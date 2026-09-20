@@ -1,0 +1,711 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentFlow — Design System</title>
+<meta name="description" content="Sistema de design do AgentFlow: cores, tipografia, componentes e telas de referência.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink-950:#0A0F1A; --ink-900:#0E1626; --ink-800:#16202F; --ink-700:#202D40;
+    --ink-600:#3C4A5C; --ink-500:#59697D; --ink-400:#7A8AA0; --ink-300:#9FACBE;
+    --ink-200:#C7D0DA; --ink-100:#E4E9EE; --mist-50:#F5F7F9; --white:#FFFFFF;
+
+    --signal-700:#0B3FCB; --signal-600:#1450F0; --signal-500:#2C6BFF;
+    --signal-100:#E4ECFF; --signal-50:#F2F6FB;
+
+    --state-run:#B5790A; --state-run-ink:#FFB020; --state-run-bg:#FFF3DC;
+    --state-done:#177A52; --state-done-ink:#1AA16B; --state-done-bg:#E1F5EB;
+    --state-error:#C22A2E; --state-error-ink:#E5484D; --state-error-bg:#FBE7E7;
+    --state-idle:#7A8AA0; --state-idle-bg:#EDF1F4;
+
+    --font-display:'Archivo', sans-serif;
+    --font-mono:'IBM Plex Mono', monospace;
+
+    --radius-sm:6px; --radius-btn:8px; --radius-md:10px; --radius-lg:16px;
+    --shadow-sm:0 1px 2px rgba(10,15,26,.06);
+    --shadow-md:0 8px 24px rgba(10,15,26,.14);
+    --sidebar-w:240px;
+    --dur-fast:.15s; --dur-med:.22s;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;}
+  body{margin:0; font-family:var(--font-display); color:var(--ink-950); background:var(--white); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3,h4{margin:0; font-family:var(--font-display);}
+  p{margin:0;}
+  a{text-decoration:none; color:inherit;}
+  button{font-family:var(--font-display); cursor:pointer;}
+  input{font-family:var(--font-display);}
+  .mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+  :focus-visible{outline:2px solid var(--signal-500); outline-offset:2px;}
+
+  /* ---- page shell ---- */
+  .ds-shell{display:flex; min-height:100vh;}
+  .ds-nav{
+    position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+    background:var(--white); border-right:1px solid var(--ink-100);
+    display:flex; flex-direction:column; padding:20px 0; z-index:10;
+  }
+  .ds-nav-brand{display:flex; align-items:center; gap:9px; padding:0 20px; margin-bottom:24px;}
+  .ds-nav-brand span{font-size:16px; font-weight:800; letter-spacing:-0.01em;}
+  .ds-nav-group-label{padding:0 20px; font-size:11px; color:var(--ink-400); margin:18px 0 6px; text-transform:none;}
+  .nav-item{display:flex; align-items:center; height:40px; padding:0 20px; font-size:14px; color:var(--ink-500); border-left:2px solid transparent;}
+  .nav-item:hover{color:var(--ink-900); background:var(--mist-50);}
+  .nav-item:active{background:var(--ink-100);}
+  .nav-item.is-active{color:var(--ink-950); font-weight:600; border-left:2px solid var(--signal-600); background:var(--signal-50);}
+  .ds-nav-foot{margin-top:auto; padding:14px 20px 0; border-top:1px solid var(--ink-100); font-size:12px; color:var(--ink-400);}
+
+  .ds-main{margin-left:var(--sidebar-w); flex-grow:1; min-width:0;}
+  .section{padding:72px min(8vw,96px);}
+  .section-tight{padding-top:56px; padding-bottom:56px;}
+  .eyebrow{font-family:var(--font-mono); font-size:13px; color:var(--ink-500);}
+  .section-title{font-size:32px; font-weight:700; letter-spacing:-0.01em; margin-top:8px;}
+  .section-lede{font-size:15px; color:var(--ink-600); line-height:1.65; max-width:760px; margin-top:12px;}
+  .block-label{font-size:14px; font-weight:700; color:var(--ink-800); margin-bottom:16px;}
+  .block-sub{font-size:12px; color:var(--ink-500); margin:-10px 0 16px;}
+
+  /* ---- hero ---- */
+  .hero{background:var(--ink-950); color:var(--white); display:flex; flex-direction:column; gap:56px; min-height:640px; justify-content:space-between;}
+  .hero-top{display:flex; justify-content:space-between; align-items:center;}
+  .hero-body{display:flex; gap:64px; align-items:center; flex-wrap:wrap;}
+  .hero-copy{flex:1 1 480px; max-width:620px;}
+  .hero-copy h1{font-size:44px; font-weight:700; line-height:1.15; letter-spacing:-0.015em; margin-top:28px;}
+  .hero-copy p{font-size:17px; color:var(--ink-200); line-height:1.65; margin-top:20px;}
+  .hero-principles{display:flex; flex-direction:column; gap:11px; margin-top:36px;}
+  .hero-principles div{display:flex; align-items:center; gap:10px; font-size:14px; font-weight:600; color:var(--ink-100);}
+  .hero-principles span.dot{width:6px; height:6px; border-radius:999px; background:var(--signal-500); flex:none;}
+  .hero-card{flex:0 0 420px; max-width:100%;}
+  .hero-foot{font-size:13px; color:var(--ink-500); border-top:1px solid var(--ink-700); padding-top:16px;}
+  .brandmark{display:flex; align-items:center; gap:12px;}
+  .brandmark span{font-size:20px; font-weight:800; letter-spacing:-0.01em;}
+
+  /* ---- surfaces ---- */
+  .surface{background:var(--white); border:1px solid var(--ink-100); border-radius:var(--radius-md);}
+  .surface-dark{background:var(--ink-900); border:1px solid var(--ink-700); border-radius:var(--radius-md); padding:26px; box-sizing:border-box;}
+
+  /* ---- swatches ---- */
+  .swatch-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:18px;}
+  .swatch-rect{height:88px; border-radius:var(--radius-md);}
+  .swatch-name{font-size:12px; color:var(--ink-700); font-weight:600; margin-top:10px;}
+  .swatch-hex{font-size:12px; color:var(--ink-500);}
+  .swatch-use{font-size:12px; color:var(--ink-500); margin-top:4px; line-height:1.4;}
+  .contrast-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(210px,1fr)); gap:18px;}
+  .contrast-box{height:80px; border-radius:var(--radius-md); display:flex; align-items:center; padding:0 16px; font-size:14px; font-weight:600;}
+
+  /* ---- buttons — hover / active / focus-visible / disabled / loading ---- */
+  .btn{position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px; height:44px; padding:0 20px; border-radius:var(--radius-btn); font-size:14px; font-weight:600; border:1px solid transparent; white-space:nowrap;}
+  .btn-primary{background:var(--signal-600); color:var(--white);}
+  .btn-primary:hover:not(:disabled){background:var(--signal-700);}
+  .btn-primary:active:not(:disabled){background:var(--signal-700); box-shadow:inset 0 1px 2px rgba(10,15,26,.25);}
+  .btn-secondary{background:var(--white); color:var(--ink-900); border-color:var(--ink-200);}
+  .btn-secondary:hover:not(:disabled){border-color:var(--ink-400);}
+  .btn-secondary:active:not(:disabled){background:var(--mist-50);}
+  .btn-ghost{background:transparent; color:var(--ink-700); border-color:transparent;}
+  .btn-ghost:hover:not(:disabled){background:var(--ink-100);}
+  .btn-ghost:active:not(:disabled){background:var(--ink-200);}
+  .btn-danger{background:var(--white); color:var(--state-error); border-color:var(--state-error-ink);}
+  .btn-danger:hover:not(:disabled){background:var(--state-error-bg);}
+  .btn:disabled{opacity:.45; cursor:not-allowed;}
+  .btn .spinner{display:none; width:14px; height:14px; border-radius:999px; border:2px solid currentColor; border-right-color:transparent; opacity:.85; animation:spin .6s linear infinite; flex:none;}
+  .btn.is-loading .spinner{display:inline-block;}
+  .btn.is-loading .btn-label{opacity:.85;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .btn-row{display:flex; align-items:center; gap:16px; flex-wrap:wrap;}
+  .btn-row + .btn-row{margin-top:16px;}
+  .btn-row-label{width:100px; font-size:12px; color:var(--ink-500); flex:none;}
+
+  /* ---- fields ---- */
+  .field{width:100%; max-width:320px;}
+  .field-label{display:block; font-size:13px; font-weight:600; color:var(--ink-700); margin-bottom:6px;}
+  .input{height:44px; width:100%; padding:0 14px; border-radius:var(--radius-btn); border:1px solid var(--ink-200); font-size:14px; color:var(--ink-900); background:var(--white);}
+  .input:focus-visible, .input:focus{outline:none; border-color:var(--signal-500); box-shadow:0 0 0 3px var(--signal-100);}
+  .input-error{border-color:var(--state-error-ink);}
+  .input-ok{border-color:var(--state-done-ink);}
+  .field-help-error{font-size:12px; color:var(--state-error); margin-top:6px; display:block;}
+  .field-help-ok{font-size:12px; color:var(--state-done); margin-top:6px; display:block;}
+  .field-row{display:flex; gap:24px; flex-wrap:wrap;}
+
+  /* ---- pills ---- */
+  .pill{display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px 0 8px; border-radius:999px; font-size:12px; font-weight:600;}
+  .pill-dot{width:6px; height:6px; border-radius:999px; flex:none;}
+  .pill-run{background:var(--state-run-bg); color:var(--state-run);} .pill-run .pill-dot{background:var(--state-run-ink);}
+  .pill-done{background:var(--state-done-bg); color:var(--state-done);} .pill-done .pill-dot{background:var(--state-done-ink);}
+  .pill-error{background:var(--state-error-bg); color:var(--state-error);} .pill-error .pill-dot{background:var(--state-error-ink);}
+  .pill-idle{background:var(--state-idle-bg); color:var(--ink-600);} .pill-idle .pill-dot{background:var(--state-idle);}
+  .pill-frozen{background:var(--state-idle-bg); color:var(--ink-600); border:1px dashed var(--ink-400);} .pill-frozen .pill-dot{background:var(--state-idle);}
+  .count-chip{font-family:var(--font-mono); font-size:12px; color:var(--ink-600); background:var(--ink-100); padding:4px 8px; border-radius:var(--radius-sm);}
+
+  /* ---- rail (signature component) ---- */
+  .rail-container{list-style:none; margin:0; padding:0;}
+  .rail-step{display:flex; gap:14px;}
+  .rail-dotcol{display:flex; flex-direction:column; align-items:center; flex:none;}
+  .rail-node{width:14px; height:14px; border-radius:999px; flex:none; box-sizing:border-box;}
+  .rail-node-done{background:var(--signal-600); border:3px solid var(--signal-600);}
+  .rail-node-run{background:var(--white); border:3px solid var(--state-run-ink);}
+  .rail-node-idle{background:var(--white); border:3px solid var(--ink-200);}
+  .rail-node-error{background:var(--white); border:3px solid var(--state-error-ink);}
+  .rail-node-frozen{background:var(--white); border:3px dashed var(--ink-400);}
+  .rail-line{width:2px; flex-grow:1; background:var(--ink-200); min-height:22px;}
+  .rail-line-error{background:var(--state-error-ink);}
+  .rail-line-done{background:var(--signal-600);}
+  .rail-body{flex-grow:1; padding-bottom:24px;}
+  .rail-body:last-child{padding-bottom:0;}
+  .rail-row{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;}
+  .rail-title{font-size:14px; font-weight:600; color:var(--ink-950);}
+  .rail-title-muted{color:var(--ink-400);}
+  .rail-meta{font-size:12px; color:var(--ink-500); margin-top:4px;}
+  .rail-meta-run{color:var(--state-run);}
+
+  /* ---- dense list row — hover / active / focus, item por item ---- */
+  .list-reset{list-style:none; margin:0; padding:0;}
+  .list-row{display:flex; align-items:center; gap:16px; padding:14px 20px; margin:0 -20px; width:calc(100% + 40px); border-top:1px solid var(--ink-100); flex-wrap:wrap; background:none; border-left:0; border-right:0; border-bottom:0; text-align:left;}
+  li:last-child > .list-row{border-bottom:1px solid var(--ink-100);}
+  .list-row:hover{background:var(--mist-50);}
+  .list-row:active{background:var(--ink-100);}
+  .list-row.is-active{background:var(--signal-50);}
+  .avatar{width:32px; height:32px; border-radius:999px; background:var(--signal-100); color:var(--signal-700); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; flex:none;}
+  .list-meta{width:230px; flex:1 1 200px; text-align:left;}
+  .list-meta strong{display:block; font-size:14px; font-weight:600; color:var(--ink-950);}
+  .list-meta span{font-size:12px; color:var(--ink-500);}
+  .progress-dots{display:flex; gap:5px; width:100px; flex:none;}
+  .progress-dots span{width:16px; height:5px; border-radius:3px; background:var(--ink-200); display:block;}
+  .list-time{font-size:12px; color:var(--ink-500); width:120px; flex:none; font-family:var(--font-mono);}
+
+  /* ---- estado vazio ---- */
+  .empty-state{display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:48px 24px; border:1px dashed var(--ink-200); border-radius:var(--radius-md); color:var(--ink-500);}
+  .empty-state h4{font-size:14px; font-weight:700; color:var(--ink-800); margin:4px 0 0;}
+  .empty-state p{font-size:13px; color:var(--ink-500); max-width:320px; line-height:1.5;}
+
+  /* ---- nav item demo swatch ---- */
+  .nav-demo{width:100%; max-width:300px;}
+
+  /* ---- screens ---- */
+  .screen-frame{border:1px solid var(--ink-100); border-radius:var(--radius-lg); overflow:hidden; box-shadow:var(--shadow-sm);}
+  .app-desktop{display:flex; min-height:560px; background:var(--white);}
+  .app-sidebar{width:200px; flex:none; border-right:1px solid var(--ink-100); padding:20px 0; display:flex; flex-direction:column;}
+  .app-sidebar .ds-nav-brand{margin-bottom:24px;}
+  .app-user{margin-top:auto; padding:14px 20px 0; border-top:1px solid var(--ink-100); display:flex; align-items:center; gap:10px;}
+  .app-user .avatar{width:26px; height:26px; font-size:10px;}
+  .app-user strong{font-size:12px; display:block;}
+  .app-user span{font-size:11px; color:var(--ink-500); font-family:var(--font-mono);}
+  .app-main{flex-grow:1; background:var(--mist-50); display:flex; flex-direction:column; min-width:0;}
+  .app-topbar{height:60px; flex:none; background:var(--white); border-bottom:1px solid var(--ink-100); display:flex; align-items:center; justify-content:space-between; padding:0 24px; flex-wrap:wrap; gap:12px;}
+  .app-topbar strong{font-size:16px;}
+  .app-body{flex-grow:1; padding:22px 24px; display:flex; gap:20px; flex-wrap:wrap;}
+  .app-list{flex:1 1 420px; padding:20px; box-sizing:border-box;}
+  .app-detail{flex:0 0 320px; padding:20px; box-sizing:border-box;}
+  .app-list .list-row.is-active{background:var(--signal-50); margin:0 -20px; padding-left:20px; padding-right:20px;}
+
+  .phone-frame{width:340px; max-width:100%; margin:0 auto; border:10px solid var(--ink-950); border-radius:36px; overflow:hidden; background:var(--white);}
+  .phone-top{height:52px; display:flex; align-items:center; justify-content:space-between; padding:0 14px; border-bottom:1px solid var(--ink-100);}
+  .phone-top button{width:28px; height:28px; border:none; background:none; font-size:16px; color:var(--ink-700);}
+  .phone-top strong{font-size:14px;}
+  .phone-body{padding:18px 18px 0;}
+  .phone-actions{display:flex; gap:10px; padding:14px 18px; border-top:1px solid var(--ink-100);}
+  .phone-actions .btn{flex-grow:1; height:44px;}
+
+  .screens-row{display:flex; gap:40px; align-items:flex-start; flex-wrap:wrap;}
+  .screens-row .screen-desktop{flex:1 1 640px; min-width:0;}
+  .screens-row .screen-mobile{flex:0 0 340px;}
+  .screen-caption{font-size:12px; color:var(--ink-500); margin-top:12px;}
+
+  /* ---- do/dont ---- */
+  .dd-grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px;}
+  .dd-card{padding:18px;}
+  .dd-title{font-size:13px; font-weight:700; color:var(--ink-800); margin-bottom:12px;}
+  .dd-pair{display:flex; gap:10px; flex-wrap:wrap;}
+  .dd-box{flex:1 1 120px; border-radius:var(--radius-btn); padding:12px; box-sizing:border-box;}
+  .dd-no{border:1.5px solid var(--state-error-ink);}
+  .dd-yes{border:1.5px solid var(--signal-600);}
+  .dd-tag-no{font-family:var(--font-mono); font-size:10px; color:var(--state-error); display:block;}
+  .dd-tag-yes{font-family:var(--font-mono); font-size:10px; color:var(--signal-700); display:block;}
+  .dd-note{font-size:12px; color:var(--ink-500); line-height:1.5; margin-top:10px;}
+
+  footer.ds-footer{padding:40px min(8vw,96px) 64px; font-size:12px; color:var(--ink-400); border-top:1px solid var(--ink-100);}
+
+  @media (max-width:860px){
+    .ds-nav{transform:translateX(-100%); transition:transform .2s;}
+    .ds-nav:target, .ds-nav:hover{transform:translateX(0);}
+    .ds-main{margin-left:0;}
+    .hero-copy h1{font-size:32px;}
+  }
+</style>
+</head>
+<body>
+<div class="ds-shell">
+
+  <nav class="ds-nav" aria-label="Seções do design system">
+    <div class="ds-nav-brand">
+      <svg width="22" height="22" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 32 L20 20 L32 8" stroke="#2C6BFF" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="8" cy="32" r="4.5" fill="#0A0F1A" stroke="#2C6BFF" stroke-width="3"/>
+        <circle cx="20" cy="20" r="4.5" fill="#2C6BFF"/>
+        <circle cx="32" cy="8" r="4.5" fill="#2C6BFF"/>
+      </svg>
+      <span>AgentFlow</span>
+    </div>
+    <a class="nav-item is-active" href="#visao">Visão geral</a>
+    <a class="nav-item" href="#cores">Cores</a>
+    <a class="nav-item" href="#tipografia">Tipografia</a>
+    <a class="nav-item" href="#componentes">Componentes</a>
+    <a class="nav-item" href="#telas">Telas</a>
+    <a class="nav-item" href="#antes-depois">Antes / depois</a>
+    <div class="ds-nav-foot">agentflow — design system<br>v1.0 · set 2026</div>
+  </nav>
+
+  <main class="ds-main">
+
+    <section id="visao" class="hero section">
+      <div class="hero-top">
+        <span class="mono" style="font-size:13px;color:var(--ink-400);">agentflow — sistema de design</span>
+        <span class="mono" style="font-size:13px;color:var(--ink-500);">v1.0 · set 2026</span>
+      </div>
+
+      <div class="hero-body">
+        <div class="hero-copy">
+          <div class="brandmark">
+            <svg width="30" height="30" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M8 32 L20 20 L32 8" stroke="#2C6BFF" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="8" cy="32" r="4" fill="#0A0F1A" stroke="#2C6BFF" stroke-width="2.5"/>
+              <circle cx="20" cy="20" r="4" fill="#2C6BFF"/>
+              <circle cx="32" cy="8" r="4" fill="#2C6BFF"/>
+            </svg>
+            <span>AgentFlow</span>
+          </div>
+          <h1>Cada tela é um fluxo em andamento — nunca uma coleção de cartões parados.</h1>
+          <p>O AgentFlow existe para tirar trabalho repetitivo das mãos de equipes. Por isso a interface inteira gira em torno de um único elemento — o trilho de fluxo, a linha que liga cada etapa à próxima — em vez de painéis genéricos de métricas. Se a tela não mostra um processo se movendo, ela está errada para este produto.</p>
+          <div class="hero-principles">
+            <div><span class="dot"></span>Fluxo contínuo — telas mostram sequência, não fragmentos soltos</div>
+            <div><span class="dot"></span>Um sinal por vez — azul é ação; cor de estado nunca é decoração</div>
+            <div><span class="dot"></span>Densidade com hierarquia — nada de espaço vazio decorativo</div>
+            <div><span class="dot"></span>Estado sempre visível — o usuário nunca pergunta "isso rodou?"</div>
+          </div>
+        </div>
+
+        <div class="hero-card surface-dark">
+          <div class="mono" style="font-size:12px;color:var(--ink-400);margin-bottom:20px;">fluxo · contratos.novo-cliente</div>
+          <div class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div>
+            <div class="rail-body">
+              <div class="rail-row"><span class="rail-title" style="color:var(--white);">Extrair dados do contrato</span><span class="pill pill-done"><span class="pill-dot"></span>concluído</span></div>
+              <div class="mono rail-meta" style="color:var(--ink-500);">14:02:31 · 812ms</div>
+            </div>
+          </div>
+          <div class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-run"></div><div class="rail-line"></div></div>
+            <div class="rail-body">
+              <div class="rail-row"><span class="rail-title" style="color:var(--white);">Validar cláusulas com o jurídico</span><span class="pill pill-run"><span class="pill-dot"></span>em execução</span></div>
+              <div class="mono rail-meta" style="color:var(--ink-500);">14:02:33 · passo 2 de 4</div>
+            </div>
+          </div>
+          <div class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-idle"></div></div>
+            <div class="rail-body">
+              <div class="rail-row"><span class="rail-title rail-title-muted">Notificar equipe responsável</span><span class="pill pill-idle"><span class="pill-dot"></span>na fila</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="hero-foot">Feito para quem quer eliminar trabalho repetitivo — não para quem quer parecer que usa IA.</div>
+    </section>
+
+    <section id="cores" class="section">
+      <span class="eyebrow">cores</span>
+      <h2 class="section-title">Uma paleta funcional, não decorativa</h2>
+      <p class="section-lede">Azul é o único acento de marca — usado em ações, foco e presença de marca. Âmbar, verde e vermelho existem exclusivamente para indicar estado de execução: nunca aparecem em botões, links, títulos ou qualquer elemento que não seja um indicador de status.</p>
+
+      <div style="margin-top:40px;">
+        <h3 class="block-label">Azul de sinal — ação e marca</h3>
+        <div class="swatch-grid">
+          <div><div class="swatch-rect" style="background:var(--signal-700);"></div><div class="swatch-name">signal-700</div><div class="swatch-hex">#0B3FCB</div><div class="swatch-use">Hover / texto de link sobre fundo claro</div></div>
+          <div><div class="swatch-rect" style="background:var(--signal-600);"></div><div class="swatch-name">signal-600</div><div class="swatch-hex">#1450F0</div><div class="swatch-use">Botão primário, foco de campo</div></div>
+          <div><div class="swatch-rect" style="background:var(--signal-500);"></div><div class="swatch-name">signal-500</div><div class="swatch-hex">#2C6BFF</div><div class="swatch-use">Acentos sobre fundo escuro, marca</div></div>
+          <div><div class="swatch-rect" style="background:var(--signal-100);"></div><div class="swatch-name">signal-100</div><div class="swatch-hex">#E4ECFF</div><div class="swatch-use">Preenchimento de item selecionado</div></div>
+          <div><div class="swatch-rect" style="background:var(--signal-50);border:1px solid var(--ink-100);"></div><div class="swatch-name">signal-50</div><div class="swatch-hex">#F2F6FB</div><div class="swatch-use">Fundo de destaque sutil</div></div>
+        </div>
+      </div>
+
+      <div style="margin-top:40px;">
+        <h3 class="block-label">Neutros — tingidos de azul, nunca cinza puro</h3>
+        <div class="swatch-grid">
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-950);"></div><div class="swatch-name">ink-950</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-900);"></div><div class="swatch-name">ink-900</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-800);"></div><div class="swatch-name">ink-800</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-600);"></div><div class="swatch-name">ink-600</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-400);"></div><div class="swatch-name">ink-400</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-300);"></div><div class="swatch-name">ink-300</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-200);"></div><div class="swatch-name">ink-200</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--ink-100);"></div><div class="swatch-name">ink-100</div></div>
+          <div><div class="swatch-rect" style="height:64px;background:var(--white);border:1px solid var(--ink-100);"></div><div class="swatch-name">white</div></div>
+        </div>
+      </div>
+
+      <div style="margin-top:40px;">
+        <h3 class="block-label">Estado de execução — uso exclusivo em indicadores de status</h3>
+        <div class="swatch-grid">
+          <div><div class="swatch-rect" style="background:var(--state-run-bg);display:flex;align-items:center;justify-content:center;"><span class="pill pill-run"><span class="pill-dot"></span>em execução</span></div><div class="swatch-name">state-run</div><div class="swatch-hex">#FFB020</div></div>
+          <div><div class="swatch-rect" style="background:var(--state-done-bg);display:flex;align-items:center;justify-content:center;"><span class="pill pill-done"><span class="pill-dot"></span>concluído</span></div><div class="swatch-name">state-done</div><div class="swatch-hex">#1AA16B</div></div>
+          <div><div class="swatch-rect" style="background:var(--state-error-bg);display:flex;align-items:center;justify-content:center;"><span class="pill pill-error"><span class="pill-dot"></span>falhou</span></div><div class="swatch-name">state-error</div><div class="swatch-hex">#E5484D</div></div>
+          <div><div class="swatch-rect" style="background:var(--state-idle-bg);display:flex;align-items:center;justify-content:center;"><span class="pill pill-idle"><span class="pill-dot"></span>na fila</span></div><div class="swatch-name">state-idle</div><div class="swatch-hex">#7A8AA0</div></div>
+        </div>
+      </div>
+
+      <div style="margin-top:40px;">
+        <h3 class="block-label">Pares de contraste aprovados</h3>
+        <div class="contrast-grid">
+          <div><div class="contrast-box" style="background:var(--ink-950);color:var(--white);">Texto sobre fundo escuro</div><div class="swatch-use">ink-950 + white · 18.5:1</div></div>
+          <div><div class="contrast-box" style="background:var(--white);color:var(--ink-950);border:1px solid var(--ink-100);">Texto sobre fundo claro</div><div class="swatch-use">white + ink-950 · 18.5:1</div></div>
+          <div><div class="contrast-box" style="background:var(--signal-600);color:var(--white);">Botão primário</div><div class="swatch-use">signal-600 + white · 5.1:1</div></div>
+          <div><div class="contrast-box" style="background:var(--state-run-bg);color:var(--state-run);">Estado sobre fundo tintado</div><div class="swatch-use">state-run-bg + state-run · 4.9:1</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="tipografia" class="section" style="background:var(--mist-50);">
+      <span class="eyebrow">tipografia</span>
+      <h2 class="section-title">Duas famílias, dois papéis — nunca decoração</h2>
+      <p class="section-lede">Archivo carrega toda a hierarquia, de manchete a rótulo de botão, para que produto e material de marca soem com a mesma voz. IBM Plex Mono aparece só onde o conteúdo é gerado pela máquina — horário, id, contagem de passos, linha de log — nunca por estética.</p>
+
+      <div style="display:flex; gap:48px; margin-top:36px; flex-wrap:wrap;">
+        <div style="flex:1 1 560px;" class="surface">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;gap:8px;">
+            <span style="font-size:38px;font-weight:700;letter-spacing:-0.02em;">Fluxos que rodam sozinhos.</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">display · 44/700</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;gap:8px;">
+            <span style="font-size:26px;font-weight:700;letter-spacing:-0.015em;">Conecte suas ferramentas em minutos.</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">h1 · 28/700</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;gap:8px;">
+            <span style="font-size:20px;font-weight:600;">Execuções recentes</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">h2 · 20/600</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;gap:8px;">
+            <span style="font-size:16px;font-weight:400;color:var(--ink-700);line-height:1.6;max-width:420px;">O fluxo é disparado assim que um novo contrato chega na caixa compartilhada e segue sem intervenção até a validação do jurídico.</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">body · 16/400</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;border-bottom:1px solid var(--ink-100);flex-wrap:wrap;gap:8px;">
+            <span style="font-size:13px;font-weight:500;color:var(--ink-600);">Disparado por regra · sem aprovação manual</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">caption · 13/500</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:22px 24px;flex-wrap:wrap;gap:8px;">
+            <span class="mono" style="font-size:14px;color:var(--ink-800);">14:02:31 · webhook.recebido · 200 OK</span>
+            <span class="mono" style="font-size:12px;color:var(--ink-500);">mono · 14/500</span>
+          </div>
+        </div>
+
+        <div style="flex:0 0 280px;" class="surface">
+          <div style="padding:22px;">
+            <h3 class="block-label">Regras do mono</h3>
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;"><span style="color:var(--state-done);font-weight:700;">✓</span><span style="font-size:13px;color:var(--ink-700);line-height:1.5;">Horários, ids, contadores, linhas de log</span></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;"><span style="color:var(--state-done);font-weight:700;">✓</span><span style="font-size:13px;color:var(--ink-700);line-height:1.5;">Sempre em caixa normal, nunca maiúsculo</span></div>
+            <div style="height:1px;background:var(--ink-100);margin:16px 0;"></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;"><span style="color:var(--state-error);font-weight:700;">✕</span><span style="font-size:13px;color:var(--ink-500);line-height:1.5;">Rótulos de navegação ou de seção</span></div>
+            <div style="display:flex;align-items:flex-start;gap:8px;"><span style="color:var(--state-error);font-weight:700;">✕</span><span style="font-size:13px;color:var(--ink-500);line-height:1.5;">Qualquer texto em MAIÚSCULO decorativo</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="componentes" class="section">
+      <span class="eyebrow">componentes</span>
+      <h2 class="section-title">As peças que constroem qualquer tela</h2>
+
+      <div class="surface" style="padding:28px;margin-top:36px;">
+        <h3 class="block-label">Botões — hover, active, foco, desabilitado e carregando</h3>
+        <div class="btn-row"><span class="btn-row-label mono">padrão</span>
+          <button class="btn btn-primary">Criar fluxo</button>
+          <button class="btn btn-secondary">Duplicar</button>
+          <button class="btn btn-ghost">Cancelar</button>
+          <button class="btn btn-danger">Excluir fluxo</button>
+        </div>
+        <div class="btn-row"><span class="btn-row-label mono">carregando</span>
+          <button class="btn btn-primary is-loading" aria-busy="true" disabled><span class="spinner" aria-hidden="true"></span><span class="btn-label">Criando…</span></button>
+          <span class="block-sub" style="margin:0;">Desabilita e mostra o spinner no instante do clique — evita disparo duplicado.</span>
+        </div>
+        <div class="btn-row"><span class="btn-row-label mono">desabilitado</span>
+          <button class="btn btn-primary" disabled>Criar fluxo</button>
+          <button class="btn btn-secondary" disabled>Duplicar</button>
+          <button class="btn btn-ghost" disabled>Cancelar</button>
+          <button class="btn btn-danger" disabled>Excluir fluxo</button>
+        </div>
+      </div>
+
+      <div class="surface" style="padding:28px;margin-top:24px;">
+        <h3 class="block-label">Campos — validação reativa</h3>
+        <div class="field-row">
+          <div class="field"><label class="field-label" for="c-nome">Nome do fluxo</label><input class="input" id="c-nome" type="text" value="Triagem de contratos"></div>
+          <div class="field"><label class="field-label" for="c-gatilho">Gatilho</label><input class="input" id="c-gatilho" type="text" value="novo e-mail em contratos@"></div>
+          <div class="field">
+            <label class="field-label" for="c-webhook-bad">URL do webhook</label>
+            <input class="input input-error" id="c-webhook-bad" type="text" value="https://api.">
+            <span class="field-help-error">Endereço incompleto — verifique antes de salvar</span>
+          </div>
+          <div class="field">
+            <label class="field-label" for="c-webhook-ok">URL do webhook</label>
+            <input class="input input-ok" id="c-webhook-ok" type="text" value="https://api.agentflow.dev/hooks/4471">
+            <span class="field-help-ok">Endereço válido</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="surface" style="padding:28px;margin-top:24px;">
+        <h3 class="block-label">Indicadores de status</h3>
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;">
+          <span class="pill pill-run"><span class="pill-dot"></span>em execução</span>
+          <span class="pill pill-done"><span class="pill-dot"></span>concluído</span>
+          <span class="pill pill-error"><span class="pill-dot"></span>falhou</span>
+          <span class="pill pill-idle"><span class="pill-dot"></span>na fila</span>
+          <span class="pill pill-frozen"><span class="pill-dot"></span>pausado pelo operador</span>
+          <span style="width:1px;height:20px;background:var(--ink-100);"></span>
+          <span class="count-chip">12 na fila</span>
+        </div>
+        <p class="block-sub" style="margin-top:14px;">"Pausado pelo operador" reaproveita a cor neutra de "na fila" — o congelamento por circuit breaker não ganha uma cor própria, só a borda tracejada, porque não é um novo tipo de estado.</p>
+      </div>
+
+      <div style="display:flex;gap:24px;margin-top:24px;flex-wrap:wrap;">
+        <div class="surface" style="padding:28px;flex:1 1 480px;">
+          <h3 class="block-label" style="margin-bottom:4px;">Trilho de fluxo</h3>
+          <div class="block-sub">O componente central do produto — todo processo é uma sequência ordenada de nós ligados por uma linha.</div>
+          <ol class="rail-container" role="list">
+          <li class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div>
+            <div class="rail-body"><div class="rail-row"><span class="rail-title">Receber contrato</span><span class="pill pill-done"><span class="pill-dot"></span>concluído</span></div><div class="mono rail-meta">14:02:31 · 210ms</div></div>
+          </li>
+          <li class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div>
+            <div class="rail-body"><div class="rail-row"><span class="rail-title">Extrair cláusulas</span><span class="pill pill-done"><span class="pill-dot"></span>concluído</span></div><div class="mono rail-meta">14:02:32 · 812ms</div></div>
+          </li>
+          <li class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-run"></div><div class="rail-line"></div></div>
+            <div class="rail-body"><div class="rail-row"><span class="rail-title">Validar com jurídico</span><span class="pill pill-run"><span class="pill-dot"></span>em execução</span></div><div class="mono rail-meta">14:02:33 · passo 3 de 4</div></div>
+          </li>
+          <li class="rail-step">
+            <div class="rail-dotcol"><div class="rail-node rail-node-idle"></div></div>
+            <div class="rail-body"><div class="rail-row"><span class="rail-title rail-title-muted">Notificar responsável</span><span class="pill pill-idle"><span class="pill-dot"></span>na fila</span></div></div>
+          </li>
+          </ol>
+          <div style="display:flex;gap:22px;align-items:center;flex-wrap:wrap;margin-top:20px;padding-top:20px;border-top:1px dashed var(--ink-200);">
+            <div style="display:flex;align-items:center;gap:8px;"><div class="rail-node rail-node-error"></div><span class="mono" style="font-size:12px;color:var(--ink-500);">falhou</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><div class="rail-node rail-node-frozen"></div><span class="mono" style="font-size:12px;color:var(--ink-500);">pausado</span></div>
+          </div>
+        </div>
+
+        <div class="surface nav-demo" style="padding:28px 0;flex:0 0 300px;">
+          <div style="padding:0 28px;">
+            <h3 class="block-label" style="margin-bottom:4px;">Trilho de navegação</h3>
+            <div class="block-sub">Claro, rotulado por extenso — nunca ícone isolado sobre fundo escuro.</div>
+          </div>
+          <a class="nav-item is-active" href="#">Fluxos</a>
+          <a class="nav-item" href="#">Execuções</a>
+          <a class="nav-item" href="#">Conectores</a>
+          <a class="nav-item" href="#">Equipe</a>
+          <a class="nav-item" href="#">Configurações</a>
+        </div>
+      </div>
+
+      <div class="surface" style="padding:28px;margin-top:24px;">
+        <h3 class="block-label" style="margin-bottom:4px;">Linha de lista densa</h3>
+        <div class="block-sub">A unidade padrão de uma tela de listagem — nunca um cartão de altura fixa repetido.</div>
+        <ul class="list-reset" role="list">
+        <li><button type="button" class="list-row">
+          <span class="avatar">MP</span>
+          <span class="list-meta"><strong>Triagem de contratos</strong><span>novo e-mail em contratos@</span></span>
+          <span class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--state-run-ink);"></span><span></span></span>
+          <span class="list-time">há 2 minutos</span>
+          <span class="pill pill-run"><span class="pill-dot"></span>em execução</span>
+        </button></li>
+        <li><button type="button" class="list-row">
+          <span class="avatar">RS</span>
+          <span class="list-meta"><strong>Fechamento mensal — financeiro</strong><span>agendado · todo dia 1º às 06:00</span></span>
+          <span class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span></span>
+          <span class="list-time">ontem, 06:03</span>
+          <span class="pill pill-done"><span class="pill-dot"></span>concluído</span>
+        </button></li>
+        <li><button type="button" class="list-row">
+          <span class="avatar">AC</span>
+          <span class="list-meta"><strong>Onboarding de cliente novo</strong><span>formulário enviado no site</span></span>
+          <span class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--state-error-ink);"></span><span></span><span></span></span>
+          <span class="list-time">há 34 minutos</span>
+          <span class="pill pill-error"><span class="pill-dot"></span>falhou</span>
+        </button></li>
+        </ul>
+      </div>
+
+      <div class="surface" style="padding:28px;margin-top:24px;">
+        <h3 class="block-label" style="margin-bottom:4px;">Estado vazio</h3>
+        <div class="block-sub">Mesma linguagem visual do trilho — nunca uma ilustração fofa solta no meio da tela.</div>
+        <div class="empty-state">
+          <div class="rail-node rail-node-idle" style="width:20px;height:20px;border-width:2px;"></div>
+          <h4>Nenhum fluxo criado ainda</h4>
+          <p>Fluxos aparecem aqui assim que o primeiro gatilho for configurado.</p>
+          <button type="button" class="btn btn-primary btn-sm" style="margin-top:6px;">Criar primeiro fluxo</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="telas" class="section" style="background:var(--mist-50);">
+      <span class="eyebrow">telas</span>
+      <h2 class="section-title">O sistema aplicado a telas reais</h2>
+      <p class="section-lede">Sem herói, sem grade de métricas, sem sidebar escura. A tela é a lista de fluxos rodando, com estado sempre visível.</p>
+
+      <div class="screens-row" style="margin-top:36px;">
+        <div class="screen-desktop">
+          <div class="screen-frame app-desktop">
+            <div class="app-sidebar">
+              <div class="ds-nav-brand">
+                <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 32 L20 20 L32 8" stroke="#2C6BFF" stroke-width="3" stroke-linecap="round"/><circle cx="8" cy="32" r="4.5" fill="#0A0F1A" stroke="#2C6BFF" stroke-width="3"/><circle cx="20" cy="20" r="4.5" fill="#2C6BFF"/><circle cx="32" cy="8" r="4.5" fill="#2C6BFF"/></svg>
+                <span style="font-size:15px;">AgentFlow</span>
+              </div>
+              <a class="nav-item is-active" href="#">Fluxos</a>
+              <a class="nav-item" href="#">Execuções</a>
+              <a class="nav-item" href="#">Conectores</a>
+              <a class="nav-item" href="#">Equipe</a>
+              <a class="nav-item" href="#">Configurações</a>
+              <div class="app-user"><div class="avatar">CA</div><div><strong>Caio Amin</strong><span>operações</span></div></div>
+            </div>
+            <div class="app-main">
+              <div class="app-topbar">
+                <strong>Fluxos</strong>
+                <div style="display:flex;gap:10px;align-items:center;">
+                  <input class="input" style="height:36px;width:180px;" type="text" placeholder="Buscar fluxo">
+                  <button class="btn btn-primary" style="height:36px;padding:0 14px;font-size:13px;">Novo fluxo</button>
+                </div>
+              </div>
+              <div class="app-body">
+                <div class="surface app-list">
+                  <div class="mono" style="font-size:12px;color:var(--ink-500);margin-bottom:6px;">6 fluxos · 1 em execução</div>
+                  <div class="list-row is-active">
+                    <div class="avatar">MP</div>
+                    <div class="list-meta"><strong>Triagem de contratos</strong><span>novo e-mail em contratos@</span></div>
+                    <div class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--state-run-ink);"></span><span></span></div>
+                    <span class="list-time">há 2 min</span>
+                    <span class="pill pill-run"><span class="pill-dot"></span>em execução</span>
+                  </div>
+                  <div class="list-row">
+                    <div class="avatar">RS</div>
+                    <div class="list-meta"><strong>Fechamento mensal</strong><span>agendado · dia 1º 06:00</span></div>
+                    <div class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span><span style="background:var(--signal-600);"></span></div>
+                    <span class="list-time">ontem</span>
+                    <span class="pill pill-done"><span class="pill-dot"></span>concluído</span>
+                  </div>
+                  <div class="list-row">
+                    <div class="avatar">AC</div>
+                    <div class="list-meta"><strong>Onboarding de cliente</strong><span>formulário no site</span></div>
+                    <div class="progress-dots"><span style="background:var(--signal-600);"></span><span style="background:var(--state-error-ink);"></span><span></span><span></span></div>
+                    <span class="list-time">há 34 min</span>
+                    <span class="pill pill-error"><span class="pill-dot"></span>falhou</span>
+                  </div>
+                </div>
+                <div class="surface app-detail">
+                  <div class="rail-row"><span style="font-size:15px;font-weight:700;">Triagem de contratos</span><span class="pill pill-run"><span class="pill-dot"></span>em execução</span></div>
+                  <div class="mono rail-meta" style="margin-bottom:16px;">execução #4471</div>
+                  <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div><div class="rail-body" style="padding-bottom:16px;"><span class="rail-title" style="font-size:13px;">Receber contrato</span></div></div>
+                  <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-run"></div><div class="rail-line"></div></div><div class="rail-body" style="padding-bottom:16px;"><span class="rail-title" style="font-size:13px;">Validar com jurídico</span></div></div>
+                  <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-idle"></div></div><div class="rail-body"><span class="rail-title rail-title-muted" style="font-size:13px;">Notificar responsável</span></div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="screen-caption">Desktop — visão de fluxos</div>
+        </div>
+
+        <div class="screen-mobile">
+          <div class="phone-frame">
+            <div class="phone-top">
+              <button aria-label="Voltar">←</button>
+              <strong>Triagem de contratos</strong>
+              <button aria-label="Mais opções">⋯</button>
+            </div>
+            <div class="phone-body">
+              <div class="rail-row" style="margin-bottom:6px;"><span class="pill pill-run"><span class="pill-dot"></span>em execução</span><span class="mono" style="font-size:12px;color:var(--ink-500);">#4471</span></div>
+              <div style="font-size:13px;color:var(--ink-500);margin-bottom:20px;">novo e-mail em contratos@</div>
+              <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div><div class="rail-body"><span class="rail-title">Receber contrato</span><div class="mono rail-meta">14:02:31 · 210ms</div></div></div>
+              <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-done"></div><div class="rail-line rail-line-done"></div></div><div class="rail-body"><span class="rail-title">Extrair cláusulas</span><div class="mono rail-meta">14:02:32 · 812ms</div></div></div>
+              <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-run"></div><div class="rail-line"></div></div><div class="rail-body"><span class="rail-title">Validar com jurídico</span><div class="mono rail-meta rail-meta-run">passo 3 de 4 · em andamento</div></div></div>
+              <div class="rail-step"><div class="rail-dotcol"><div class="rail-node rail-node-idle"></div></div><div class="rail-body"><span class="rail-title rail-title-muted">Notificar responsável</span></div></div>
+            </div>
+            <div class="phone-actions">
+              <button class="btn btn-secondary">Pausar fluxo</button>
+              <button class="btn btn-primary">Ver execuções</button>
+            </div>
+          </div>
+          <div class="screen-caption">Mobile — detalhe do fluxo</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="antes-depois" class="section">
+      <span class="eyebrow">antes / depois</span>
+      <h2 class="section-title">O que este produto rejeita, e o que faz no lugar</h2>
+
+      <div class="dd-grid" style="margin-top:36px;">
+        <div class="surface dd-card">
+          <h4 class="dd-title">Herói + métricas soltas</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no"><span class="dd-tag-no">✕ não</span><div style="height:14px;width:70%;background:var(--ink-200);border-radius:3px;margin:14px auto 12px;"></div><div style="display:flex;gap:6px;"><div style="flex:1;height:32px;background:var(--ink-100);border-radius:5px;"></div><div style="flex:1;height:32px;background:var(--ink-100);border-radius:5px;"></div><div style="flex:1;height:32px;background:var(--ink-100);border-radius:5px;"></div></div></div>
+            <div class="dd-box dd-yes"><span class="dd-tag-yes">✓ sim</span><div style="display:flex;gap:8px;margin-top:12px;"><div style="flex:1;"><div style="height:8px;width:90%;background:var(--ink-700);border-radius:3px;"></div><div style="height:6px;width:70%;background:var(--ink-200);border-radius:3px;margin-top:6px;"></div></div><div style="width:40px;height:40px;background:var(--ink-900);border-radius:5px;flex:none;"></div></div></div>
+          </div>
+          <p class="dd-note">Um recorte real da interface substitui o número inventado.</p>
+        </div>
+
+        <div class="surface dd-card">
+          <h4 class="dd-title">Grade de cards idênticos</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no"><span class="dd-tag-no">✕ não</span><div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;"><div style="height:24px;background:var(--ink-100);border-radius:5px;"></div><div style="height:24px;background:var(--ink-100);border-radius:5px;"></div><div style="height:24px;background:var(--ink-100);border-radius:5px;"></div></div></div>
+            <div class="dd-box dd-yes"><span class="dd-tag-yes">✓ sim</span><div style="display:flex;flex-direction:column;gap:6px;margin-top:12px;"><div style="display:flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:999px;background:var(--state-run-ink);"></span><div style="height:8px;flex:1;background:var(--ink-300);border-radius:3px;"></div></div><div style="display:flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:999px;background:var(--state-done-ink);"></span><div style="height:8px;flex:1;background:var(--ink-200);border-radius:3px;"></div></div><div style="display:flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:999px;background:var(--state-error-ink);"></span><div style="height:8px;flex:1;background:var(--ink-100);border-radius:3px;"></div></div></div></div>
+          </div>
+          <p class="dd-note">Cada linha carrega estado e conteúdo próprios — nunca repete a anterior.</p>
+        </div>
+
+        <div class="surface dd-card">
+          <h4 class="dd-title">Texto com gradiente decorativo</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no" style="display:flex;flex-direction:column;justify-content:center;align-items:center;"><span class="dd-tag-no" style="align-self:flex-start;">✕ não</span><span style="font-size:22px;font-weight:800;background:linear-gradient(90deg,#7C3AED,#EC4899,#F59E0B);-webkit-background-clip:text;background-clip:text;color:transparent;margin-top:14px;">Fluxo</span></div>
+            <div class="dd-box dd-yes" style="display:flex;flex-direction:column;justify-content:center;align-items:center;"><span class="dd-tag-yes" style="align-self:flex-start;">✓ sim</span><span style="font-size:22px;font-weight:800;color:var(--ink-950);margin-top:14px;">Fluxo</span></div>
+          </div>
+          <p class="dd-note">Hierarquia vem de peso e tamanho, nunca de efeito de cor.</p>
+        </div>
+
+        <div class="surface dd-card">
+          <h4 class="dd-title">Painel de vidro / blur sem razão</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no" style="background:linear-gradient(135deg,#7C3AED,#2C6BFF 60%,#F59E0B);"><span class="dd-tag-no" style="color:#fff;">✕ não</span><div style="margin-top:18px;height:40px;border-radius:6px;background:rgba(255,255,255,0.25);backdrop-filter:blur(6px);border:1px solid rgba(255,255,255,0.4);"></div></div>
+            <div class="dd-box dd-yes" style="background:var(--mist-50);"><span class="dd-tag-yes">✓ sim</span><div style="margin-top:18px;height:40px;border-radius:6px;background:var(--white);border:1px solid var(--ink-100);"></div></div>
+          </div>
+          <p class="dd-note">Superfície plana com borda de 1px — elevação sem embaçar o conteúdo.</p>
+        </div>
+
+        <div class="surface dd-card">
+          <h4 class="dd-title">Rótulo minúsculo em MAIÚSCULO</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no" style="display:flex;align-items:center;"><span class="dd-tag-no" style="position:absolute;">✕ não</span><span style="font-size:11px;font-weight:700;letter-spacing:0.12em;color:var(--ink-400);margin-top:14px;">STATUS DO SISTEMA</span></div>
+            <div class="dd-box dd-yes" style="display:flex;align-items:center;"><span class="dd-tag-yes" style="position:absolute;">✓ sim</span><span class="mono" style="font-size:13px;color:var(--ink-700);margin-top:14px;">14:02:31 · sincronizado</span></div>
+          </div>
+          <p class="dd-note">Mono em caixa normal, reservado a valor real — nunca a rótulo decorativo.</p>
+        </div>
+
+        <div class="surface dd-card">
+          <h4 class="dd-title">Sidebar escura + cards de métrica</h4>
+          <div class="dd-pair">
+            <div class="dd-box dd-no" style="display:flex;gap:8px;"><div style="width:22px;background:var(--ink-950);border-radius:4px;flex:none;"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px;"><div style="height:20px;background:var(--ink-100);border-radius:4px;"></div><div style="height:20px;background:var(--ink-100);border-radius:4px;"></div></div></div>
+            <div class="dd-box dd-yes" style="display:flex;gap:8px;"><div style="width:34px;background:var(--white);border:1px solid var(--ink-100);border-left:2px solid var(--signal-600);border-radius:4px;flex:none;"></div><div style="flex:1;display:flex;flex-direction:column;gap:6px;justify-content:center;"><div style="height:6px;width:80%;background:var(--ink-300);border-radius:3px;"></div><div style="height:6px;width:60%;background:var(--ink-200);border-radius:3px;"></div></div></div>
+          </div>
+          <p class="dd-note">Navegação clara e rotulada; nada de ícone mudo sobre fundo escuro.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="ds-footer">
+      AgentFlow — Design System v1.0 · arquivo estático, sem dependências. Abra este arquivo diretamente no navegador para visualizar.
+    </footer>
+
+  </main>
+</div>
+</body>
+</html>

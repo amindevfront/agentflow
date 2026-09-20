@@ -1,0 +1,1386 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AgentFlow — Console de fluxos</title>
+<meta name="description" content="Console operacional do AgentFlow: fluxos, execuções e simulação de payload.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TOKENS — mesma paleta e escala do design system do AgentFlow
+   ============================================================ */
+:root{
+  --ink-950:#0A0F1A; --ink-900:#0E1626; --ink-800:#16202F; --ink-700:#202D40;
+  --ink-600:#3C4A5C; --ink-500:#59697D; --ink-400:#7A8AA0; --ink-300:#9FACBE;
+  --ink-200:#C7D0DA; --ink-100:#E4E9EE; --mist-50:#F5F7F9; --white:#FFFFFF;
+
+  --signal-700:#0B3FCB; --signal-600:#1450F0; --signal-500:#2C6BFF;
+  --signal-100:#E4ECFF; --signal-50:#F2F6FB;
+
+  --state-run:#B5790A; --state-run-ink:#FFB020; --state-run-bg:#FFF3DC;
+  --state-done:#177A52; --state-done-ink:#1AA16B; --state-done-bg:#E1F5EB;
+  --state-error:#C22A2E; --state-error-ink:#E5484D; --state-error-bg:#FBE7E7;
+  --state-idle:#7A8AA0; --state-idle-bg:#EDF1F4;
+
+  --font-display:'Archivo', sans-serif;
+  --font-mono:'IBM Plex Mono', monospace;
+
+  --radius-sm:6px; --radius-btn:8px; --radius-md:10px; --radius-lg:16px;
+  --shadow-sm:0 1px 2px rgba(10,15,26,.06);
+  --shadow-md:0 8px 24px rgba(10,15,26,.14);
+  --sidebar-w:240px;
+  --dur-fast:.15s; --dur-med:.22s;
+  --z-sidebar:50; --z-overlay:45; --z-modal:70; --z-modal-overlay:65; --z-toast:80; --z-float:60;
+}
+
+/* ============================================================
+   BASE
+   ============================================================ */
+*{box-sizing:border-box;}
+html{-webkit-text-size-adjust:100%;}
+body{margin:0; font-family:var(--font-display); color:var(--ink-950); background:var(--mist-50); -webkit-font-smoothing:antialiased;}
+h1,h2,h3,h4{margin:0; font-family:var(--font-display);}
+p{margin:0;}
+button{font-family:var(--font-display); cursor:pointer;}
+input,textarea{font-family:var(--font-display);}
+.mono{font-family:var(--font-mono); font-variant-numeric:tabular-nums;}
+.visually-hidden{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap;}
+:focus-visible{outline:2px solid var(--signal-500); outline-offset:2px;}
+
+/* ============================================================
+   APP SHELL / SIDEBAR (off-canvas)
+   ============================================================ */
+.app-shell{display:flex; min-height:100vh;}
+
+.sidebar{
+  position:fixed; top:0; left:0; width:var(--sidebar-w); height:100vh; overflow-y:auto;
+  flex:none;
+  background:var(--white); border-right:1px solid var(--ink-100);
+  display:flex; flex-direction:column; padding:20px 0;
+  transform:translateX(-100%); transition:transform var(--dur-med) ease;
+  z-index:var(--z-sidebar);
+}
+.sidebar.is-open{transform:translateX(0); box-shadow:var(--shadow-md);}
+.sidebar-overlay{
+  position:fixed; inset:0; background:rgba(10,15,26,.42);
+  opacity:0; pointer-events:none; transition:opacity var(--dur-med) ease;
+  z-index:var(--z-overlay);
+}
+.sidebar-overlay.is-visible{opacity:1; pointer-events:auto;}
+
+.brand{display:flex; align-items:center; gap:9px; padding:0 20px; margin-bottom:22px;}
+.brand span{font-size:16px; font-weight:800; letter-spacing:-0.01em;}
+
+.nav-item{display:flex; align-items:center; height:40px; padding:0 20px; font-size:14px; color:var(--ink-500); border-left:2px solid transparent; background:none; border-top:none; border-bottom:none; border-right:none; width:100%; text-align:left;}
+a.nav-item{width:auto;}
+.nav-item:hover{color:var(--ink-900); background:var(--mist-50);}
+.nav-item:active{background:var(--ink-100);}
+.nav-item.is-active{color:var(--ink-950); font-weight:600; border-left:2px solid var(--signal-600); background:var(--signal-50);}
+
+.sidebar-foot{margin-top:auto; padding:14px 20px 0; border-top:1px solid var(--ink-100); display:flex; align-items:center; gap:10px;}
+.avatar{width:28px; height:28px; border-radius:999px; background:var(--signal-100); color:var(--signal-700); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:700; flex:none;}
+.sidebar-foot strong{font-size:13px; display:block;}
+.sidebar-foot span{font-size:11px; color:var(--ink-500); font-family:var(--font-mono);}
+
+@media (min-width:960px){
+  .sidebar{transform:none; position:sticky; top:0;}
+  .sidebar-overlay{display:none !important;}
+  .hamburger{display:none !important;}
+}
+@media (max-width:959px){
+  .sidebar{position:fixed;}
+}
+
+.main{flex:1 1 auto; min-width:0; display:flex; flex-direction:column; min-height:100vh;}
+
+/* ============================================================
+   TOPBAR
+   ============================================================ */
+.topbar{
+  position:sticky; top:0; z-index:20; height:60px; flex:none;
+  background:var(--white); border-bottom:1px solid var(--ink-100);
+  display:flex; align-items:center; gap:14px; padding:0 20px;
+}
+.topbar-title{font-size:17px; font-weight:700; flex:none;}
+.topbar-spacer{flex-grow:1;}
+.topbar-actions{display:flex; align-items:center; gap:10px; flex-wrap:wrap;}
+
+.icon-btn{
+  width:38px; height:38px; border-radius:var(--radius-sm); border:1px solid transparent;
+  background:none; display:flex; align-items:center; justify-content:center; color:var(--ink-700); flex:none;
+}
+.icon-btn:hover{background:var(--ink-100);}
+.icon-btn:active{background:var(--ink-200);}
+.hamburger span, .hamburger span::before, .hamburger span::after{
+  content:''; display:block; width:18px; height:2px; background:currentColor; border-radius:2px;
+}
+.hamburger span{position:relative;}
+.hamburger span::before{position:absolute; top:-6px;}
+.hamburger span::after{position:absolute; top:6px;}
+
+/* ============================================================
+   BUTTONS (com estado de carregamento)
+   ============================================================ */
+.btn{position:relative; display:inline-flex; align-items:center; justify-content:center; gap:8px; height:44px; padding:0 20px; border-radius:var(--radius-btn); font-size:14px; font-weight:600; border:1px solid transparent; white-space:nowrap;}
+.btn-sm{height:36px; padding:0 14px; font-size:13px;}
+.btn-primary{background:var(--signal-600); color:var(--white);}
+.btn-primary:hover:not(:disabled){background:var(--signal-700);}
+.btn-primary:active:not(:disabled){background:var(--signal-700); box-shadow:inset 0 1px 2px rgba(10,15,26,.25);}
+.btn-secondary{background:var(--white); color:var(--ink-900); border-color:var(--ink-200);}
+.btn-secondary:hover:not(:disabled){border-color:var(--ink-400);}
+.btn-secondary:active:not(:disabled){background:var(--mist-50);}
+.btn-ghost{background:transparent; color:var(--ink-700); border-color:transparent;}
+.btn-ghost:hover:not(:disabled){background:var(--ink-100);}
+.btn-ghost:active:not(:disabled){background:var(--ink-200);}
+.btn-danger{background:var(--white); color:var(--state-error); border-color:var(--state-error-ink);}
+.btn-danger:hover:not(:disabled){background:var(--state-error-bg);}
+.btn-danger:active:not(:disabled){background:var(--state-error-bg); box-shadow:inset 0 1px 2px rgba(194,42,46,.2);}
+.btn-danger-solid{background:var(--state-error-ink); color:var(--white); border-color:var(--state-error-ink);}
+.btn-danger-solid:hover:not(:disabled){background:var(--state-error);}
+.btn-danger-solid:active:not(:disabled){background:var(--state-error); box-shadow:inset 0 1px 2px rgba(10,15,26,.25);}
+.btn:disabled{opacity:.45; cursor:not-allowed;}
+.btn .spinner{display:none; width:14px; height:14px; border-radius:999px; border:2px solid currentColor; border-right-color:transparent; opacity:.85; animation:spin .6s linear infinite; flex:none;}
+.btn.is-loading .spinner{display:inline-block;}
+.btn.is-loading .btn-label{opacity:.85;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.cb-trigger{border-color:var(--state-error-ink); color:var(--state-error); background:var(--white); font-weight:700;}
+.cb-trigger:hover:not(:disabled){background:var(--state-error-bg);}
+.cb-trigger:active:not(:disabled){background:var(--state-error-bg); box-shadow:inset 0 1px 2px rgba(194,42,46,.2);}
+.cb-trigger .dot{width:7px; height:7px; border-radius:999px; background:var(--state-error-ink); flex:none;}
+
+/* ============================================================
+   CIRCUIT BREAKER — banner e modal
+   ============================================================ */
+.cb-banner{
+  display:none; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;
+  background:var(--state-error-bg); color:var(--state-error); padding:12px 20px; font-size:13px; font-weight:600;
+  border-bottom:1px solid var(--state-error-ink);
+}
+.cb-banner.is-visible{display:flex;}
+
+.modal-overlay{
+  position:fixed; inset:0; background:rgba(10,15,26,.5); z-index:var(--z-modal-overlay);
+  opacity:0; pointer-events:none; transition:opacity var(--dur-med) ease;
+}
+.modal-overlay.is-visible{opacity:1; pointer-events:auto;}
+.modal{
+  position:fixed; top:50%; left:50%; transform:translate(-50%,-46%); width:min(420px,90vw);
+  background:var(--white); border-radius:var(--radius-lg); box-shadow:var(--shadow-md);
+  padding:24px; z-index:var(--z-modal); opacity:0; pointer-events:none; transition:opacity var(--dur-med) ease, transform var(--dur-med) ease;
+}
+.modal.is-visible{opacity:1; pointer-events:auto; transform:translate(-50%,-50%);}
+.modal h3{font-size:17px; font-weight:700; margin-bottom:10px;}
+.modal p{font-size:13px; color:var(--ink-600); line-height:1.55;}
+.modal-actions{display:flex; justify-content:flex-end; gap:10px; margin-top:22px;}
+
+/* ============================================================
+   LAYOUT DE CONTEÚDO
+   ============================================================ */
+.content{padding:24px min(4vw,32px) 64px; display:flex; flex-direction:column; gap:24px;}
+.panel-row{display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start;}
+.panel-flows{flex:1 1 420px;}
+.panel-detail{flex:0 0 360px; min-width:280px;}
+.surface{background:var(--white); border:1px solid var(--ink-100); border-radius:var(--radius-md);}
+.panel{padding:22px;}
+.panel-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:6px; flex-wrap:wrap;}
+.panel-title{font-size:14px; font-weight:700; color:var(--ink-800); margin:0;}
+.panel-sub{font-size:12px; color:var(--ink-500); margin-bottom:18px;}
+.sim-output-col .panel-title{font-size:13px; margin-bottom:14px;}
+.sim-output-col .panel-title ~ .panel-title{margin-top:22px; margin-bottom:4px;}
+
+/* ---- lista densa ---- */
+.list-reset{list-style:none; margin:0; padding:0;}
+.list-row{display:flex; align-items:center; gap:16px; padding:14px 20px; margin:0 -20px; width:calc(100% + 40px); border-top:1px solid var(--ink-100); flex-wrap:wrap; background:none; border-left:0; border-right:0; border-bottom:0; text-align:left;}
+li:last-child > .list-row{border-bottom:1px solid var(--ink-100);}
+.list-row:hover{background:var(--mist-50);}
+.list-row:active{background:var(--ink-100);}
+.list-row.is-active{background:var(--signal-50);}
+.list-row .avatar{width:32px; height:32px;}
+.list-meta{width:220px; flex:1 1 190px;}
+.list-meta strong{display:block; font-size:14px; font-weight:600; color:var(--ink-950);}
+.list-meta span{font-size:12px; color:var(--ink-500);}
+.progress-dots{display:flex; gap:5px; width:96px; flex:none;}
+.progress-dots span{width:16px; height:5px; border-radius:3px; background:var(--ink-200); display:block;}
+.list-time{font-size:12px; color:var(--ink-500); width:112px; flex:none; font-family:var(--font-mono);}
+
+/* ---- pills ---- */
+.pill{display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px 0 8px; border-radius:999px; font-size:12px; font-weight:600; flex:none;}
+.pill-dot{width:6px; height:6px; border-radius:999px; flex:none;}
+.pill-run{background:var(--state-run-bg); color:var(--state-run);} .pill-run .pill-dot{background:var(--state-run-ink);}
+.pill-done{background:var(--state-done-bg); color:var(--state-done);} .pill-done .pill-dot{background:var(--state-done-ink);}
+.pill-error{background:var(--state-error-bg); color:var(--state-error);} .pill-error .pill-dot{background:var(--state-error-ink);}
+.pill-idle{background:var(--state-idle-bg); color:var(--ink-600);} .pill-idle .pill-dot{background:var(--state-idle);}
+.pill-frozen{background:var(--state-idle-bg); color:var(--ink-600); border:1px dashed var(--ink-400);} .pill-frozen .pill-dot{background:var(--state-idle);}
+.count-chip{font-family:var(--font-mono); font-size:12px; color:var(--ink-600); background:var(--ink-100); padding:4px 8px; border-radius:var(--radius-sm);}
+
+/* ---- trilho de fluxo (rail) — adaptativo ---- */
+.rail-steps{list-style:none; margin:0; padding:0;}
+.rail-summary{display:none; align-items:center; gap:8px; font-size:12px; color:var(--ink-500); padding-bottom:14px; margin-bottom:14px; border-bottom:1px dashed var(--ink-200);}
+.rail-summary.is-visible{display:flex;}
+.rail-summary-check{color:var(--state-done); font-weight:700;}
+.rail-step{display:flex; gap:14px;}
+.rail-dotcol{display:flex; flex-direction:column; align-items:center; flex:none;}
+.rail-node{width:14px; height:14px; border-radius:999px; flex:none; box-sizing:border-box;}
+.rail-node-done{background:var(--signal-600); border:3px solid var(--signal-600);}
+.rail-node-run{background:var(--white); border:3px solid var(--state-run-ink);}
+.rail-node-idle{background:var(--white); border:3px solid var(--ink-200);}
+.rail-node-error{background:var(--white); border:3px solid var(--state-error-ink);}
+.rail-node-frozen{background:var(--white); border:3px dashed var(--ink-400);}
+.rail-line{width:2px; flex-grow:1; background:var(--ink-200); min-height:22px;}
+.rail-line-done{background:var(--signal-600);}
+.rail-line-error{background:var(--state-error-ink);}
+.rail-body{flex-grow:1; padding-bottom:22px; min-width:0;}
+.rail-step:last-child .rail-body{padding-bottom:0;}
+.rail-row{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+.rail-title{font-size:14px; font-weight:600; color:var(--ink-950);}
+.rail-title-muted{color:var(--ink-400);}
+.rail-meta{font-size:12px; color:var(--ink-500); margin-top:4px;}
+.rail-meta-run{color:var(--state-run);}
+.rail-meta-error{color:var(--state-error);}
+
+/* ---- explicabilidade (cards expansíveis) ---- */
+.explain-toggle{
+  display:inline-flex; align-items:center; gap:6px; margin-top:6px; padding:0; border:none; background:none;
+  font-size:12px; font-weight:600; color:var(--signal-600);
+}
+.explain-toggle:hover{color:var(--signal-700); text-decoration:underline;}
+.explain-toggle:active{color:var(--signal-700);}
+.explain-toggle .chevron{transition:transform var(--dur-fast) ease; font-size:11px;}
+.explain-toggle[aria-expanded="true"] .chevron{transform:rotate(180deg);}
+.explain-panel{display:grid; grid-template-rows:0fr; transition:grid-template-rows var(--dur-med) ease; margin-top:2px;}
+.explain-panel.is-open{grid-template-rows:1fr;}
+.explain-panel-inner{overflow:hidden;}
+.explain-panel-inner p{font-size:12.5px; color:var(--ink-600); line-height:1.55; background:var(--mist-50); border:1px solid var(--ink-100); border-radius:var(--radius-btn); padding:10px 12px; margin-top:8px;}
+
+/* ---- campos / formulário ---- */
+.field{width:100%;}
+.field-label{display:block; font-size:13px; font-weight:600; color:var(--ink-700); margin-bottom:6px;}
+.field-row{display:flex; gap:20px; flex-wrap:wrap;}
+.field-row .field{flex:1 1 220px; max-width:340px;}
+.input{height:44px; width:100%; padding:0 14px; border-radius:var(--radius-btn); border:1px solid var(--ink-200); font-size:14px; color:var(--ink-900); background:var(--white);}
+.input:focus-visible, .input:focus{outline:none; border-color:var(--signal-500); box-shadow:0 0 0 3px var(--signal-100);}
+textarea.input{height:auto; padding:12px 14px; line-height:1.5; resize:vertical;}
+.field.is-invalid .input{border-color:var(--state-error-ink);}
+.field.is-invalid .input.is-shake{animation:shake .32s ease;}
+@keyframes shake{25%{transform:translateX(-4px);}75%{transform:translateX(4px);}}
+.field.is-valid .input{border-color:var(--state-done-ink);}
+.field-help{font-size:12px; margin-top:6px; display:none; align-items:center; gap:5px;}
+.field-help.is-visible{display:flex;}
+.field-help-error{color:var(--state-error);}
+.field-help-ok{color:var(--state-done);}
+.token-field{position:relative;}
+.token-field .input{padding-right:44px;}
+.token-toggle{position:absolute; right:4px; top:4px; width:36px; height:36px; border:none; background:none; border-radius:var(--radius-sm); color:var(--ink-500); display:flex; align-items:center; justify-content:center;}
+.token-toggle:hover{background:var(--ink-100); color:var(--ink-800);}
+.token-toggle:active{background:var(--ink-200);}
+.form-actions{display:flex; align-items:center; gap:12px; margin-top:20px;}
+.form-hint{font-size:12px; color:var(--ink-400);}
+
+/* ---- simulador de payload ---- */
+.sim-grid{display:flex; gap:24px; flex-wrap:wrap;}
+.sim-input-col{flex:1 1 320px; min-width:0;}
+.sim-output-col{flex:1 1 280px; min-width:0; border-left:1px solid var(--ink-100); padding-left:24px;}
+@media (max-width:720px){.sim-output-col{border-left:none; padding-left:0; border-top:1px solid var(--ink-100); padding-top:20px;}}
+.sim-log{margin-top:20px; display:flex; flex-direction:column; gap:10px;}
+.sim-log-item{border:1px solid var(--ink-100); border-radius:var(--radius-btn); padding:12px 14px;}
+.sim-log-head{display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;}
+.sim-log-time{font-size:12px; color:var(--ink-500);}
+.sim-empty{font-size:12px; color:var(--ink-400); font-style:italic;}
+
+/* ---- estado vazio ---- */
+.empty-state{display:flex; flex-direction:column; align-items:center; text-align:center; gap:8px; padding:48px 24px; border:1px dashed var(--ink-200); border-radius:var(--radius-md); color:var(--ink-500);}
+.empty-state h3{font-size:14px; font-weight:700; color:var(--ink-800); margin:4px 0 0;}
+.empty-state p{font-size:13px; color:var(--ink-500); max-width:320px; line-height:1.5; margin:0;}
+
+/* ---- detalhe do fluxo — cabeçalho, meta e ações ---- */
+.detail-head{margin-bottom:4px;}
+.detail-name{font-size:15px; font-weight:700; margin:0;}
+.detail-meta{margin-bottom:18px;}
+.detail-actions{display:flex; gap:10px; margin-top:20px; padding-top:20px; border-top:1px solid var(--ink-100);}
+.btn-grow{flex-grow:1;}
+
+/* ---- pontos de progresso — cor por estado, sem inline style ---- */
+.dot-done{background:var(--signal-600);}
+.dot-run{background:var(--state-run-ink);}
+.dot-run.is-frozen{background:var(--ink-400);}
+.dot-error{background:var(--state-error-ink);}
+.dot-idle{background:var(--ink-200);}
+
+/* ---- toasts ---- */
+.toast-region{position:fixed; bottom:24px; left:24px; display:flex; flex-direction:column; gap:10px; z-index:var(--z-toast); max-width:min(340px,84vw);}
+.toast{
+  background:var(--ink-950); color:var(--white); padding:12px 16px; border-radius:9px; font-size:13px; font-weight:600;
+  box-shadow:var(--shadow-md); display:flex; align-items:center; gap:10px;
+  opacity:0; transform:translateY(8px); transition:opacity var(--dur-med) ease, transform var(--dur-med) ease;
+}
+.toast.is-visible{opacity:1; transform:translateY(0);}
+.toast .pill-dot{width:7px; height:7px; border-radius:999px; flex:none; background:var(--signal-500);}
+.toast.toast-error .pill-dot{background:var(--state-error-ink);}
+.toast.toast-success .pill-dot{background:var(--state-done-ink);}
+
+/* ---- seletor de idioma flutuante ---- */
+.lang-switch{
+  position:fixed; bottom:24px; right:24px; z-index:var(--z-float);
+  width:52px; height:52px; border-radius:999px; border:1px solid var(--ink-100);
+  background:var(--ink-950); color:var(--white); font-size:13px; font-weight:700; letter-spacing:.02em;
+  box-shadow:var(--shadow-md); display:flex; align-items:center; justify-content:center;
+}
+.lang-switch:hover{background:var(--ink-800);}
+.lang-switch:active{background:var(--ink-700);}
+
+footer.app-footer{padding:0 min(4vw,32px) 40px; font-size:12px; color:var(--ink-400);}
+</style>
+</head>
+<body>
+
+<div class="app-shell">
+
+  <div class="sidebar-overlay" id="sidebar-overlay"></div>
+
+  <nav class="sidebar" id="sidebar" aria-label="Navegação principal">
+    <div class="brand">
+      <svg width="22" height="22" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M8 32 L20 20 L32 8" stroke="#2C6BFF" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="8" cy="32" r="4.5" fill="#0A0F1A" stroke="#2C6BFF" stroke-width="3"/>
+        <circle cx="20" cy="20" r="4.5" fill="#2C6BFF"/>
+        <circle cx="32" cy="8" r="4.5" fill="#2C6BFF"/>
+      </svg>
+      <span>AgentFlow</span>
+    </div>
+
+    <button type="button" class="nav-item is-active" data-i18n="navFlows">Fluxos</button>
+    <button type="button" class="nav-item" data-i18n="navRuns">Execuções</button>
+    <button type="button" class="nav-item" data-i18n="navConnectors">Conectores</button>
+    <button type="button" class="nav-item" data-i18n="navTeam">Equipe</button>
+    <button type="button" class="nav-item" data-i18n="navSettings">Configurações</button>
+
+    <div class="sidebar-foot">
+      <div class="avatar">CA</div>
+      <div>
+        <strong>Caio Amin</strong>
+        <span data-i18n="roleOps">operações</span>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <header class="topbar">
+      <button type="button" class="icon-btn hamburger" id="hamburger-btn" aria-controls="sidebar" aria-expanded="false" aria-label="Abrir menu de navegação" data-i18n-aria-label="openMenu">
+        <span></span>
+      </button>
+      <h1 class="topbar-title" data-i18n="topbarTitle">Fluxos</h1>
+      <div class="topbar-spacer"></div>
+      <div class="topbar-actions">
+        <button type="button" class="btn btn-sm cb-trigger" id="cb-trigger-btn">
+          <span class="dot" aria-hidden="true"></span>
+          <span data-i18n="cbTrigger">Parar tudo</span>
+        </button>
+        <button type="button" class="btn btn-primary btn-sm js-async-btn" id="new-flow-btn" data-loading-text="creatingFlow">
+          <span class="spinner" aria-hidden="true"></span>
+          <span class="btn-label" data-i18n="btnNewFlow">Novo fluxo</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="cb-banner" id="cb-banner">
+      <span data-i18n="cbBannerText">Execuções pausadas manualmente — os fluxos em andamento foram congelados.</span>
+      <button type="button" class="btn btn-secondary btn-sm" id="cb-resume-btn" data-i18n="cbResume">Retomar execuções</button>
+    </div>
+
+    <div class="content">
+
+      <section class="panel-row" aria-label="Fluxos e detalhe">
+        <div class="surface panel panel-flows">
+          <div class="panel-head">
+            <div>
+              <h2 class="panel-title" data-i18n="listTitle">Fluxos</h2>
+              <div class="panel-sub" id="list-sub">3 fluxos · 1 em execução</div>
+            </div>
+          </div>
+          <ul id="flow-list" class="list-reset" role="list"></ul>
+        </div>
+
+        <div class="surface panel panel-detail" id="detail-panel"></div>
+      </section>
+
+      <section class="surface panel" aria-label="Configurações do fluxo">
+        <h2 class="panel-title" data-i18n="settingsTitle">Configurações do fluxo selecionado</h2>
+        <div class="panel-sub" data-i18n="settingsSub">Validação reativa antes de salvar — nada é aceito fora do formato esperado.</div>
+
+        <form id="settings-form" novalidate>
+          <div class="field-row">
+            <div class="field" id="field-name">
+              <label class="field-label" for="f-name" data-i18n="fieldName">Nome do fluxo</label>
+              <input class="input" id="f-name" type="text" value="Triagem de contratos" maxlength="60" autocomplete="off">
+              <span class="field-help field-help-error" id="f-name-help" data-i18n="fieldNameHelp">Informe pelo menos 3 caracteres.</span>
+            </div>
+
+            <div class="field" id="field-trigger">
+              <label class="field-label" for="f-trigger" data-i18n="fieldTrigger">Gatilho</label>
+              <input class="input" id="f-trigger" type="text" value="novo e-mail em contratos@" autocomplete="off">
+            </div>
+
+            <div class="field" id="field-webhook">
+              <label class="field-label" for="f-webhook" data-i18n="fieldWebhook">URL do webhook</label>
+              <input class="input" id="f-webhook" type="text" value="https://api." autocomplete="off" inputmode="url">
+              <span class="field-help field-help-error" id="f-webhook-help" data-i18n="fieldWebhookHelp">Endereço incompleto — use https:// e um domínio válido.</span>
+              <span class="field-help field-help-ok" id="f-webhook-ok" data-i18n="fieldWebhookOk">Endereço válido.</span>
+            </div>
+
+            <div class="field" id="field-token">
+              <label class="field-label" for="f-token" data-i18n="fieldToken">Token de API</label>
+              <div class="token-field">
+                <input class="input mono" id="f-token" type="text" readonly>
+                <button type="button" class="token-toggle" id="token-toggle" aria-pressed="false" aria-label="Mostrar token" data-i18n-aria-label="tokenShow">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="1.6"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button type="submit" class="btn btn-primary js-async-btn" id="save-settings-btn" data-loading-text="saving">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="btn-label" data-i18n="btnSave">Salvar configurações</span>
+            </button>
+            <span class="form-hint" data-i18n="formHint">O token nunca é exibido por padrão — clique no ícone para revelar.</span>
+          </div>
+        </form>
+      </section>
+
+      <section class="surface panel" aria-label="Simulador de payload">
+        <h2 class="panel-title" data-i18n="simTitle">Simulador de payload</h2>
+        <div class="panel-sub" data-i18n="simSub">Teste um fluxo com dados fictícios antes de colocá-lo em produção.</div>
+
+        <div class="sim-grid">
+          <div class="sim-input-col">
+            <label class="field-label" for="sim-payload" data-i18n="simPayloadLabel">Payload de teste (JSON)</label>
+            <textarea class="input mono" id="sim-payload" rows="10">{
+  "contrato_id": "CT-4471",
+  "cliente": "Meridian Peças Ltda",
+  "valor": 4200.00,
+  "moeda": "BRL",
+  "clausulas_criticas": ["4.2", "7.1"]
+}</textarea>
+            <span class="field-help field-help-error" id="sim-payload-help" data-i18n="simPayloadHelp">JSON inválido — verifique a sintaxe antes de executar.</span>
+
+            <div class="form-actions">
+              <button type="button" class="btn btn-primary js-async-btn" id="run-sim-btn" data-loading-text="running">
+                <span class="spinner" aria-hidden="true"></span>
+                <span class="btn-label" data-i18n="btnRunSim">Executar teste</span>
+              </button>
+              <span class="form-hint" data-i18n="simHint">Não afeta execuções reais — roda isolado, localmente.</span>
+            </div>
+          </div>
+
+          <div class="sim-output-col">
+            <h3 class="panel-title" data-i18n="simOutputTitle">Execução simulada</h3>
+            <div id="sim-rail" class="rail-container"></div>
+
+            <h3 class="panel-title" data-i18n="simHistoryTitle">Histórico de testes</h3>
+            <div class="sim-log" id="sim-log">
+              <p class="sim-empty" id="sim-log-empty" data-i18n="simHistoryEmpty">Nenhum teste executado nesta sessão ainda.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <footer class="app-footer" data-i18n="footerText">AgentFlow — Console operacional. Protótipo estático, sem backend real.</footer>
+  </div>
+</div>
+
+<div class="modal-overlay" id="cb-overlay"></div>
+<div class="modal" id="cb-modal" role="dialog" aria-modal="true" aria-labelledby="cb-modal-title" aria-describedby="cb-modal-body">
+  <h3 id="cb-modal-title" data-i18n="cbModalTitle">Parar todas as execuções?</h3>
+  <p id="cb-modal-body" data-i18n="cbModalBody">Isso congela imediatamente os fluxos em execução. Use apenas em caso de comportamento inesperado — a ação pode ser revertida depois.</p>
+  <div class="modal-actions">
+    <button type="button" class="btn btn-secondary" id="cb-cancel-btn" data-i18n="cbCancel">Cancelar</button>
+    <button type="button" class="btn btn-danger-solid" id="cb-confirm-btn" data-i18n="cbConfirm">Sim, parar tudo</button>
+  </div>
+</div>
+
+<div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+<button type="button" class="lang-switch" id="lang-toggle" aria-label="Switch language to English">
+  <span id="lang-code">EN</span>
+</button>
+
+<script>
+'use strict';
+/* ==========================================================================
+   AgentFlow — Console (protótipo estático de front-end)
+   Vanilla JS, sem dependências. Organizado por módulo funcional.
+   ========================================================================== */
+(function () {
+
+  /* ------------------------------------------------------------------
+     i18n
+     ------------------------------------------------------------------ */
+  var i18n = {
+    pt: {
+      navFlows:'Fluxos', navRuns:'Execuções', navConnectors:'Conectores', navTeam:'Equipe', navSettings:'Configurações',
+      roleOps:'operações',
+      openMenu:'Abrir menu de navegação', closeMenu:'Fechar menu de navegação',
+      topbarTitle:'Fluxos',
+      cbTrigger:'Parar tudo',
+      btnNewFlow:'Novo fluxo', creatingFlow:'Criando…',
+      cbBannerText:'Execuções pausadas manualmente — os fluxos em andamento foram congelados.',
+      cbResume:'Retomar execuções',
+      listTitle:'Fluxos',
+      detailRunLabel:'execução',
+      settingsTitle:'Configurações do fluxo selecionado',
+      settingsSub:'Validação reativa antes de salvar — nada é aceito fora do formato esperado.',
+      fieldName:'Nome do fluxo', fieldNameHelp:'Informe pelo menos 3 caracteres.',
+      fieldTrigger:'Gatilho',
+      fieldWebhook:'URL do webhook', fieldWebhookHelp:'Endereço incompleto — use https:// e um domínio válido.', fieldWebhookOk:'Endereço válido.',
+      fieldToken:'Token de API', tokenShow:'Mostrar token', tokenHide:'Ocultar token',
+      btnSave:'Salvar configurações', saving:'Salvando…',
+      formHint:'O token nunca é exibido por padrão — clique no ícone para revelar.',
+      simTitle:'Simulador de payload',
+      simSub:'Teste um fluxo com dados fictícios antes de colocá-lo em produção.',
+      simPayloadLabel:'Payload de teste (JSON)',
+      simPayloadHelp:'JSON inválido — verifique a sintaxe antes de executar.',
+      btnRunSim:'Executar teste', running:'Executando…',
+      simHint:'Não afeta execuções reais — roda isolado, localmente.',
+      simOutputTitle:'Execução simulada',
+      simHistoryTitle:'Histórico de testes',
+      simHistoryEmpty:'Nenhum teste executado nesta sessão ainda.',
+      whyLabel:'Por que a IA fez isso?', hideLabel:'Ocultar explicação',
+      footerText:'AgentFlow — Console operacional. Protótipo estático, sem backend real.',
+      toastFlowCreated:'Fluxo criado com sucesso.',
+      toastSettingsSaved:'Configurações salvas.',
+      toastSettingsBlocked:'Corrija os campos destacados antes de salvar.',
+      toastSimOk:'Simulação concluída sem erros.',
+      toastSimError:'Simulação encontrou um payload inválido.',
+      toastCbOn:'Circuit breaker ativado — execuções congeladas.',
+      toastCbOff:'Execuções retomadas.',
+      simLogOk:'concluído', simLogError:'erro de validação',
+      simExplainOk:'O motor classificou o payload como contrato de baixo risco: o campo "valor" está abaixo de R$ 5.000 e o cliente já possui histórico aprovado nas últimas 6 execuções.',
+      simExplainError:'A execução parou na etapa de validação porque o JSON enviado não pôde ser interpretado. Corrija a sintaxe e tente novamente.',
+      cbModalTitle:'Parar todas as execuções?',
+      cbModalBody:'Isso congela imediatamente os fluxos em execução. Use apenas em caso de comportamento inesperado — a ação pode ser revertida depois.',
+      cbCancel:'Cancelar', cbConfirm:'Sim, parar tudo',
+      frozenLabel:'pausado pelo operador'
+    },
+    en: {
+      navFlows:'Flows', navRuns:'Runs', navConnectors:'Connectors', navTeam:'Team', navSettings:'Settings',
+      roleOps:'operations',
+      openMenu:'Open navigation menu', closeMenu:'Close navigation menu',
+      topbarTitle:'Flows',
+      cbTrigger:'Stop all',
+      btnNewFlow:'New flow', creatingFlow:'Creating…',
+      cbBannerText:'Runs paused manually — in-progress flows have been frozen.',
+      cbResume:'Resume runs',
+      listTitle:'Flows',
+      detailRunLabel:'run',
+      settingsTitle:'Selected flow settings',
+      settingsSub:'Reactive validation before saving — nothing is accepted outside the expected format.',
+      fieldName:'Flow name', fieldNameHelp:'Enter at least 3 characters.',
+      fieldTrigger:'Trigger',
+      fieldWebhook:'Webhook URL', fieldWebhookHelp:'Incomplete address — use https:// and a valid domain.', fieldWebhookOk:'Valid address.',
+      fieldToken:'API token', tokenShow:'Show token', tokenHide:'Hide token',
+      btnSave:'Save settings', saving:'Saving…',
+      formHint:'The token is never shown by default — click the icon to reveal it.',
+      simTitle:'Payload simulator',
+      simSub:'Test a flow with sample data before putting it into production.',
+      simPayloadLabel:'Test payload (JSON)',
+      simPayloadHelp:'Invalid JSON — check the syntax before running.',
+      btnRunSim:'Run test', running:'Running…',
+      simHint:'Does not affect real runs — runs isolated, locally.',
+      simOutputTitle:'Simulated run',
+      simHistoryTitle:'Test history',
+      simHistoryEmpty:'No test has been run in this session yet.',
+      whyLabel:'Why did the AI do this?', hideLabel:'Hide explanation',
+      footerText:'AgentFlow — Operations console. Static prototype, no real backend.',
+      toastFlowCreated:'Flow created successfully.',
+      toastSettingsSaved:'Settings saved.',
+      toastSettingsBlocked:'Fix the highlighted fields before saving.',
+      toastSimOk:'Simulation completed with no errors.',
+      toastSimError:'Simulation found an invalid payload.',
+      toastCbOn:'Circuit breaker engaged — runs frozen.',
+      toastCbOff:'Runs resumed.',
+      simLogOk:'completed', simLogError:'validation error',
+      simExplainOk:'The engine classified the payload as a low-risk contract: the "value" field is under $5,000 and the customer already has an approved history across the last 6 runs.',
+      simExplainError:'The run stopped at the validation step because the submitted JSON could not be parsed. Fix the syntax and try again.',
+      cbModalTitle:'Stop all runs?',
+      cbModalBody:'This immediately freezes any flows in progress. Use only for unexpected behavior — the action can be reversed afterwards.',
+      cbCancel:'Cancel', cbConfirm:'Yes, stop everything',
+      frozenLabel:'paused by operator'
+    }
+  };
+
+  var state = {
+    lang: 'pt',
+    systemPaused: false,
+    selectedFlowId: 'triagem',
+    simRunning: false,
+    tokenRevealed: false
+  };
+
+  var REAL_TOKEN = 'agentflow-demo-token-8f2ac91b6de34f0aa9c74f2a';
+
+  /* ------------------------------------------------------------------
+     Segurança — helpers de sanitização (defesa em profundidade)
+     Preferimos sempre textContent/DOM em vez de innerHTML com dados do
+     usuário; estas funções filtram caracteres perigosos como camada extra.
+     ------------------------------------------------------------------ */
+  function stripDangerousChars(value) {
+    return String(value).replace(/[<>]/g, '');
+  }
+  function sanitizeText(value, maxLen) {
+    var clean = String(value)
+      .replace(/[<>]/g, '')
+      .replace(/[\u0000-\u001F\u007F]/g, '')
+      .trim();
+    return maxLen ? clean.slice(0, maxLen) : clean;
+  }
+  function maskToken(value) {
+    var clean = String(value);
+    if (clean.length <= 4) return '•'.repeat(Math.max(clean.length, 4));
+    return '•'.repeat(clean.length - 4) + clean.slice(-4);
+  }
+
+  /* ------------------------------------------------------------------
+     Utilidades
+     ------------------------------------------------------------------ */
+  function $(sel, ctx) { return (ctx || document).querySelector(sel); }
+  function $all(sel, ctx) { return Array.prototype.slice.call((ctx || document).querySelectorAll(sel)); }
+  function t(key) { return i18n[state.lang][key] || key; }
+  function debounce(fn, wait) {
+    var timer;
+    return function () {
+      var args = arguments;
+      clearTimeout(timer);
+      timer = setTimeout(function () { fn.apply(null, args); }, wait);
+    };
+  }
+  function el(tag, attrs, children) {
+    var node = document.createElement(tag);
+    if (attrs) {
+      Object.keys(attrs).forEach(function (k) {
+        if (k === 'class') node.className = attrs[k];
+        else if (k === 'text') node.textContent = attrs[k];
+        else node.setAttribute(k, attrs[k]);
+      });
+    }
+    (children || []).forEach(function (c) { if (c) node.appendChild(c); });
+    return node;
+  }
+
+  /* ------------------------------------------------------------------
+     Dados de exemplo — cada fluxo carrega seus próprios passos
+     ------------------------------------------------------------------ */
+  var FLOWS = [
+    {
+      id: 'triagem', name: 'Triagem de contratos', trigger: 'novo e-mail em contratos@',
+      runId: '4471', time: 'há 2 minutos',
+      steps: [
+        { label: 'Receber contrato', status: 'done', meta: '14:02:31 · 210ms' },
+        { label: 'Extrair cláusulas', status: 'done', meta: '14:02:32 · 812ms',
+          explain: 'A IA identificou 2 cláusulas para revisão (4.2 e 7.1) porque os valores extraídos divergem em mais de 10% do orçamento original registrado no CRM.' },
+        { label: 'Validar com jurídico', status: 'run', meta: 'passo 3 de 4' },
+        { label: 'Notificar responsável', status: 'idle' }
+      ]
+    },
+    {
+      id: 'fechamento', name: 'Fechamento mensal — financeiro', trigger: 'agendado · todo dia 1º às 06:00',
+      runId: '4402', time: 'ontem, 06:03',
+      steps: [
+        { label: 'Consolidar lançamentos', status: 'done', meta: '06:00:04 · 1.2s' },
+        { label: 'Conciliar com banco', status: 'done', meta: '06:00:19 · 3.4s',
+          explain: 'A conciliação foi aprovada automaticamente porque a diferença entre os saldos ficou abaixo da tolerância de R$ 0,50 configurada para esta conta.' },
+        { label: 'Gerar relatório', status: 'done', meta: '06:00:41 · 900ms' },
+        { label: 'Enviar ao controller', status: 'done', meta: '06:00:44 · 210ms' }
+      ]
+    },
+    {
+      id: 'onboarding', name: 'Onboarding de cliente novo', trigger: 'formulário enviado no site',
+      runId: '4498', time: 'há 34 minutos',
+      steps: [
+        { label: 'Receber cadastro', status: 'done', meta: '13:28:02 · 180ms' },
+        { label: 'Validar documentos', status: 'error', meta: 'falhou às 13:28:05',
+          explain: 'A validação falhou porque o CNPJ enviado não passou na checagem de dígito verificador. Nenhum dado foi processado após esse ponto.' },
+        { label: 'Criar acesso ao portal', status: 'idle' },
+        { label: 'Notificar time comercial', status: 'idle' }
+      ]
+    }
+  ];
+
+  var explainCounter = 0;
+
+  /* ------------------------------------------------------------------
+     Renderização do trilho de fluxo (rail) — reaproveitado em
+     detalhe do fluxo e no simulador de payload
+     ------------------------------------------------------------------ */
+  function buildRailStep(step, frozen) {
+    var status = step.status;
+    var displayStatus = status;
+    var pillClass = 'pill-idle';
+    var pillText = 'na fila';
+    var nodeClass = 'rail-node-idle';
+    var lineClass = '';
+
+    if (status === 'done') { pillClass = 'pill-done'; pillText = 'concluído'; nodeClass = 'rail-node-done'; lineClass = 'rail-line-done'; }
+    else if (status === 'run') {
+      if (frozen) { pillClass = 'pill-frozen'; pillText = t('frozenLabel'); nodeClass = 'rail-node-frozen'; }
+      else { pillClass = 'pill-run'; pillText = 'em execução'; nodeClass = 'rail-node-run'; }
+    } else if (status === 'error') { pillClass = 'pill-error'; pillText = 'falhou'; nodeClass = 'rail-node-error'; lineClass = 'rail-line-error'; }
+
+    if (state.lang === 'en') {
+      var map = { 'concluído': 'completed', 'em execução': 'running', 'na fila': 'queued', 'falhou': 'failed' };
+      if (!frozen || status !== 'run') pillText = map[pillText] || pillText;
+    }
+
+    var dotCol = el('div', { class: 'rail-dotcol' }, [
+      el('div', { class: 'rail-node ' + nodeClass }),
+      el('div', { class: 'rail-line ' + lineClass })
+    ]);
+
+    var titleEl = el('span', { class: 'rail-title' + (status === 'idle' ? ' rail-title-muted' : ''), text: step.label });
+    var pillEl = el('span', { class: 'pill ' + pillClass }, [el('span', { class: 'pill-dot' }), document.createTextNode(pillText)]);
+    var row = el('div', { class: 'rail-row' }, [titleEl, pillEl]);
+
+    var body = el('div', { class: 'rail-body' }, [row]);
+    if (step.meta) {
+      var metaClass = 'rail-meta' + (status === 'run' ? ' rail-meta-run' : status === 'error' ? ' rail-meta-error' : '');
+      body.appendChild(el('div', { class: metaClass + ' mono', text: step.meta }));
+    }
+
+    if (step.explain) {
+      explainCounter += 1;
+      var panelId = 'explain-' + explainCounter;
+      var toggle = el('button', { type: 'button', class: 'explain-toggle', 'aria-expanded': 'false', 'aria-controls': panelId }, [
+        el('span', { text: t('whyLabel') }),
+        el('span', { class: 'chevron', 'aria-hidden': 'true', text: '⌄' })
+      ]);
+      var panel = el('div', { class: 'explain-panel', id: panelId }, [
+        el('div', { class: 'explain-panel-inner' }, [el('p', { text: step.explain })])
+      ]);
+      body.appendChild(toggle);
+      body.appendChild(panel);
+    }
+
+    return el('li', { class: 'rail-step', 'data-status': status }, [dotCol, body]);
+  }
+
+  function toggleExplain(toggle) {
+    var panel = document.getElementById(toggle.getAttribute('aria-controls'));
+    if (!panel) return;
+    var open = toggle.getAttribute('aria-expanded') === 'true';
+    toggle.setAttribute('aria-expanded', String(!open));
+    panel.classList.toggle('is-open', !open);
+    var label = toggle.querySelector('span');
+    if (label) label.textContent = open ? t('whyLabel') : t('hideLabel');
+  }
+
+  // Delegação única de clique para todo botão .explain-toggle da página,
+  // em vez de um listener por card criado (evita religar handlers a cada render).
+  document.addEventListener('click', function (e) {
+    var toggle = e.target.closest('.explain-toggle');
+    if (toggle) toggleExplain(toggle);
+  });
+
+  function renderRail(container, steps, frozen) {
+    container.innerHTML = '';
+    var summary = el('div', { class: 'rail-summary' }, [
+      el('span', { class: 'rail-summary-check', text: '✓' }),
+      el('span', { class: 'rail-summary-text' })
+    ]);
+    var list = el('ol', { class: 'rail-steps', role: 'list' });
+    steps.forEach(function (step) { list.appendChild(buildRailStep(step, frozen)); });
+    container.appendChild(summary);
+    container.appendChild(list);
+    applyRailCompactMode(container);
+  }
+
+  /* ------------------------------------------------------------------
+     Trilho adaptativo — em telas pequenas, recolhe passos concluídos
+     e destaca dinamicamente o passo em execução e o próximo da fila
+     ------------------------------------------------------------------ */
+  var compactMQ = window.matchMedia('(max-width:560px)');
+
+  function applyRailCompactMode(container) {
+    var compact = compactMQ.matches;
+    var steps = $all('.rail-step', container);
+    var summary = $('.rail-summary', container);
+    var summaryText = summary ? $('.rail-summary-text', summary) : null;
+
+    if (!compact) {
+      steps.forEach(function (s) { s.style.display = ''; });
+      if (summary) summary.classList.remove('is-visible');
+      return;
+    }
+
+    var runIdx = -1, idleIdx = -1;
+    steps.forEach(function (s, i) {
+      var status = s.getAttribute('data-status');
+      if (status === 'run' && runIdx === -1) runIdx = i;
+      if (status === 'idle' && idleIdx === -1) idleIdx = i;
+    });
+    var focusIdx = runIdx !== -1 ? runIdx : idleIdx;
+    var doneCount = 0;
+
+    steps.forEach(function (s, i) {
+      var status = s.getAttribute('data-status');
+      if (status === 'done') doneCount += 1;
+      var keep = focusIdx === -1 ? (i === steps.length - 1) : (i === focusIdx || i === focusIdx + 1);
+      s.style.display = keep ? '' : 'none';
+    });
+
+    if (summary) {
+      if (doneCount > 0) {
+        summary.classList.add('is-visible');
+        if (summaryText) {
+          var label = state.lang === 'en'
+            ? doneCount + (doneCount === 1 ? ' step completed' : ' steps completed')
+            : doneCount + (doneCount === 1 ? ' etapa concluída' : ' etapas concluídas');
+          summaryText.textContent = label;
+        }
+      } else {
+        summary.classList.remove('is-visible');
+      }
+    }
+  }
+
+  function refreshAllRails() {
+    $all('.rail-container').forEach(function (c) { applyRailCompactMode(c); });
+  }
+  window.addEventListener('resize', debounce(refreshAllRails, 150));
+
+  /* ------------------------------------------------------------------
+     Lista de fluxos + painel de detalhe
+     ------------------------------------------------------------------ */
+  function progressDots(steps) {
+    var wrap = el('span', { class: 'progress-dots' });
+    steps.slice(0, 4).forEach(function (s) {
+      var dotClass = 'dot-idle';
+      if (s.status === 'done') dotClass = 'dot-done';
+      else if (s.status === 'run') dotClass = state.systemPaused ? 'dot-run is-frozen' : 'dot-run';
+      else if (s.status === 'error') dotClass = 'dot-error';
+      wrap.appendChild(el('span', { class: dotClass }));
+    });
+    return wrap;
+  }
+
+  function initials(name) {
+    return name.split(' ').filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join('').toUpperCase();
+  }
+
+  function statusPillForFlow(flow) {
+    var last = flow.steps.reduce(function (acc, s) { return s.status === 'run' || s.status === 'error' ? s.status : acc; }, null);
+    if (!last) last = flow.steps.every(function (s) { return s.status === 'done'; }) ? 'done' : 'idle';
+    return last;
+  }
+
+  function renderFlowList() {
+    var listEl = $('#flow-list');
+    listEl.innerHTML = '';
+    var runningCount = 0;
+
+    if (FLOWS.length === 0) {
+      listEl.appendChild(el('li', {}, [
+        el('div', { class: 'empty-state' }, [
+          el('div', { class: 'rail-node rail-node-idle', style: 'width:20px;height:20px;border-width:2px;' }),
+          el('h3', { text: state.lang === 'en' ? 'No flow created yet' : 'Nenhum fluxo criado ainda' }),
+          el('p', { text: state.lang === 'en'
+            ? 'Flows show up here as soon as the first trigger is configured.'
+            : 'Fluxos aparecem aqui assim que o primeiro gatilho for configurado.' })
+        ])
+      ]));
+      $('#list-sub').textContent = state.lang === 'en' ? '0 flows' : '0 fluxos';
+      return;
+    }
+
+    FLOWS.forEach(function (flow) {
+      var status = statusPillForFlow(flow);
+      if (status === 'run') runningCount += 1;
+      var frozen = state.systemPaused && status === 'run';
+
+      var pillClass = 'pill-idle', pillText = 'agendado';
+      if (status === 'run') { pillClass = frozen ? 'pill-frozen' : 'pill-run'; pillText = frozen ? t('frozenLabel') : 'em execução'; }
+      else if (status === 'done') { pillClass = 'pill-done'; pillText = 'concluído'; }
+      else if (status === 'error') { pillClass = 'pill-error'; pillText = 'falhou'; }
+
+      if (state.lang === 'en' && !(frozen && status === 'run')) {
+        var map = { 'em execução': 'running', 'concluído': 'completed', 'falhou': 'failed', 'agendado': 'scheduled' };
+        pillText = map[pillText] || pillText;
+      }
+
+      var row = el('button', {
+        type: 'button', class: 'list-row' + (flow.id === state.selectedFlowId ? ' is-active' : ''),
+        'data-flow-id': flow.id
+      }, [
+        el('span', { class: 'avatar', text: initials(flow.name) }),
+        el('span', { class: 'list-meta' }, [
+          el('strong', { text: flow.name }),
+          el('span', { text: flow.trigger })
+        ]),
+        progressDots(flow.steps),
+        el('span', { class: 'list-time mono', text: flow.time }),
+        el('span', { class: 'pill ' + pillClass }, [el('span', { class: 'pill-dot' }), document.createTextNode(pillText)])
+      ]);
+      listEl.appendChild(el('li', {}, [row]));
+    });
+
+    var sub = $('#list-sub');
+    var count = FLOWS.length;
+    if (state.lang === 'en') {
+      sub.textContent = count + ' flows · ' + runningCount + ' running';
+    } else {
+      sub.textContent = count + ' fluxos · ' + runningCount + ' em execução';
+    }
+  }
+
+  // Delegação única de clique para as linhas da lista de fluxos —
+  // um só listener no container em vez de um por linha renderizada.
+  $('#flow-list').addEventListener('click', function (e) {
+    var row = e.target.closest('[data-flow-id]');
+    if (row) selectFlow(row.getAttribute('data-flow-id'));
+  });
+
+  function renderDetail() {
+    var flow = FLOWS.filter(function (f) { return f.id === state.selectedFlowId; })[0];
+    if (!flow) return;
+    var panel = $('#detail-panel');
+    panel.innerHTML = '';
+
+    var status = statusPillForFlow(flow);
+    var frozen = state.systemPaused && status === 'run';
+    var pillClass = 'pill-idle', pillText = 'agendado';
+    if (status === 'run') { pillClass = frozen ? 'pill-frozen' : 'pill-run'; pillText = frozen ? t('frozenLabel') : 'em execução'; }
+    else if (status === 'done') { pillClass = 'pill-done'; pillText = 'concluído'; }
+    else if (status === 'error') { pillClass = 'pill-error'; pillText = 'falhou'; }
+    if (state.lang === 'en' && !(frozen && status === 'run')) {
+      var map = { 'em execução': 'running', 'concluído': 'completed', 'falhou': 'failed', 'agendado': 'scheduled' };
+      pillText = map[pillText] || pillText;
+    }
+
+    var head = el('div', { class: 'rail-row detail-head' }, [
+      el('h3', { class: 'detail-name', text: flow.name }),
+      el('span', { class: 'pill ' + pillClass }, [el('span', { class: 'pill-dot' }), document.createTextNode(pillText)])
+    ]);
+    var meta = el('div', { class: 'rail-meta mono detail-meta', text: flow.trigger + ' · ' + t('detailRunLabel') + ' #' + flow.runId });
+
+    var railContainer = el('div', { class: 'rail-container' });
+    panel.appendChild(head);
+    panel.appendChild(meta);
+    panel.appendChild(railContainer);
+    renderRail(railContainer, flow.steps, frozen);
+
+    var actions = el('div', { class: 'detail-actions' });
+    var pauseBtn = el('button', {
+      type: 'button', class: 'btn btn-secondary btn-sm btn-grow js-async-btn', id: 'detail-pause-btn'
+    }, [
+      el('span', { class: 'spinner', 'aria-hidden': 'true' }),
+      el('span', { class: 'btn-label', text: status === 'run' ? 'Pausar fluxo' : 'Executar agora' })
+    ]);
+    if (frozen || (state.systemPaused && status === 'run')) pauseBtn.disabled = true;
+    pauseBtn.addEventListener('click', function () {
+      runAsyncAction(pauseBtn, function () { return wait(700); }, function () {
+        showToast(state.lang === 'en' ? 'Action simulated.' : 'Ação simulada.', 'default');
+      });
+    });
+    var historyBtn = el('button', { type: 'button', class: 'btn btn-ghost btn-sm', text: 'Ver histórico' });
+    actions.appendChild(pauseBtn);
+    actions.appendChild(historyBtn);
+    panel.appendChild(actions);
+  }
+
+  function selectFlow(id) {
+    state.selectedFlowId = id;
+    renderFlowList();
+    renderDetail();
+  }
+
+  /* ------------------------------------------------------------------
+     Botões com estado de carregamento (idempotência visual)
+     ------------------------------------------------------------------ */
+  function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+
+  function runAsyncAction(btn, work, onDone) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.classList.add('is-loading');
+    btn.setAttribute('aria-busy', 'true');
+    Promise.resolve().then(work).then(function (result) {
+      if (typeof onDone === 'function') onDone(result);
+    }).catch(function (err) {
+      console.error('[AgentFlow] ação assíncrona falhou:', err);
+    }).finally(function () {
+      btn.classList.remove('is-loading');
+      btn.removeAttribute('aria-busy');
+      btn.disabled = false;
+    });
+  }
+
+  /* ------------------------------------------------------------------
+     Sidebar off-canvas
+     ------------------------------------------------------------------ */
+  var sidebar = $('#sidebar');
+  var overlay = $('#sidebar-overlay');
+  var hamburger = $('#hamburger-btn');
+  var lastFocused = null;
+  var mobileMQ = window.matchMedia('(max-width:959px)');
+
+  function openSidebar() {
+    lastFocused = document.activeElement;
+    sidebar.classList.add('is-open');
+    overlay.classList.add('is-visible');
+    hamburger.setAttribute('aria-expanded', 'true');
+    if (mobileMQ.matches) document.body.style.overflow = 'hidden';
+    var firstItem = $('.nav-item', sidebar);
+    if (firstItem) firstItem.focus();
+  }
+  function closeSidebar(skipFocusReturn) {
+    sidebar.classList.remove('is-open');
+    overlay.classList.remove('is-visible');
+    hamburger.setAttribute('aria-expanded', 'false');
+    document.body.style.overflow = '';
+    if (!skipFocusReturn && lastFocused) lastFocused.focus();
+  }
+  hamburger.addEventListener('click', function () {
+    sidebar.classList.contains('is-open') ? closeSidebar() : openSidebar();
+  });
+  overlay.addEventListener('click', function () { closeSidebar(); });
+  // Delegação única de clique para os itens de navegação da sidebar.
+  sidebar.addEventListener('click', function (e) {
+    var item = e.target.closest('.nav-item');
+    if (!item) return;
+    $all('.nav-item', sidebar).forEach(function (n) { n.classList.remove('is-active'); });
+    item.classList.add('is-active');
+    if (mobileMQ.matches) closeSidebar(true);
+  });
+  window.matchMedia('(min-width:960px)').addEventListener('change', function (e) {
+    if (e.matches) closeSidebar(true);
+  });
+
+  /* ------------------------------------------------------------------
+     Circuit breaker — banner + modal de confirmação
+     ------------------------------------------------------------------ */
+  var cbOverlay = $('#cb-overlay');
+  var cbModal = $('#cb-modal');
+  var cbTrigger = $('#cb-trigger-btn');
+  var cbLastFocused = null;
+
+  function openCbModal() {
+    cbLastFocused = document.activeElement;
+    cbOverlay.classList.add('is-visible');
+    cbModal.classList.add('is-visible');
+    $('#cb-cancel-btn').focus();
+  }
+  function closeCbModal() {
+    cbOverlay.classList.remove('is-visible');
+    cbModal.classList.remove('is-visible');
+    if (cbLastFocused) cbLastFocused.focus();
+  }
+  function trapModalTab(e) {
+    if (!cbModal.classList.contains('is-visible') || e.key !== 'Tab') return;
+    var focusables = $all('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])', cbModal);
+    if (!focusables.length) return;
+    var first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+
+  cbTrigger.addEventListener('click', function () {
+    if (state.systemPaused) return;
+    openCbModal();
+  });
+  $('#cb-cancel-btn').addEventListener('click', closeCbModal);
+  cbOverlay.addEventListener('click', closeCbModal);
+  $('#cb-confirm-btn').addEventListener('click', function () {
+    closeCbModal();
+    setSystemPaused(true);
+    showToast(t('toastCbOn'), 'error');
+  });
+  $('#cb-resume-btn').addEventListener('click', function () {
+    setSystemPaused(false);
+    showToast(t('toastCbOff'), 'success');
+  });
+
+  function setSystemPaused(paused) {
+    state.systemPaused = paused;
+    $('#cb-banner').classList.toggle('is-visible', paused);
+    cbTrigger.disabled = paused;
+    renderFlowList();
+    renderDetail();
+  }
+
+  /* ------------------------------------------------------------------
+     Teclado global — Esc fecha o que estiver aberto (modal > sidebar)
+     ------------------------------------------------------------------ */
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' && e.key !== 'Esc') { trapModalTab(e); return; }
+    if (cbModal.classList.contains('is-visible')) { closeCbModal(); return; }
+    if (sidebar.classList.contains('is-open')) { closeSidebar(); }
+  });
+
+  /* ------------------------------------------------------------------
+     Validação reativa — nome do fluxo, webhook e token mascarado
+     ------------------------------------------------------------------ */
+  var nameField = $('#f-name');
+  var webhookField = $('#f-webhook');
+  var tokenField = $('#f-token');
+  var tokenToggle = $('#token-toggle');
+
+  function validateName() {
+    var clean = stripDangerousChars(nameField.value);
+    if (clean !== nameField.value) nameField.value = clean;
+    var ok = sanitizeText(clean).length >= 3;
+    $('#field-name').classList.toggle('is-invalid', !ok);
+    $('#f-name-help').classList.toggle('is-visible', !ok);
+    return ok;
+  }
+
+  function validateWebhook() {
+    var value = webhookField.value.trim();
+    var ok = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)+(\/[^\s]*)?$/i.test(value);
+    $('#field-webhook').classList.toggle('is-invalid', !ok);
+    $('#field-webhook').classList.toggle('is-valid', ok);
+    $('#f-webhook-help').classList.toggle('is-visible', !ok);
+    $('#f-webhook-ok').classList.toggle('is-visible', ok);
+    return ok;
+  }
+
+  nameField.addEventListener('input', validateName);
+  webhookField.addEventListener('input', validateWebhook);
+
+  tokenField.value = maskToken(REAL_TOKEN);
+  tokenToggle.addEventListener('click', function () {
+    state.tokenRevealed = !state.tokenRevealed;
+    tokenField.value = state.tokenRevealed ? REAL_TOKEN : maskToken(REAL_TOKEN);
+    tokenToggle.setAttribute('aria-pressed', String(state.tokenRevealed));
+    tokenToggle.setAttribute('aria-label', state.tokenRevealed ? t('tokenHide') : t('tokenShow'));
+  });
+
+  $('#settings-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    var nameOk = validateName();
+    var webhookOk = validateWebhook();
+    var saveBtn = $('#save-settings-btn');
+    if (!nameOk || !webhookOk) {
+      showToast(t('toastSettingsBlocked'), 'error');
+      [nameField, webhookField].forEach(function (field, i) {
+        if ((i === 0 && nameOk) || (i === 1 && webhookOk)) return;
+        field.classList.add('is-shake');
+        field.addEventListener('animationend', function handler() {
+          field.classList.remove('is-shake');
+          field.removeEventListener('animationend', handler);
+        });
+      });
+      return;
+    }
+    runAsyncAction(saveBtn, function () { return wait(900); }, function () {
+      var flow = FLOWS.filter(function (f) { return f.id === state.selectedFlowId; })[0];
+      if (flow) {
+        flow.name = sanitizeText(nameField.value, 60);
+        flow.trigger = sanitizeText($('#f-trigger').value, 90);
+        renderFlowList();
+        renderDetail();
+      }
+      showToast(t('toastSettingsSaved'), 'success');
+    });
+  });
+
+  /* ------------------------------------------------------------------
+     "Novo fluxo" — botão primário do topbar
+     ------------------------------------------------------------------ */
+  $('#new-flow-btn').addEventListener('click', function () {
+    var button = this;
+    runAsyncAction(button, function () { return wait(900); }, function () {
+      showToast(t('toastFlowCreated'), 'success');
+      nameField.focus();
+      nameField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    });
+  });
+
+  /* ------------------------------------------------------------------
+     Simulador de payload
+     ------------------------------------------------------------------ */
+  var simRailContainer = $('#sim-rail');
+  var simSteps = [
+    { label: 'Receber payload', status: 'idle' },
+    { label: 'Validar esquema', status: 'idle' },
+    { label: 'Executar regra de negócio', status: 'idle' },
+    { label: 'Notificar destino', status: 'idle' }
+  ];
+  renderRail(simRailContainer, simSteps, false);
+
+  function resetSimSteps() {
+    simSteps.forEach(function (s) { s.status = 'idle'; delete s.meta; delete s.explain; });
+    renderRail(simRailContainer, simSteps, false);
+  }
+
+  function runSimulation() {
+    var textarea = $('#sim-payload');
+    var helpEl = $('#sim-payload-help');
+    var raw = textarea.value;
+    var parsed = null;
+    var parseError = null;
+    try { parsed = JSON.parse(raw); } catch (err) { parseError = err; }
+
+    resetSimSteps();
+    simSteps[0].status = 'run';
+    renderRail(simRailContainer, simSteps, false);
+
+    return wait(450).then(function () {
+      simSteps[0].status = 'done';
+      simSteps[0].meta = new Date().toLocaleTimeString('pt-BR') + ' · payload recebido';
+      if (parseError) {
+        simSteps[1].status = 'run';
+        renderRail(simRailContainer, simSteps, false);
+        return wait(450);
+      }
+      simSteps[1].status = 'run';
+      renderRail(simRailContainer, simSteps, false);
+      return wait(450);
+    }).then(function () {
+      if (parseError) {
+        simSteps[1].status = 'error';
+        simSteps[1].meta = 'JSON inválido';
+        simSteps[1].explain = t('simExplainError');
+        helpEl.classList.add('is-visible');
+        renderRail(simRailContainer, simSteps, false);
+        logSimResult(false);
+        showToast(t('toastSimError'), 'error');
+        return;
+      }
+      helpEl.classList.remove('is-visible');
+      simSteps[1].status = 'done';
+      simSteps[1].meta = 'esquema válido · ' + Object.keys(parsed || {}).length + ' campos';
+      simSteps[2].status = 'run';
+      renderRail(simRailContainer, simSteps, false);
+      return wait(500).then(function () {
+        simSteps[2].status = 'done';
+        simSteps[2].meta = 'regra aplicada · risco baixo';
+        simSteps[2].explain = t('simExplainOk');
+        simSteps[3].status = 'run';
+        renderRail(simRailContainer, simSteps, false);
+        return wait(450);
+      }).then(function () {
+        simSteps[3].status = 'done';
+        simSteps[3].meta = new Date().toLocaleTimeString('pt-BR');
+        renderRail(simRailContainer, simSteps, false);
+        logSimResult(true);
+        showToast(t('toastSimOk'), 'success');
+      });
+    });
+  }
+
+  function logSimResult(success) {
+    var logEl = $('#sim-log');
+    var emptyEl = $('#sim-log-empty');
+    if (emptyEl) emptyEl.remove();
+
+    var time = new Date().toLocaleTimeString(state.lang === 'en' ? 'en-US' : 'pt-BR');
+    var pillClass = success ? 'pill-done' : 'pill-error';
+    var pillText = success ? t('simLogOk') : t('simLogError');
+
+    explainCounter += 1;
+    var panelId = 'sim-explain-' + explainCounter;
+    var toggle = el('button', { type: 'button', class: 'explain-toggle', 'aria-expanded': 'false', 'aria-controls': panelId }, [
+      el('span', { text: t('whyLabel') }),
+      el('span', { class: 'chevron', 'aria-hidden': 'true', text: '⌄' })
+    ]);
+    var panel = el('div', { class: 'explain-panel', id: panelId }, [
+      el('div', { class: 'explain-panel-inner' }, [el('p', { text: success ? t('simExplainOk') : t('simExplainError') })])
+    ]);
+
+    var item = el('div', { class: 'sim-log-item' }, [
+      el('div', { class: 'sim-log-head' }, [
+        el('span', { class: 'sim-log-time mono', text: time }),
+        el('span', { class: 'pill ' + pillClass }, [el('span', { class: 'pill-dot' }), document.createTextNode(pillText)])
+      ]),
+      toggle,
+      panel
+    ]);
+    logEl.insertBefore(item, logEl.firstChild);
+  }
+
+  $('#run-sim-btn').addEventListener('click', function () {
+    var button = this;
+    if (state.simRunning) return;
+    state.simRunning = true;
+    runAsyncAction(button, runSimulation, function () { state.simRunning = false; });
+  });
+
+  /* ------------------------------------------------------------------
+     Toasts
+     ------------------------------------------------------------------ */
+  function showToast(message, variant) {
+    var region = $('#toast-region');
+    var toast = el('div', { class: 'toast' + (variant === 'error' ? ' toast-error' : variant === 'success' ? ' toast-success' : '') }, [
+      el('span', { class: 'pill-dot', 'aria-hidden': 'true' }),
+      el('span', { text: message })
+    ]);
+    region.appendChild(toast);
+    requestAnimationFrame(function () { toast.classList.add('is-visible'); });
+    setTimeout(function () {
+      toast.classList.remove('is-visible');
+      setTimeout(function () { toast.remove(); }, 250);
+    }, 3600);
+  }
+
+  /* ------------------------------------------------------------------
+     Idioma — PT/EN instantâneo, sem recarregar a página
+     ------------------------------------------------------------------ */
+  var langToggle = $('#lang-toggle');
+  var langCode = $('#lang-code');
+
+  function applyLanguage(lang) {
+    state.lang = lang;
+    document.documentElement.lang = lang === 'pt' ? 'pt-BR' : 'en';
+    $all('[data-i18n]').forEach(function (node) {
+      var key = node.getAttribute('data-i18n');
+      if (i18n[lang][key] !== undefined) node.textContent = i18n[lang][key];
+    });
+    $all('[data-i18n-aria-label]').forEach(function (node) {
+      var key = node.getAttribute('data-i18n-aria-label');
+      if (i18n[lang][key] !== undefined) node.setAttribute('aria-label', i18n[lang][key]);
+    });
+    langCode.textContent = lang === 'pt' ? 'EN' : 'PT';
+    langToggle.setAttribute('aria-label', lang === 'pt' ? 'Switch language to English' : 'Mudar idioma para português');
+    try { localStorage.setItem('agentflow_lang', lang); } catch (err) { /* file:// ou modo privado — ignora */ }
+
+    // reconstrói telas dependentes de dados para refletir strings traduzidas
+    renderFlowList();
+    renderDetail();
+    renderRail(simRailContainer, simSteps, false);
+  }
+
+  langToggle.addEventListener('click', function () {
+    applyLanguage(state.lang === 'pt' ? 'en' : 'pt');
+  });
+
+  /* ------------------------------------------------------------------
+     Inicialização
+     ------------------------------------------------------------------ */
+  function init() {
+    var savedLang = 'pt';
+    try {
+      var stored = localStorage.getItem('agentflow_lang');
+      if (stored === 'pt' || stored === 'en') savedLang = stored;
+    } catch (err) { /* ignora */ }
+
+    validateWebhook();
+    renderFlowList();
+    renderDetail();
+    if (savedLang !== 'pt') applyLanguage(savedLang);
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+})();
+</script>
+</body>
+</html>
