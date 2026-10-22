@@ -1,0 +1,268 @@
+{
+  "storyId": "shell-auth",
+  "gatheredAt": "2026-09-24T00:00:00Z",
+  "source": "prd",
+  "gatheredBy": "@pm",
+  "elicitationVersion": "2.0",
+
+  "functional": [
+    {
+      "id": "FR-1",
+      "description": "Sistema deve permitir login com e-mail e senha via Firebase Auth.",
+      "priority": "P0",
+      "rationale": "Método de autenticação principal aprovado pelo usuário.",
+      "acceptance": ["AC-1"]
+    },
+    {
+      "id": "FR-2",
+      "description": "Sistema deve permitir login social via Google usando Firebase Auth.",
+      "priority": "P0",
+      "rationale": "Método complementar aprovado pelo usuário para reduzir fricção de cadastro.",
+      "acceptance": ["AC-1"]
+    },
+    {
+      "id": "FR-3",
+      "description": "Sistema deve permitir recuperação de senha via e-mail usando o fluxo padrão do Firebase Auth.",
+      "priority": "P0",
+      "rationale": "Aprovado para o escopo do MVP para evitar usuários travados sem acesso.",
+      "acceptance": ["AC-2"]
+    },
+    {
+      "id": "FR-4",
+      "description": "Criação de novas contas só pode ocorrer via convite; não deve existir cadastro público auto-serviço.",
+      "priority": "P0",
+      "rationale": "Modelo fechado aprovado pelo usuário; conecta-se ao módulo Equipe.",
+      "acceptance": ["AC-3"]
+    },
+    {
+      "id": "FR-5",
+      "description": "AppShell deve renderizar sidebar fixa de 240px com marca, os 5 nav-items (Fluxos, Execuções, Conectores, Equipe, Configurações) e rodapé com avatar, nome e papel do usuário logado.",
+      "priority": "P0",
+      "rationale": "Confirmado em design-system.html / app.html.",
+      "acceptance": ["AC-4"]
+    },
+    {
+      "id": "FR-6",
+      "description": "Topbar deve exibir o título da página ativa e a área de ação contextual (busca e/ou botão primário conforme o módulo).",
+      "priority": "P0",
+      "rationale": "Confirmado em app.html (ex.: título 'Fluxos' + busca + botão 'Novo fluxo').",
+      "acceptance": ["AC-4"]
+    },
+    {
+      "id": "FR-7",
+      "description": "Navegação deve ser responsiva: sidebar vira overlay acionado por botão hambúrguer em telas estreitas.",
+      "priority": "P0",
+      "rationale": "Confirmado no CSS/JS do protótipo (sidebar-overlay, hamburger-btn).",
+      "acceptance": ["AC-4"]
+    },
+    {
+      "id": "FR-8",
+      "description": "Qualquer rota do shell autenticado deve redirecionar usuários sem sessão ativa para a tela de Login.",
+      "priority": "P0",
+      "rationale": "Requisito básico de proteção de rotas.",
+      "acceptance": ["AC-5"]
+    }
+  ],
+
+  "nonFunctional": [
+    {
+      "id": "NFR-1",
+      "category": "security",
+      "description": "Autenticação e gestão de sessão devem usar exclusivamente o SDK do Firebase Auth; nenhuma lógica de auth customizada (hash de senha, tokens próprios) deve ser implementada.",
+      "metric": "0 implementações de auth fora do Firebase Auth SDK"
+    },
+    {
+      "id": "NFR-2",
+      "category": "usability",
+      "description": "Todas as telas de autenticação e o shell devem usar exclusivamente os tokens e componentes de design-system.html (cores, tipografia, campos com validação reativa, botões com estado de carregamento).",
+      "metric": "0 desvios de token/componente identificados no QA gate de conformidade visual"
+    }
+  ],
+
+  "constraints": [
+    {
+      "id": "CON-1",
+      "type": "technical",
+      "description": "Autenticação deve usar Firebase Auth, já presente como dependência do projeto (package.json).",
+      "impact": "Define o provedor de auth; não avaliar alternativas (Auth0, NextAuth, etc.)."
+    },
+    {
+      "id": "CON-2",
+      "type": "technical",
+      "description": "Toda UI implementada deve derivar dos tokens/componentes definidos em design-system.html, conforme .claude/rules/design-system-compliance.md.",
+      "impact": "Bloqueia qualquer estilo, cor ou componente não tokenizado; gaps devem ser escalados a @ux-design-expert."
+    },
+    {
+      "id": "CON-3",
+      "type": "business",
+      "description": "Cadastro de conta é fechado — apenas via convite, sem self-signup público.",
+      "impact": "Exige um mecanismo de convite (e-mail + link) antes de qualquer tela de login funcionar de ponta a ponta."
+    }
+  ],
+
+  "assumptions": [
+    {
+      "id": "ASM-1",
+      "description": "Modelo de workspace/organização ainda não foi decidido pelo usuário (marcado como 'decidir depois'). Assume-se, para desbloquear este módulo, um único workspace global por enquanto.",
+      "risk_if_wrong": "Se o produto exigir multi-workspace por usuário, o modelo de dados de User/Workspace/Membership precisará ser migrado antes do módulo Equipe.",
+      "validation_needed": true
+    },
+    {
+      "id": "ASM-2",
+      "description": "Assume-se que qualquer membro existente pode emitir convites até que o módulo Equipe defina permissões granulares por papel.",
+      "risk_if_wrong": "Pode exigir controle de acesso mais restrito revisado quando o módulo Equipe for especificado.",
+      "validation_needed": true
+    }
+  ],
+
+  "domainModel": [
+    {
+      "id": "DM-1",
+      "entity": "User",
+      "attributes": ["uid", "nome", "email", "avatarUrl", "papel"],
+      "relationships": [
+        { "type": "belongs_to", "target": "Workspace" }
+      ]
+    },
+    {
+      "id": "DM-2",
+      "entity": "Workspace",
+      "attributes": ["id", "nome"],
+      "relationships": [
+        { "type": "has_many", "target": "User" },
+        { "type": "has_many", "target": "Invite" }
+      ]
+    },
+    {
+      "id": "DM-3",
+      "entity": "Invite",
+      "attributes": ["email", "workspaceId", "papel", "status", "criadoPor"],
+      "relationships": [
+        { "type": "belongs_to", "target": "Workspace" }
+      ]
+    }
+  ],
+
+  "interactions": [
+    {
+      "id": "INT-1",
+      "trigger": "Usuário acessa o app sem sessão ativa",
+      "flow": [
+        "Redireciona para /login",
+        "Usuário preenche e-mail/senha ou clica em 'Continuar com Google'",
+        "Firebase Auth valida credenciais",
+        "Sucesso → redireciona para /flows"
+      ],
+      "states": {
+        "loading": "Botão de submit assume o estado 'carregando' do design system",
+        "error": "Mensagem inline no campo, seguindo o padrão de validação reativa (ex.: campo de webhook)",
+        "empty": "Não aplicável"
+      }
+    },
+    {
+      "id": "INT-2",
+      "trigger": "Usuário clica em 'Esqueci minha senha'",
+      "flow": [
+        "Abre formulário de recuperação",
+        "Usuário informa e-mail",
+        "Sistema dispara e-mail de reset via Firebase Auth",
+        "Usuário define nova senha pelo link recebido"
+      ],
+      "states": {
+        "loading": "Botão em estado carregando",
+        "error": "E-mail não encontrado ou formato inválido, mensagem inline",
+        "empty": "Não aplicável"
+      }
+    },
+    {
+      "id": "INT-3",
+      "trigger": "Usuário aceita um convite",
+      "flow": [
+        "Usuário recebe link de convite por e-mail",
+        "Acessa o link",
+        "Define senha (ou entra com Google)",
+        "É automaticamente adicionado ao workspace do convite"
+      ],
+      "states": {
+        "loading": "Botão em estado carregando",
+        "error": "Convite expirado ou inválido, tela de erro dedicada",
+        "empty": "Não aplicável"
+      }
+    }
+  ],
+
+  "edgeCases": [
+    {
+      "id": "EC-1",
+      "scenario": "Senha incorreta informada no login",
+      "handling": "Mensagem de erro inline no campo de senha, sem revelar se o e-mail existe (evitar user enumeration)",
+      "severity": "high"
+    },
+    {
+      "id": "EC-2",
+      "scenario": "E-mail já possui conta e tenta aceitar um novo convite",
+      "handling": "Direcionar para o login normal informando que a conta já existe",
+      "severity": "medium"
+    },
+    {
+      "id": "EC-3",
+      "scenario": "Convite expirado ou já utilizado",
+      "handling": "Tela de erro clara com ação de solicitar novo convite a um administrador",
+      "severity": "medium"
+    },
+    {
+      "id": "EC-4",
+      "scenario": "Firebase Auth indisponível ou timeout",
+      "handling": "Mensagem de erro genérica com ação de tentar novamente, sem travar a UI",
+      "severity": "high"
+    },
+    {
+      "id": "EC-5",
+      "scenario": "Usuário autenticado mas sem workspace associado (ex.: removido da equipe)",
+      "handling": "Tela de estado vazio/bloqueio explicando a situação, com contato de suporte",
+      "severity": "medium"
+    }
+  ],
+
+  "terminology": [
+    {
+      "term": "workspace",
+      "definition": "Espaço de trabalho/organização que agrupa fluxos, conectores e equipe",
+      "synonyms": ["organização"],
+      "avoid": ["conta", "tenant"]
+    },
+    {
+      "term": "convite",
+      "definition": "Registro que permite a um e-mail específico entrar em um workspace com um papel definido",
+      "synonyms": ["invite"],
+      "avoid": []
+    },
+    {
+      "term": "papel",
+      "definition": "Nível de permissão do usuário dentro do workspace (ex.: operações)",
+      "synonyms": ["role"],
+      "avoid": ["cargo"]
+    }
+  ],
+
+  "openQuestions": [
+    {
+      "id": "OQ-1",
+      "question": "O workspace será single-tenant global ou multi-tenant (um usuário pode pertencer a mais de um workspace)?",
+      "blocking": true,
+      "assignedTo": "@architect"
+    },
+    {
+      "id": "OQ-2",
+      "question": "Quem tem permissão para emitir convites — qualquer membro ou apenas papéis administrativos?",
+      "blocking": false,
+      "assignedTo": "@pm"
+    },
+    {
+      "id": "OQ-3",
+      "question": "Há exigência de verificação de e-mail obrigatória antes do primeiro acesso?",
+      "blocking": false,
+      "assignedTo": "@pm"
+    }
+  ]
+}

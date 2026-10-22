@@ -1,0 +1,45 @@
+{
+  "storyId": "shell-auth",
+  "assessedAt": "2026-09-24T00:00:00Z",
+  "assessedBy": "@architect",
+
+  "result": "COMPLEX",
+  "overridden": false,
+
+  "dimensions": {
+    "scope": {
+      "score": 4,
+      "notes": "Cross-cutting: páginas de login/recuperação de senha/aceite de convite, layout protegido (AppShell: Sidebar/Topbar/nav responsivo), provider de auth, middleware de proteção de rota, coleções Firestore (users/workspaces/invites) + regras de segurança, bootstrap dos design tokens (Tailwind theme + fontes Archivo/IBM Plex Mono) e biblioteca inicial de componentes (botão, campo com validação reativa, avatar) em src/components/ui, hoje vazio. Estimado em 15-18 arquivos novos/alterados."
+    },
+    "integration": {
+      "score": 3,
+      "notes": "Firebase Auth (e-mail/senha + provedor Google) já é dependência do projeto, mas nenhuma tela usa ainda. Envio do e-mail de convite (INT-3) precisa de um mecanismo de entrega — recomendado Firebase Trigger Email extension em vez de backend próprio, para não introduzir uma integração nova de e-mail transacional do zero."
+    },
+    "infrastructure": {
+      "score": 4,
+      "notes": "Criação de 3 novas coleções Firestore (users, workspaces, invites) com regras de segurança escopadas por workspaceId (ver ADR-0001), habilitação do provedor Google no console do Firebase Auth, e possível instalação da extensão Trigger Email para convites."
+    },
+    "knowledge": {
+      "score": 2,
+      "notes": "Firebase Auth e Firestore já são dependências conhecidas do projeto (package.json), mas nenhum padrão de integração com Next.js 15 App Router (proteção de rota via middleware/server components) existe ainda no codebase — é o primeiro caso de uso, não uma tecnologia desconhecida."
+    },
+    "risk": {
+      "score": 4,
+      "notes": "Autenticação e o AppShell são a porta de entrada de todo o produto — todos os módulos subsequentes (Fluxos, Execuções, Conectores, Equipe, Configurações) dependem deste módulo estar correto. Falha aqui bloqueia o produto inteiro."
+    }
+  },
+
+  "totalScore": 17,
+
+  "pipelinePhases": ["gather", "assess", "research", "spec", "critique_1", "revise", "critique_2", "plan"],
+
+  "flags": [
+    "COMPLEX: recomenda-se revisão arquitetural adicional antes da implementação (já iniciada via ADR-0001).",
+    "Considerar quebrar 'shell-auth' em duas stories menores na Fase 2 (SDC): (1) AppShell + design tokens/componentes base, sem depender de auth funcional; (2) Autenticação + convite + proteção de rota, consumindo o AppShell da story 1. Recomendação para @pm/@sm na criação das stories.",
+    "Spike recomendado: validar o padrão de proteção de rota do Next.js 15 App Router com sessão do Firebase Auth (client SDK) antes de comprometer a spec — decidir entre guard client-side (redirecionamento após hidratação) vs. cookie de sessão + middleware server-side. Nenhum padrão equivalente existe hoje no codebase.",
+    "Mecanismo de envio de e-mail de convite (INT-3) ainda não está resolvido — recomenda-se Firebase Trigger Email extension para evitar introduzir um serviço de e-mail transacional customizado no v1.",
+    "ADR-0001 (docs/architecture/adr-0001-workspace-model.md) resolve OQ-1: schema workspace-scoped desde a v1, produto opera single-tenant (workspace único, seedado). OQ-2 e OQ-3 seguem em aberto, atribuídas a @pm, e não bloqueiam a Fase 3 (Research/Spec)."
+  ],
+
+  "estimatedEffort": "3+ dias"
+}

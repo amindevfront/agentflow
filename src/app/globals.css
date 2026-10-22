@@ -1,2 +1,58 @@
-/* Diretiva de importação do Tailwind CSS v4 */
 @import "tailwindcss";
+
+/* Tokens do design system do AgentFlow — espelham 1:1 design-system.html */
+@theme {
+  --color-ink-950: #0a0f1a;
+  --color-ink-900: #0e1626;
+  --color-ink-800: #16202f;
+  --color-ink-700: #202d40;
+  --color-ink-600: #3c4a5c;
+  --color-ink-500: #59697d;
+  --color-ink-400: #7a8aa0;
+  --color-ink-300: #9fadbe;
+  --color-ink-200: #c7d0da;
+  --color-ink-100: #e4e9ee;
+  --color-mist-50: #f5f7f9;
+  --color-white: #ffffff;
+
+  --color-signal-700: #0b3fcb;
+  --color-signal-600: #1450f0;
+  --color-signal-500: #2c6bff;
+  --color-signal-100: #e4ecff;
+  --color-signal-50: #f2f6fb;
+
+  --color-state-run: #b5790a;
+  --color-state-run-ink: #ffb020;
+  --color-state-run-bg: #fff3dc;
+  --color-state-done: #177a52;
+  --color-state-done-ink: #1aa16b;
+  --color-state-done-bg: #e1f5eb;
+  --color-state-error: #c22a2e;
+  --color-state-error-ink: #e5484d;
+  --color-state-error-bg: #fbe7e7;
+  --color-state-idle: #7a8aa0;
+  --color-state-idle-bg: #edf1f4;
+
+  --font-sans: var(--font-archivo), sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), monospace;
+
+  --radius-sm: 6px;
+  --radius-btn: 8px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+
+  --shadow-sm: 0 1px 2px rgba(10, 15, 26, 0.06);
+  --shadow-md: 0 8px 24px rgba(10, 15, 26, 0.14);
+
+  --sidebar-w: 240px;
+}
+
+body {
+  background: var(--color-mist-50);
+  color: var(--color-ink-950);
+}
+
+/* Reservado a valores reais (timestamps, IDs, tokens) — nunca rótulo decorativo */
+.mono {
+  font-family: var(--font-mono);
+}

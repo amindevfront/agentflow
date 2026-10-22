@@ -27,3 +27,32 @@ yarn-error.log*
 .vercel
 *.tsbuildinfo
 next-env.d.ts
+
+# Environment & Secrets (AIOS)
+.env
+.env.local
+.env.*.local
+*.key
+
+# Credenciais de conta de serviço (Firebase/GCP Admin) — NUNCA versionar
+/secrets/
+*.serviceaccount.json
+
+# Dependencies (AIOS)
+node_modules/
+
+# Build & Logs (AIOS)
+dist/
+build/
+*.log
+logs/
+
+# IDE & OS (AIOS)
+Thumbs.db
+.idea/
+*.swp
+
+# AIOS Local (AIOS)
+.aios-core/local/
+.claude/settings.local.json
+.aios/install-log.txt

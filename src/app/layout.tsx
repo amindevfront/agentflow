@@ -1,18 +1,23 @@
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google";
+import { Archivo, IBM_Plex_Mono } from "next/font/google";
+import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
-// Fonte Inter carregada do Google Fonts via next/font
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo" });
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  variable: "--font-ibm-plex-mono",
+});
 
 export const metadata: Metadata = {
-  title: "App Name",
-  description: "Aplicativo PWA construído com Next.js, Tailwind CSS e Firebase",
+  title: "AgentFlow",
+  description: "Console de orquestração de agentes de IA",
   manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#000000",
+  themeColor: "#0a0f1a",
 };
 
 export default function RootLayout({
@@ -21,8 +26,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="pt-BR" className={inter.variable}>
-      <body className={inter.className}>{children}</body>
+    <html lang="pt-BR" className={`${archivo.variable} ${ibmPlexMono.variable}`}>
+      <body className="font-sans antialiased">
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

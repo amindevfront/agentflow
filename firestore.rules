@@ -1,0 +1,306 @@
+rules_version = '2';
+
+// Regras escopadas por workspaceId desde a v1, mesmo operando single-tenant
+// (ver docs/architecture/adr-0001-workspace-model.md). Qualquer leitura/escrita
+// exige um usuário autenticado que pertença ao workspace do documento.
+//
+// As coleções de governança (credentials, credentialSecrets, auditLogs,
+// auditChainHead, hitlTickets, _rateLimits) aplicam privilégio mínimo de forma
+// determinística no banco, e não por confiança no código de aplicação:
+//
+//   - `credentialSecrets` nega LEITURA a todo cliente. O envelope cifrado só é
+//     acessível ao motor de orquestração via Admin SDK, que não passa por estas
+//     regras. Mesmo um cliente comprometido não obtém o ciphertext — e, sem a
+//     chave-mestra que vive apenas no servidor, ele seria inerte. A criação é
+//     adicionalmente amarrada a uma credencial real do mesmo workspace (exceto
+//     na primeira versão, quando a credencial-mãe ainda não existe).
+//   - `auditLogs` e `auditChainHead` negam TODA escrita de cliente. O selo e a
+//     persistência da trilha migraram para uma transação do Admin SDK no
+//     servidor (`/api/audit/seal` → `src/lib/server/auditChainStore.ts`), que
+//     elimina a corrida que existia quando o cliente lia a última entrada e
+//     escrevia a própria com retry otimista em caso de colisão.
+//   - `_rateLimits` é infraestrutura interna do limitador de taxa distribuído
+//     (`src/lib/server/distributedRateLimit.ts`) — nunca lida nem escrita por
+//     um cliente, só pelo Admin SDK.
+//   - `messageVaults` (Neural Inbox) espelha `credentialSecrets`: nega leitura
+//     a todo cliente. `conversations/{id}/mensagens` é append-only (nenhum
+//     `update`/`delete`) — uma transcrição de chat é registro, não rascunho.
+//   - `campaigns`/`destinatarios` restringem criação/controle a administradores
+//     — disparo em massa é ação de maior risco (spam, compliance); o avanço de
+//     status de cada envio é exclusivo do Admin SDK (`/api/campaigns/tick`).
+//
+// Limite honesto: quem detém credenciais de administrador do projeto Firebase
+// (console ou Admin SDK) pode contornar estas regras. Elas protegem contra um
+// CLIENTE comprometido ou malicioso, não contra o operador do próprio projeto.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // As funções ficam dentro do bloco `match`: é onde a linguagem de regras
+    // aceita declará-las.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function belongsToWorkspace(workspaceId) {
+      return isSignedIn() && userDoc().workspaceId == workspaceId;
+    }
+
+    function isAdminOf(workspaceId) {
+      return isSignedIn()
+             && userDoc().workspaceId == workspaceId
+             && userDoc().papel == 'admin';
+    }
+
+    match /workspaces/{workspaceId} {
+      allow read: if belongsToWorkspace(workspaceId);
+      // Configuração do workspace (nome, roiConfig) é operação administrativa:
+      // os parâmetros de ROI determinam os números financeiros reportados.
+      allow write: if isAdminOf(workspaceId);
+    }
+
+    match /users/{uid} {
+      // Ler o próprio documento é sempre permitido, inclusive antes dele
+      // existir (bootstrap do primeiro login): o operador `||` do CEL faz
+      // curto-circuito, então `resource.data` nunca é tocado nesse ramo.
+      // Ler o documento de outra pessoa exige pertencer ao MESMO workspace —
+      // sem isso, qualquer usuário autenticado conseguiria enumerar nome,
+      // e-mail e papel de usuários de outros workspaces.
+      allow read: if isSignedIn() && (request.auth.uid == uid || belongsToWorkspace(resource.data.workspaceId));
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+
+    match /invites/{inviteId} {
+      // Leitura do próprio convite é necessária antes do login (fluxo de aceite),
+      // por isso não exige autenticação prévia — o id do convite funciona como token.
+      allow get: if true;
+      allow list: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+      allow update: if isSignedIn();
+    }
+
+    match /flows/{flowId} {
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    match /flowRuns/{runId} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow write: if false; // criadas apenas pelo motor de orquestração (Admin SDK)
+    }
+
+    match /connectors/{connectorId} {
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    // ---------- Governança: cofre de credenciais ----------
+
+    match /credentials/{credentialId} {
+      // Metadados (nome, tipo, versão, sufixo, impressão) são visíveis ao
+      // workspace: a operação precisa saber o que existe para diagnosticar um
+      // fluxo. Nenhum campo aqui contém o segredo.
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if isAdminOf(request.resource.data.workspaceId)
+                    && request.resource.data.status == 'ativa'
+                    && request.resource.data.versao == 1
+                    // O campo `id` tem de corresponder ao id real do documento —
+                    // fecha a possibilidade de um metadado apontar, por engano
+                    // ou má-fé, para um `credentialId` diferente do seu próprio.
+                    && request.resource.data.id == credentialId;
+      // Atualização cobre rotação (nova versão) e revogação. O workspace e o id
+      // são imutáveis, para que uma credencial não seja movida de tenant.
+      allow update: if isAdminOf(resource.data.workspaceId)
+                    && request.resource.data.workspaceId == resource.data.workspaceId
+                    && request.resource.data.id == resource.data.id;
+      // Nunca apagar: a trilha precisa poder responder "esta credencial existiu
+      // e foi revogada em tal data".
+      allow delete: if false;
+    }
+
+    match /credentialSecrets/{secretId} {
+      // NENHUM cliente lê o envelope cifrado. Apenas o Admin SDK, no servidor.
+      allow read: if false;
+
+      allow create: if isAdminOf(request.resource.data.workspaceId)
+                    && request.resource.data.credentialId is string
+                    && request.resource.data.versao is int
+                    && request.resource.data.versao > 0
+                    && request.resource.data.envelope.algoritmo == 'AES-256-GCM'
+                    && request.resource.data.envelope.ciphertext is string
+                    && request.resource.data.envelope.aad is string
+                    // O id do segredo tem de começar com o `credentialId` que
+                    // ele próprio declara — sem isso, nada impede um cliente de
+                    // gravar um segredo "órfão" sob um id arbitrário.
+                    && secretId.split('__v')[0] == request.resource.data.credentialId
+                    // Primeira versão: a credencial-mãe ainda não existe (o
+                    // cliente grava o segredo antes do metadado, deliberadamente
+                    // — ver `armazenarCredencial`). A partir da segunda versão
+                    // (rotação), a credencial-mãe já existe, pertence ao mesmo
+                    // workspace, e sua versão registrada é estritamente menor
+                    // que a que está sendo criada agora — isto é o que impede
+                    // regravar uma versão antiga ou pular posições.
+                    && (
+                         request.resource.data.versao == 1
+                         || (
+                              exists(/databases/$(database)/documents/credentials/$(request.resource.data.credentialId))
+                              && get(/databases/$(database)/documents/credentials/$(request.resource.data.credentialId)).data.workspaceId == request.resource.data.workspaceId
+                              && get(/databases/$(database)/documents/credentials/$(request.resource.data.credentialId)).data.versao < request.resource.data.versao
+                            )
+                       );
+      // Imutável: rotação cria uma nova versão, nunca sobrescreve a anterior.
+      allow update, delete: if false;
+    }
+
+    // ---------- Governança: trilha de auditoria imutável ----------
+    //
+    // Toda a escrita (selo + avanço do ponteiro da cadeia) acontece dentro de
+    // uma transação do Admin SDK em `/api/audit/seal` — ver
+    // `src/lib/server/auditChainStore.ts`. Nenhum cliente escreve aqui.
+
+    match /auditLogs/{entryId} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow write: if false;
+    }
+
+    match /auditChainHead/{workspaceId} {
+      // O ponteiro em si (posição e hash atuais da cadeia) não é sensível —
+      // expô-lo para leitura permite que a UI mostre "N eventos registrados"
+      // sem precisar carregar a trilha inteira.
+      allow read: if belongsToWorkspace(workspaceId);
+      allow write: if false;
+    }
+
+    // ---------- Governança: transbordo humano (HITL) ----------
+
+    match /hitlTickets/{ticketId} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                    && request.resource.data.status == 'aberto';
+      // Decisões de transbordo são transições de estado. O workspace, o fluxo e
+      // o payload mascarado são imutáveis: um revisor não reescreve o caso que
+      // está julgando.
+      allow update: if belongsToWorkspace(resource.data.workspaceId)
+                    && request.resource.data.workspaceId == resource.data.workspaceId
+                    && request.resource.data.flowId == resource.data.flowId
+                    && request.resource.data.traceId == resource.data.traceId
+                    && request.resource.data.payloadMascarado == resource.data.payloadMascarado
+                    && request.resource.data.criadoEm == resource.data.criadoEm
+                    && request.resource.data.slaExpiraEm == resource.data.slaExpiraEm;
+      allow delete: if false;
+    }
+
+    // ---------- Infraestrutura interna: limitador de taxa distribuído ----------
+
+    match /_rateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    // ---------- Neural Inbox: atendimento omnichannel ----------
+    //
+    // `messageVaults` segue o mesmo desenho de `credentialSecrets`: nega
+    // leitura a todo cliente, cifra só é acessível por extração formal de
+    // compliance (trabalho futuro, server-only). `mensagens` é imutável uma
+    // vez enviada — um chat é um registro de auditoria, não um documento
+    // editável.
+
+    match /conversations/{conversationId} {
+      allow read, update: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+      allow delete: if false;
+
+      match /mensagens/{messageId} {
+        allow read: if belongsToWorkspace(get(/databases/$(database)/documents/conversations/$(conversationId)).data.workspaceId);
+        allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                      && request.resource.data.conversationId == conversationId
+                      && request.resource.data.workspaceId == get(/databases/$(database)/documents/conversations/$(conversationId)).data.workspaceId
+                      && request.resource.data.texto is string;
+        // Transcrição de chat é append-only — nenhuma mensagem enviada é
+        // editada ou apagada depois.
+        allow update, delete: if false;
+      }
+    }
+
+    match /messageVaults/{vaultId} {
+      allow read: if false;
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                    && request.resource.data.envelope.algoritmo == 'AES-256-GCM'
+                    && request.resource.data.envelope.ciphertext is string
+                    && request.resource.data.envelope.aad is string;
+      allow update, delete: if false;
+    }
+
+    match /operatorProfiles/{uid} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      // Um admin configura qualquer perfil (especialidade, capacidade); o
+      // próprio operador só ajusta o seu (ex.: marcar-se indisponível).
+      allow create, update: if isAdminOf(request.resource.data.workspaceId)
+                            || (isSignedIn() && request.auth.uid == uid && belongsToWorkspace(request.resource.data.workspaceId));
+      allow delete: if isAdminOf(resource.data.workspaceId);
+    }
+
+    match /agentProfiles/{agentId} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      // Sub-agentes automatizados são infraestrutura, não um perfil pessoal —
+      // só administradores os configuram.
+      allow write: if isAdminOf(request.resource.data.workspaceId);
+    }
+
+    // ---------- Motor de campanhas com anti-ban estocástico ----------
+    //
+    // Campanhas em massa são uma ação de maior risco (spam, compliance) — a
+    // criação e o controle de status ficam restritos a administradores. O
+    // disparo de fato acontece via Admin SDK em `/api/campaigns/tick` (ver
+    // `src/lib/server/campaignsAdmin.ts`), que ignora estas regras; elas
+    // governam apenas o que o cliente pode fazer diretamente: criar o
+    // planejamento e ler o progresso.
+
+    match /campaigns/{campaignId} {
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if isAdminOf(request.resource.data.workspaceId)
+                    && request.resource.data.status == 'rascunho';
+      allow update: if isAdminOf(resource.data.workspaceId)
+                    && request.resource.data.workspaceId == resource.data.workspaceId;
+      allow delete: if false;
+
+      match /destinatarios/{recipientId} {
+        allow read: if belongsToWorkspace(get(/databases/$(database)/documents/campaigns/$(campaignId)).data.workspaceId);
+        // O cliente só planeja envios pendentes — o avanço de status
+        // ("enviado"/"falhou"/"bloqueado-*") é exclusivo do Admin SDK no
+        // tick do servidor, nunca de uma escrita direta do cliente.
+        allow create: if isAdminOf(get(/databases/$(database)/documents/campaigns/$(campaignId)).data.workspaceId)
+                      && request.resource.data.status == 'pendente';
+        allow update, delete: if false;
+      }
+    }
+
+    match /recipientVaults/{vaultId} {
+      // Mesmo desenho de `messageVaults`/`credentialSecrets`: nenhum cliente
+      // lê. A decifragem (quando um canal real de mensageria estiver
+      // configurado) é server-only, no tick do servidor.
+      allow read: if false;
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                    && request.resource.data.envelope.algoritmo == 'AES-256-GCM'
+                    && request.resource.data.envelope.ciphertext is string
+                    && request.resource.data.envelope.aad is string;
+      allow update, delete: if false;
+    }
+
+    match /optOuts/{optOutId} {
+      // Opt-out é checado por hash, nunca pelo valor em claro — ver
+      // `hashDestino()`. Qualquer membro do workspace pode registrar um
+      // opt-out (um cliente pedindo para sair vale no mesmo instante em que
+      // chega, não precisa esperar um admin); remover um opt-out já
+      // registrado, porém, é uma decisão administrativa.
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                    && request.resource.data.destinoHash is string;
+      allow update: if false;
+      allow delete: if isAdminOf(resource.data.workspaceId);
+    }
+  }
+}
