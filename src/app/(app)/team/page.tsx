@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { subscribeTeamMembers, subscribePendingInvites, createInvite } from "@/lib/firestore";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
+import { inviteSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -25,6 +26,7 @@ export default function TeamPage() {
   const [papel, setPapel] = useState<UserRole>("operacoes");
   const [saving, setSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -39,10 +41,18 @@ export default function TeamPage() {
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
     if (!user || !workspaceId) return;
+
+    const validado = inviteSchema.safeParse({ email, papel });
+    if (!validado.success) {
+      setInviteError(primeiraMensagemZod(validado.error));
+      return;
+    }
+
+    setInviteError(null);
     setSaving(true);
     setInviteLink(null);
     try {
-      const id = await createInvite(email, papel, workspaceId, user.uid);
+      const id = await createInvite(validado.data.email, validado.data.papel, workspaceId, user.uid);
       setInviteLink(`${window.location.origin}/invite/${id}`);
       setEmail("");
     } finally {
@@ -64,7 +74,14 @@ export default function TeamPage() {
       {showForm && (
         <form onSubmit={handleInvite} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <Field label="E-mail do convidado" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+            <Field
+              label="E-mail do convidado"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              errorText={inviteError ?? undefined}
+              required
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ink-700" htmlFor="papel">

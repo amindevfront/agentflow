@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from "next";
 import { Archivo, IBM_Plex_Mono } from "next/font/google";
 import { AuthProvider } from "@/lib/auth";
+import { AppQueryProvider } from "@/lib/queryClient";
+import { TelemetryProvider } from "@/components/telemetry/TelemetryProvider";
 import "./globals.css";
 
 const archivo = Archivo({ subsets: ["latin"], variable: "--font-archivo" });
@@ -28,7 +30,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" className={`${archivo.variable} ${ibmPlexMono.variable}`}>
       <body className="font-sans antialiased">
-        <AuthProvider>{children}</AuthProvider>
+        <TelemetryProvider>
+          <AppQueryProvider>
+            <AuthProvider>{children}</AuthProvider>
+          </AppQueryProvider>
+        </TelemetryProvider>
       </body>
     </html>
   );

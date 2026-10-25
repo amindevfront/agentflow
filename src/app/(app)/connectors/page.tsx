@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { subscribeConnectors, createConnector } from "@/lib/firestore";
 import { useWorkspace } from "@/lib/workspace";
+import { connectorSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
 import { Pill } from "@/components/ui/Pill";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -19,6 +20,7 @@ export default function ConnectorsPage() {
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState(CONNECTOR_TYPES[0]);
   const [saving, setSaving] = useState(false);
+  const [nomeError, setNomeError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -28,9 +30,17 @@ export default function ConnectorsPage() {
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
     if (!workspaceId) return;
+
+    const validado = connectorSchema.safeParse({ nome, tipo });
+    if (!validado.success) {
+      setNomeError(primeiraMensagemZod(validado.error));
+      return;
+    }
+
+    setNomeError(null);
     setSaving(true);
     try {
-      await createConnector(workspaceId, { nome, tipo, status: "nao-configurado" });
+      await createConnector(workspaceId, { ...validado.data, status: "nao-configurado" });
       setNome("");
       setShowForm(false);
     } finally {
@@ -52,7 +62,13 @@ export default function ConnectorsPage() {
       {showForm && (
         <form onSubmit={handleCreate} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <Field label="Nome do conector" value={nome} onChange={(e) => setNome(e.target.value)} required />
+            <Field
+              label="Nome do conector"
+              value={nome}
+              onChange={(e) => setNome(e.target.value)}
+              errorText={nomeError ?? undefined}
+              required
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-ink-700" htmlFor="connector-tipo">

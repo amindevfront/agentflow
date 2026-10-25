@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, translateAuthError } from "@/lib/auth";
 import { validatePassword } from "@/lib/passwordPolicy";
+import { emailSchema } from "@/lib/validation/schemas";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -24,6 +25,12 @@ export default function SignupPage() {
   async function handleEmailSignup(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    const emailValidado = emailSchema.safeParse(email);
+    if (!emailValidado.success) {
+      setError(emailValidado.error.issues[0]?.message ?? "E-mail inválido.");
+      return;
+    }
     const senhaInvalida = validatePassword(password);
     if (senhaInvalida) {
       setError(senhaInvalida);
@@ -35,7 +42,7 @@ export default function SignupPage() {
     }
     setLoading("email");
     try {
-      await signUpWithEmail(email, password);
+      await signUpWithEmail(emailValidado.data, password);
       router.push("/onboarding");
     } catch (err) {
       setError(translateAuthError(err));

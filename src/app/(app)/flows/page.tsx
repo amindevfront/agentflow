@@ -1,9 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { subscribeFlows, subscribeFlowRuns, getWorkspace } from "@/lib/firestore";
+import { subscribeFlows, subscribeFlowRuns } from "@/lib/firestore";
 import { formatRelativeTime } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { ListRow } from "@/components/ui/ListRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -19,7 +20,11 @@ export default function FlowsPage() {
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | "new" | null>(null);
-  const [playbooksSugeridos, setPlaybooksSugeridos] = useState<string[]>([]);
+  // Cacheado (ver `src/lib/queries/workspace.ts`) — sem isso, cada visita a
+  // `/flows` pagava uma leitura nova de `workspaces/{id}` só para sugerir
+  // playbooks, um valor que praticamente nunca muda após o onboarding.
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
+  const playbooksSugeridos = workspace?.playbooksSugeridos ?? [];
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -29,13 +34,6 @@ export default function FlowsPage() {
   useEffect(() => {
     if (!workspaceId) return;
     return subscribeFlowRuns(workspaceId, setRuns);
-  }, [workspaceId]);
-
-  useEffect(() => {
-    if (!workspaceId) return;
-    getWorkspace(workspaceId)
-      .then((ws) => setPlaybooksSugeridos(ws?.playbooksSugeridos ?? []))
-      .catch(() => setPlaybooksSugeridos([]));
   }, [workspaceId]);
 
   useEffect(() => {

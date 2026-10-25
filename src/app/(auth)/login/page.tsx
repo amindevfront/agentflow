@@ -1,9 +1,11 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, translateAuthError } from "@/lib/auth";
+import { loginSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
+import { registrarFalhaAuth, registrarSucessoAuth, verificarBloqueioAuth } from "@/lib/authThrottle";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 
@@ -14,15 +16,47 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<"email" | "google" | null>(null);
+  const [bloqueadoPorSegundos, setBloqueadoPorSegundos] = useState(0);
+
+  // Contagem regressiva visível do bloqueio por força bruta — libera o botão
+  // sozinha quando o tempo expira, sem exigir que o usuário tente de novo às
+  // escuras.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setBloqueadoPorSegundos((s) => (s > 0 ? s - 1 : 0));
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   async function handleEmailLogin(e: FormEvent) {
     e.preventDefault();
     setError(null);
+
+    // Fricção client-side contra tentativas repetidas — nunca a defesa real
+    // (ver `src/lib/authThrottle.ts`); a defesa real é o próprio Firebase
+    // Auth, cujo `auth/too-many-requests` já é tratado abaixo.
+    const chaveThrottle = email.trim().toLowerCase() || "sem-email";
+    const bloqueio = verificarBloqueioAuth(chaveThrottle);
+    if (bloqueio.bloqueado) {
+      setBloqueadoPorSegundos(bloqueio.restanteSegundos);
+      setError(`Muitas tentativas. Aguarde ${bloqueio.restanteSegundos}s antes de tentar novamente.`);
+      return;
+    }
+
+    const validado = loginSchema.safeParse({ email, password });
+    if (!validado.success) {
+      setError(primeiraMensagemZod(validado.error));
+      return;
+    }
+
     setLoading("email");
     try {
-      await signInWithEmail(email, password);
+      await signInWithEmail(validado.data.email, validado.data.password);
+      registrarSucessoAuth(chaveThrottle);
       router.push("/flows");
     } catch (err) {
+      const status = registrarFalhaAuth(chaveThrottle);
+      setBloqueadoPorSegundos(status.restanteSegundos);
       setError(translateAuthError(err));
     } finally {
       setLoading(null);
@@ -81,8 +115,13 @@ export default function LoginPage() {
           </Link>
         </div>
 
-        <Button type="submit" loading={loading === "email"} className="w-full">
-          Entrar
+        <Button
+          type="submit"
+          loading={loading === "email"}
+          disabled={bloqueadoPorSegundos > 0}
+          className="w-full"
+        >
+          {bloqueadoPorSegundos > 0 ? `Aguarde ${bloqueadoPorSegundos}s` : "Entrar"}
         </Button>
       </form>
 

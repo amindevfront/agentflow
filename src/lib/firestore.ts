@@ -15,6 +15,7 @@ import {
 } from "firebase/firestore";
 import { db } from "./firebase";
 import { NICHE_PRESETS } from "./niches";
+import { sanitizeEmailInput, sanitizeText, sanitizeUrl } from "./sanitize";
 import type {
   AppUser,
   Connector,
@@ -57,7 +58,7 @@ export function prepareWorkspace(nome: string, setor: NicheKey) {
   const ref = doc(collection(database, "workspaces"));
   const workspace: Workspace = {
     id: ref.id,
-    nome,
+    nome: sanitizeText(nome, 80),
     setor,
     criadoEm: new Date().toISOString(),
     playbooksSugeridos: NICHE_PRESETS[setor].playbooksSugeridos,
@@ -85,12 +86,12 @@ export async function getWorkspace(workspaceId: string): Promise<Workspace | nul
 
 export async function updateWorkspaceName(workspaceId: string, nome: string): Promise<void> {
   const database = requireDb();
-  await setDoc(doc(database, "workspaces", workspaceId), { nome }, { merge: true });
+  await setDoc(doc(database, "workspaces", workspaceId), { nome: sanitizeText(nome, 80) }, { merge: true });
 }
 
 export async function upsertAppUser(user: AppUser): Promise<void> {
   const database = requireDb();
-  await setDoc(doc(database, "users", user.uid), user, { merge: true });
+  await setDoc(doc(database, "users", user.uid), { ...user, nome: sanitizeText(user.nome, 120) }, { merge: true });
 }
 
 export async function getAppUser(uid: string): Promise<AppUser | null> {
@@ -115,7 +116,7 @@ export async function createInvite(
 ): Promise<string> {
   const database = requireDb();
   const ref = await addDoc(collection(database, "invites"), {
-    email,
+    email: sanitizeEmailInput(email),
     papel,
     workspaceId,
     status: "pendente" satisfies Invite["status"],
@@ -147,13 +148,22 @@ export function subscribeFlows(workspaceId: string, onChange: (flows: Flow[]) =>
   });
 }
 
+/** Aplica a sanitização de texto livre comum a `createFlow`/`updateFlow` — só toca os campos presentes. */
+function sanitizeFlowFields<T extends Partial<Pick<Flow, "nome" | "origem" | "webhookUrl">>>(input: T): T {
+  const resultado = { ...input };
+  if (typeof resultado.nome === "string") resultado.nome = sanitizeText(resultado.nome, 120);
+  if (typeof resultado.origem === "string") resultado.origem = sanitizeText(resultado.origem, 200);
+  if (typeof resultado.webhookUrl === "string") resultado.webhookUrl = sanitizeUrl(resultado.webhookUrl);
+  return resultado;
+}
+
 export async function createFlow(
   workspaceId: string,
   input: Omit<Flow, "id" | "workspaceId" | "atualizadoEm">
 ): Promise<string> {
   const database = requireDb();
   const ref = await addDoc(collection(database, "flows"), {
-    ...input,
+    ...sanitizeFlowFields(input),
     workspaceId,
     atualizadoEm: new Date().toISOString(),
   });
@@ -163,7 +173,7 @@ export async function createFlow(
 export async function updateFlow(flowId: string, patch: Partial<Flow>): Promise<void> {
   const database = requireDb();
   await updateDoc(doc(database, "flows", flowId), {
-    ...patch,
+    ...sanitizeFlowFields(patch),
     atualizadoEm: new Date().toISOString(),
   });
 }
@@ -211,6 +221,7 @@ export async function createConnector(
   const database = requireDb();
   const ref = await addDoc(collection(database, "connectors"), {
     ...input,
+    nome: sanitizeText(input.nome, 80),
     workspaceId,
     atualizadoEm: new Date().toISOString(),
   });

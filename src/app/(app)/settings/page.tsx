@@ -2,10 +2,12 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { getWorkspace, updateWorkspaceName } from "@/lib/firestore";
+import { updateWorkspaceName } from "@/lib/firestore";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
+import { useInvalidarWorkspace, useWorkspaceDoc } from "@/lib/queries/workspace";
 import { NICHE_PRESETS } from "@/lib/niches";
+import { workspaceNameSchema } from "@/lib/validation/schemas";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -14,26 +16,36 @@ export default function SettingsPage() {
   const router = useRouter();
   const { user, signOut } = useAuth();
   const { workspaceId } = useWorkspace();
+  // Cacheado (ver `src/lib/queries/workspace.ts`) — a mesma leitura que
+  // `/flows` já pede; sem cache compartilhado, trocar entre as duas telas
+  // pagava uma leitura nova a cada troca.
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
+  const invalidarWorkspace = useInvalidarWorkspace();
   const [workspaceName, setWorkspaceName] = useState("");
-  const [setorLabel, setSetorLabel] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (!workspaceId) return;
-    getWorkspace(workspaceId).then((ws) => {
-      setWorkspaceName(ws?.nome ?? "AgentFlow");
-      setSetorLabel(ws?.setor ? NICHE_PRESETS[ws.setor].label : null);
-    });
-  }, [workspaceId]);
+    if (workspace) setWorkspaceName(workspace.nome);
+  }, [workspace]);
+
+  const setorLabel = workspace?.setor ? NICHE_PRESETS[workspace.setor].label : null;
 
   async function handleSaveWorkspace(e: FormEvent) {
     e.preventDefault();
     if (!workspaceId) return;
+    const validado = workspaceNameSchema.safeParse(workspaceName);
+    if (!validado.success) {
+      setNameError(validado.error.issues[0]?.message ?? "Nome inválido.");
+      return;
+    }
+    setNameError(null);
     setSaving(true);
     setSaved(false);
     try {
-      await updateWorkspaceName(workspaceId, workspaceName);
+      await updateWorkspaceName(workspaceId, validado.data);
+      invalidarWorkspace(workspaceId);
       setSaved(true);
     } finally {
       setSaving(false);
@@ -51,7 +63,12 @@ export default function SettingsPage() {
         <h2 className="text-sm font-semibold text-ink-950">Workspace</h2>
         <form onSubmit={handleSaveWorkspace} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
           <div className="flex-1">
-            <Field label="Nome do workspace" value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} />
+            <Field
+              label="Nome do workspace"
+              value={workspaceName}
+              onChange={(e) => setWorkspaceName(e.target.value)}
+              errorText={nameError ?? undefined}
+            />
           </div>
           <Button type="submit" size="sm" loading={saving}>
             Salvar
