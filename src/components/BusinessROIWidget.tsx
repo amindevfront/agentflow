@@ -16,6 +16,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Campaign, Conversation, FlowRun, HandoffTicket, Moeda, RoiConfig, RoiPeriodo } from "@/types";
 import { subscribeFlowRuns } from "@/lib/firestore";
+import { useWorkspace } from "@/lib/workspace";
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
@@ -67,6 +68,7 @@ interface BusinessROIWidgetProps {
 }
 
 export function BusinessROIWidget({ compacto = false, className }: BusinessROIWidgetProps) {
+  const { workspaceId } = useWorkspace();
   const [execucoes, setExecucoes] = useState<FlowRun[]>([]);
   const [tickets, setTickets] = useState<HandoffTicket[]>([]);
   const [conversas, setConversas] = useState<Conversation[]>([]);
@@ -89,31 +91,35 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
   }, []);
 
   useEffect(() => {
+    if (!workspaceId) return;
     const cancelamentos = [
-      subscribeFlowRuns((lista) => {
+      subscribeFlowRuns(workspaceId, (lista) => {
         setExecucoes(lista);
         setCarregando(false);
       }),
       subscribeFilaTransbordo(setTickets, {
+        workspaceId,
         limite: 300,
         onError: (e) => setErro(`Fila de transbordo indisponível: ${e.message}`),
       }),
       // Neural Inbox e campanhas alimentam o MESMO snapshot de ROI — ver a
       // nota "Unificação financeira" em `calcularRoi`.
       subscribeConversations(setConversas, {
+        workspaceId,
         limite: 500,
         onError: (e) => setErro(`Neural Inbox indisponível: ${e.message}`),
       }),
       subscribeCampaigns(setCampanhas, {
+        workspaceId,
         onError: (e) => setErro(`Campanhas indisponíveis: ${e.message}`),
       }),
       subscribeRoiConfig((nova) => {
         setConfig(nova);
         setMoeda(nova.moedaExibicao);
-      }),
+      }, workspaceId),
     ];
     return () => cancelamentos.forEach((cancelar) => cancelar());
-  }, []);
+  }, [workspaceId]);
 
   const snapshot = useMemo(
     () =>

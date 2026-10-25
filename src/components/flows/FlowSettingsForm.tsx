@@ -4,6 +4,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createFlow, updateFlow } from "@/lib/firestore";
+import { useWorkspace } from "@/lib/workspace";
 import {
   armazenarCredencial,
   obterCredencial,
@@ -31,6 +32,7 @@ interface FlowSettingsFormProps {
  * do cofre construído para esse exato propósito.
  */
 export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
+  const { workspaceId } = useWorkspace();
   const [nome, setNome] = useState(flow?.nome ?? "");
   const [gatilho, setGatilho] = useState(flow?.gatilho ?? "webhook");
   const [origem, setOrigem] = useState(flow?.origem ?? "");
@@ -95,7 +97,7 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!canSubmit) return;
+    if (!canSubmit || !workspaceId) return;
     setSaving(true);
     setSaveError(null);
 
@@ -108,13 +110,14 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
       if (tokenParaSelar.length > 0) {
         if (apiTokenCredentialId) {
-          await rotacionarCredencial(apiTokenCredentialId, tokenParaSelar, flow?.workspaceId);
+          await rotacionarCredencial(apiTokenCredentialId, tokenParaSelar, flow?.workspaceId ?? workspaceId);
         } else {
           const criada = await armazenarCredencial({
             nome: `Token do fluxo: ${nome.trim()}`,
             tipo: "api-key",
             segredo: tokenParaSelar,
             conectorId: null,
+            workspaceId,
           });
           apiTokenCredentialId = criada.id;
         }
@@ -124,7 +127,7 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
         await updateFlow(flow.id, { nome, gatilho, origem, webhookUrl, apiTokenCredentialId });
         onSaved(flow.id);
       } else {
-        const id = await createFlow({
+        const id = await createFlow(workspaceId, {
           nome,
           gatilho,
           origem,

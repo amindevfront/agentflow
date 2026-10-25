@@ -58,9 +58,17 @@ service cloud.firestore {
 
     match /workspaces/{workspaceId} {
       allow read: if belongsToWorkspace(workspaceId);
+      // Criação acontece durante o onboarding (ver ADR-0002), antes de existir
+      // um documento em `users/{uid}` — por isso não pode exigir
+      // `isAdminOf`, que depende desse documento já existir. Qualquer usuário
+      // autenticado pode criar um novo workspace (self-serve signup); isso só
+      // cria o registro em si, nada sensível é exposto por essa operação, e
+      // a leitura/atualização subsequentes continuam exigindo pertencimento.
+      allow create: if isSignedIn();
       // Configuração do workspace (nome, roiConfig) é operação administrativa:
       // os parâmetros de ROI determinam os números financeiros reportados.
-      allow write: if isAdminOf(workspaceId);
+      allow update: if isAdminOf(workspaceId);
+      allow delete: if false;
     }
 
     match /users/{uid} {

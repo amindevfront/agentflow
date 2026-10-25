@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { subscribeFlowRuns } from "@/lib/firestore";
 import { formatRelativeTime } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 import { ListRow } from "@/components/ui/ListRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { FlowRail } from "@/components/ui/FlowRail";
@@ -18,11 +19,15 @@ const FILTERS: Array<{ value: RunStatus | "todos"; label: string }> = [
 ];
 
 export default function RunsPage() {
+  const { workspaceId } = useWorkspace();
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [filter, setFilter] = useState<RunStatus | "todos">("todos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => subscribeFlowRuns(setRuns), []);
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeFlowRuns(workspaceId, setRuns);
+  }, [workspaceId]);
 
   useEffect(() => {
     if (!selectedId && runs.length > 0) setSelectedId(runs[0].id);

@@ -3,13 +3,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
-import { DEFAULT_WORKSPACE_ID, ensureDefaultWorkspace, getAppUser, upsertAppUser } from "@/lib/firestore";
+import { useWorkspace } from "@/lib/workspace";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import type { AppUser } from "@/types";
+import { EmptyState } from "@/components/ui/EmptyState";
 
 const TITLE_BY_PATH: Array<[string, string]> = [
   ["/inbox", "Neural Inbox"],
@@ -24,45 +24,43 @@ const TITLE_BY_PATH: Array<[string, string]> = [
 export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, loading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+  const { appUser, loading: workspaceLoading, pendingSync, error: workspaceError, retry } = useWorkspace();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [pausedGlobally, setPausedGlobally] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   useEffect(() => {
-    if (!loading && !user) {
+    if (!authLoading && !user) {
       router.replace("/login");
     }
-  }, [loading, user, router]);
+  }, [authLoading, user, router]);
 
-  useEffect(() => {
-    if (!user) return;
-    ensureDefaultWorkspace().catch(() => undefined);
-    getAppUser(user.uid)
-      .then(async (found) => {
-        if (found) return setAppUser(found);
-        // Bootstrap: usuário autenticado (ex.: criado manualmente no console do
-        // Firebase para o primeiro acesso) mas ainda sem doc em `users/{uid}`.
-        // Sem isso, as regras de segurança bloqueiam qualquer leitura workspace-scoped.
-        const bootstrapped: AppUser = {
-          uid: user.uid,
-          nome: user.displayName ?? user.email?.split("@")[0] ?? "Usuário",
-          email: user.email ?? "",
-          papel: "admin",
-          workspaceId: DEFAULT_WORKSPACE_ID,
-        };
-        await upsertAppUser(bootstrapped);
-        setAppUser(bootstrapped);
-      })
-      .catch(() => setAppUser(null));
-  }, [user]);
-
-  if (loading || !user) {
+  if (authLoading || !user || workspaceLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-ink-400">
         Carregando…
+      </div>
+    );
+  }
+
+  // Timeout/erro na leitura do perfil (users/{uid}) sem nenhum fallback
+  // otimista disponível — ver src/lib/workspace.tsx. Estado recuperável, não
+  // um loop: o usuário sempre tem uma ação (tentar de novo) em vez de ficar
+  // olhando "Carregando…" para sempre.
+  if (workspaceError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center p-4">
+        <EmptyState
+          title="Não foi possível carregar seu workspace"
+          description="A conexão com o servidor demorou demais ou falhou. Verifique sua internet e tente novamente."
+          action={
+            <Button size="sm" onClick={retry}>
+              Tentar novamente
+            </Button>
+          }
+        />
       </div>
     );
   }
@@ -101,6 +99,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             }
           >
             Execuções pausadas manualmente — os fluxos em andamento foram congelados.
+          </Banner>
+        )}
+        {pendingSync && (
+          <Banner
+            action={
+              <Button variant="secondary" size="sm" onClick={retry}>
+                Sincronizar agora
+              </Button>
+            }
+          >
+            Sincronizando seu workspace com o servidor — algumas informações ainda não foram confirmadas.
           </Banner>
         )}
         <main className="flex-1 bg-mist-50 p-4 md:p-6">{children}</main>

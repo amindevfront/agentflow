@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { subscribeConnectors, createConnector } from "@/lib/firestore";
+import { useWorkspace } from "@/lib/workspace";
 import { Pill } from "@/components/ui/Pill";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -12,19 +13,24 @@ import type { Connector } from "@/types";
 const CONNECTOR_TYPES = ["Webhook", "E-mail", "Armazenamento", "API externa"];
 
 export default function ConnectorsPage() {
+  const { workspaceId } = useWorkspace();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState(CONNECTOR_TYPES[0]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => subscribeConnectors(setConnectors), []);
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeConnectors(workspaceId, setConnectors);
+  }, [workspaceId]);
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();
+    if (!workspaceId) return;
     setSaving(true);
     try {
-      await createConnector({ nome, tipo, status: "nao-configurado" });
+      await createConnector(workspaceId, { nome, tipo, status: "nao-configurado" });
       setNome("");
       setShowForm(false);
     } finally {

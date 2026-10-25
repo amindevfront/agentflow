@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { subscribeFlows, subscribeFlowRuns } from "@/lib/firestore";
+import { subscribeFlows, subscribeFlowRuns, getWorkspace } from "@/lib/firestore";
 import { formatRelativeTime } from "@/lib/utils";
+import { useWorkspace } from "@/lib/workspace";
 import { ListRow } from "@/components/ui/ListRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -13,13 +14,29 @@ import { RealExecutionPanel } from "@/components/flows/RealExecutionPanel";
 import type { Flow, FlowRun } from "@/types";
 
 export default function FlowsPage() {
+  const { workspaceId } = useWorkspace();
   const [flows, setFlows] = useState<Flow[]>([]);
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | "new" | null>(null);
+  const [playbooksSugeridos, setPlaybooksSugeridos] = useState<string[]>([]);
 
-  useEffect(() => subscribeFlows(setFlows), []);
-  useEffect(() => subscribeFlowRuns(setRuns), []);
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeFlows(workspaceId, setFlows);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeFlowRuns(workspaceId, setRuns);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    getWorkspace(workspaceId)
+      .then((ws) => setPlaybooksSugeridos(ws?.playbooksSugeridos ?? []))
+      .catch(() => setPlaybooksSugeridos([]));
+  }, [workspaceId]);
 
   useEffect(() => {
     if (selectedId === null && flows.length > 0) {
@@ -59,7 +76,11 @@ export default function FlowsPage() {
         {filteredFlows.length === 0 ? (
           <EmptyState
             title="Nenhum fluxo ainda"
-            description="Crie o primeiro fluxo para começar a orquestrar agentes."
+            description={
+              playbooksSugeridos.length > 0
+                ? `Sugestões para o seu setor: ${playbooksSugeridos.join(" · ")}.`
+                : "Crie o primeiro fluxo para começar a orquestrar agentes."
+            }
             action={
               <Button size="sm" onClick={() => setSelectedId("new")}>
                 Novo fluxo

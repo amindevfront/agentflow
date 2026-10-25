@@ -3,7 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useAuth, translateAuthError } from "@/lib/auth";
-import { getInviteById, markInviteAccepted, upsertAppUser, DEFAULT_WORKSPACE_ID } from "@/lib/firestore";
+import { getInviteById, markInviteAccepted, upsertAppUser } from "@/lib/firestore";
+import { validatePassword } from "@/lib/passwordPolicy";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import type { Invite } from "@/types";
@@ -20,6 +21,8 @@ export default function InvitePage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<"password" | "google" | null>(null);
+
+  const passwordError = password.length > 0 ? validatePassword(password) : null;
 
   useEffect(() => {
     getInviteById(params.token)
@@ -40,7 +43,7 @@ export default function InvitePage() {
       nome,
       email: invite.email,
       papel: invite.papel,
-      workspaceId: DEFAULT_WORKSPACE_ID,
+      workspaceId: invite.workspaceId,
     });
     await markInviteAccepted(invite.id);
     router.push("/flows");
@@ -50,6 +53,11 @@ export default function InvitePage() {
     e.preventDefault();
     if (!invite) return;
     setError(null);
+    const senhaInvalida = validatePassword(password);
+    if (senhaInvalida) {
+      setError(senhaInvalida);
+      return;
+    }
     setLoading("password");
     try {
       const user = await signUpWithEmail(invite.email, password);
@@ -106,13 +114,19 @@ export default function InvitePage() {
           type="password"
           autoComplete="new-password"
           required
-          minLength={6}
+          minLength={8}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          helpText="Mínimo de 6 caracteres."
+          errorText={passwordError ?? undefined}
+          helpText={passwordError ? undefined : "Mínimo de 8 caracteres, com letras, números e símbolos."}
         />
         {error && <p className="text-xs text-state-error">{error}</p>}
-        <Button type="submit" loading={loading === "password"} className="w-full">
+        <Button
+          type="submit"
+          loading={loading === "password"}
+          disabled={!password || Boolean(passwordError)}
+          className="w-full"
+        >
           Criar conta e entrar
         </Button>
       </form>

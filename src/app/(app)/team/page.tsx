@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { subscribeTeamMembers, subscribePendingInvites, createInvite } from "@/lib/firestore";
 import { useAuth } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -16,6 +17,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
 
 export default function TeamPage() {
   const { user } = useAuth();
+  const { workspaceId } = useWorkspace();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -24,16 +26,23 @@ export default function TeamPage() {
   const [saving, setSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
 
-  useEffect(() => subscribeTeamMembers(setMembers), []);
-  useEffect(() => subscribePendingInvites(setInvites), []);
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeTeamMembers(workspaceId, setMembers);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribePendingInvites(workspaceId, setInvites);
+  }, [workspaceId]);
 
   async function handleInvite(e: FormEvent) {
     e.preventDefault();
-    if (!user) return;
+    if (!user || !workspaceId) return;
     setSaving(true);
     setInviteLink(null);
     try {
-      const id = await createInvite(email, papel, user.uid);
+      const id = await createInvite(email, papel, workspaceId, user.uid);
       setInviteLink(`${window.location.origin}/invite/${id}`);
       setEmail("");
     } finally {

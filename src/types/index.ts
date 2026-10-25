@@ -22,9 +22,25 @@ export interface AppUser {
   workspaceId: string;
 }
 
+/**
+ * Nicho primário do workspace, escolhido na triagem de onboarding
+ * (ver `src/lib/niches.ts`). Determina os playbooks sugeridos exibidos
+ * no estado vazio de Fluxos — nunca renomeia navegação ou componentes
+ * do design system (ver .claude/rules/design-system-compliance.md).
+ */
+export type NicheKey =
+  | "construtora-imobiliaria"
+  | "logistica-portuaria"
+  | "clinica-alto-padrao"
+  | "outros";
+
 export interface Workspace {
   id: string;
   nome: string;
+  setor?: NicheKey;
+  criadoEm?: string;
+  /** Nomes de fluxo sugeridos para o nicho escolhido (ver NICHE_PRESETS). */
+  playbooksSugeridos?: string[];
 }
 
 export type InviteStatus = "pendente" | "aceito" | "expirado";

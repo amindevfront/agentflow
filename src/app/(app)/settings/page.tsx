@@ -2,10 +2,10 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { doc, getDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
-import { DEFAULT_WORKSPACE_ID, updateWorkspaceName } from "@/lib/firestore";
+import { getWorkspace, updateWorkspaceName } from "@/lib/firestore";
 import { useAuth } from "@/lib/auth";
+import { useWorkspace } from "@/lib/workspace";
+import { NICHE_PRESETS } from "@/lib/niches";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -13,23 +13,27 @@ import { EmptyState } from "@/components/ui/EmptyState";
 export default function SettingsPage() {
   const router = useRouter();
   const { user, signOut } = useAuth();
+  const { workspaceId } = useWorkspace();
   const [workspaceName, setWorkspaceName] = useState("");
+  const [setorLabel, setSetorLabel] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    if (!db) return;
-    getDoc(doc(db, "workspaces", DEFAULT_WORKSPACE_ID)).then((snap) => {
-      setWorkspaceName((snap.data()?.nome as string | undefined) ?? "AgentFlow");
+    if (!workspaceId) return;
+    getWorkspace(workspaceId).then((ws) => {
+      setWorkspaceName(ws?.nome ?? "AgentFlow");
+      setSetorLabel(ws?.setor ? NICHE_PRESETS[ws.setor].label : null);
     });
-  }, []);
+  }, [workspaceId]);
 
   async function handleSaveWorkspace(e: FormEvent) {
     e.preventDefault();
+    if (!workspaceId) return;
     setSaving(true);
     setSaved(false);
     try {
-      await updateWorkspaceName(workspaceName);
+      await updateWorkspaceName(workspaceId, workspaceName);
       setSaved(true);
     } finally {
       setSaving(false);
@@ -54,6 +58,7 @@ export default function SettingsPage() {
           </Button>
         </form>
         {saved && <p className="mt-2 text-xs text-state-done">Salvo.</p>}
+        {setorLabel && <p className="mono mt-2 text-xs text-ink-400">Setor: {setorLabel}</p>}
       </section>
 
       <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">

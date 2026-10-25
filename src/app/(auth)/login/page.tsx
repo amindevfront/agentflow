@@ -103,7 +103,13 @@ export default function LoginPage() {
       </Button>
 
       <p className="text-center text-xs text-ink-400">
-        Cadastro apenas por convite. Recebeu um convite? Acesse pelo link enviado ao seu e-mail.
+        Novo por aqui?{" "}
+        <Link href="/signup" className="text-signal-600 hover:underline">
+          Criar workspace
+        </Link>
+      </p>
+      <p className="text-center text-xs text-ink-400">
+        Recebeu um convite de equipe? Acesse pelo link enviado ao seu e-mail.
       </p>
     </div>
   );

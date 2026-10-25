@@ -12,6 +12,7 @@ import {
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { auth } from "./firebase";
+import { PASSWORD_MIN_LENGTH, validatePassword } from "./passwordPolicy";
 
 interface AuthContextValue {
   user: FirebaseUser | null;
@@ -53,11 +54,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firebaseReady: Boolean(auth),
     async signInWithEmail(email, password) {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
-      await signInWithEmailAndPassword(auth, email, password);
+      await signInWithEmailAndPassword(auth, sanitizeEmail(email), password);
     },
     async signUpWithEmail(email, password) {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      // Reforço no cliente: mesmo que uma tela esqueça de validar antes de
+      // chamar o provider, nenhuma conta é criada com senha fora da política
+      // (ver src/lib/passwordPolicy.ts).
+      const erroSenha = validatePassword(password);
+      if (erroSenha) throw new Error(erroSenha);
+      const cred = await createUserWithEmailAndPassword(auth, sanitizeEmail(email), password);
       return cred.user;
     },
     async signInWithGoogle() {
@@ -67,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     },
     async sendPasswordReset(email) {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, sanitizeEmail(email));
     },
     async signOut() {
       if (!auth) return;
@@ -84,25 +90,61 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
-/** Traduz os códigos de erro mais comuns do Firebase Auth para mensagens em pt-BR. */
+function sanitizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+// Qualquer código que revelaria se uma conta existe para um e-mail específico
+// (senha errada vs. e-mail inexistente vs. credencial inválida) cai na MESMA
+// mensagem genérica — ver OWASP "Authentication Cheat Sheet" / EC-1 em
+// docs/stories/shell-auth/spec/requirements.json. Nunca adicionar aqui um
+// `case` que diferencie esses três cenários.
+const CREDENCIAIS_INVALIDAS = new Set([
+  "auth/invalid-credential",
+  "auth/wrong-password",
+  "auth/user-not-found",
+  "auth/invalid-email",
+]);
+
+/**
+ * Traduz erros do Firebase Auth para mensagens em pt-BR seguras contra user
+ * enumeration. Nenhum `case` de código `auth/*` repassa `error.message` ao
+ * usuário — esse texto vem direto do SDK/backend e pode conter detalhes
+ * técnicos (nomes de projeto, códigos internos). Detalhe completo deve ir
+ * para `console.error`/observabilidade, nunca para a tela.
+ *
+ * Exceção deliberada: um `Error` sem `code` (ex.: validação de senha em
+ * `signUpWithEmail`, ou "As senhas não coincidem." nas telas) foi gerado
+ * pelo nosso próprio código, não pelo backend — não há risco de enumeração
+ * e a mensagem específica é o que ajuda o usuário a corrigir o formulário.
+ */
 export function translateAuthError(error: unknown): string {
-  const code = (error as { code?: string })?.code ?? "";
+  const code = (error as { code?: string })?.code;
+
+  if (!code) {
+    return error instanceof Error ? error.message : "Não foi possível concluir a autenticação. Tente novamente.";
+  }
+
+  if (CREDENCIAIS_INVALIDAS.has(code)) {
+    return "E-mail ou senha incorretos.";
+  }
+
   switch (code) {
-    case "auth/invalid-credential":
-    case "auth/wrong-password":
-    case "auth/user-not-found":
-      return "E-mail ou senha incorretos.";
-    case "auth/invalid-email":
-      return "Formato de e-mail inválido.";
     case "auth/email-already-in-use":
       return "Já existe uma conta com este e-mail. Faça login normalmente.";
     case "auth/weak-password":
-      return "Senha muito curta — use pelo menos 6 caracteres.";
+      return `Senha muito curta — use pelo menos ${PASSWORD_MIN_LENGTH} caracteres, com letras, números e símbolos.`;
     case "auth/too-many-requests":
       return "Muitas tentativas. Aguarde um momento e tente novamente.";
     case "auth/popup-closed-by-user":
       return "Janela de login fechada antes de concluir.";
+    case "auth/network-request-failed":
+      return "Falha de conexão. Verifique sua internet e tente novamente.";
+    case "auth/operation-not-allowed":
+      return "Este método de login não está habilitado no momento.";
+    case "auth/user-disabled":
+      return "Esta conta foi desativada. Contate um administrador.";
     default:
-      return error instanceof Error ? error.message : "Não foi possível concluir. Tente novamente.";
+      return "Não foi possível concluir a autenticação. Tente novamente.";
   }
 }
