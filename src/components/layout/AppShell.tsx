@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
+import { assinarConectividade, assinarOperacoesPendentes, estaOnline, type OperacaoPendente } from "@/lib/offlineQueue";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
 import { Banner } from "@/components/ui/Banner";
@@ -30,12 +31,26 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pausedGlobally, setPausedGlobally] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [online, setOnline] = useState(true);
+  const [operacoesPendentes, setOperacoesPendentes] = useState<OperacaoPendente[]>([]);
 
   useEffect(() => {
     if (!authLoading && !user) {
       router.replace("/login");
     }
   }, [authLoading, user, router]);
+
+  // Resiliência offline-first (ver ADR-0005): o Firestore já reenvia
+  // sozinho as escritas pendentes quando a conexão volta (persistência local
+  // habilitada em `src/lib/firebase.ts`) — o que falta é tornar isso visível
+  // ao operador em campo, em vez de ele simplesmente não saber por que uma
+  // tela parece "travada" sem rede.
+  useEffect(() => {
+    setOnline(estaOnline());
+    return assinarConectividade(setOnline);
+  }, []);
+
+  useEffect(() => assinarOperacoesPendentes(setOperacoesPendentes), []);
 
   if (authLoading || !user || workspaceLoading) {
     return (
@@ -110,6 +125,20 @@ export function AppShell({ children }: { children: ReactNode }) {
             }
           >
             Sincronizando seu workspace com o servidor — algumas informações ainda não foram confirmadas.
+          </Banner>
+        )}
+        {!online && (
+          <Banner>
+            Você está offline — continue trabalhando normalmente. Suas alterações ficam salvas neste dispositivo e
+            serão sincronizadas automaticamente quando a conexão voltar.
+          </Banner>
+        )}
+        {online && operacoesPendentes.length > 0 && (
+          <Banner>
+            {operacoesPendentes.length === 1
+              ? "1 alteração"
+              : `${operacoesPendentes.length} alterações`}{" "}
+            aguardando confirmação do servidor.
           </Banner>
         )}
         <main className="flex-1 bg-mist-50 p-4 md:p-6">{children}</main>

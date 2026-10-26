@@ -13,6 +13,7 @@ import {
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { auth } from "./firebase";
 import { PASSWORD_MIN_LENGTH, validatePassword } from "./passwordPolicy";
+import { medirDuracao } from "./telemetry/performance";
 
 interface AuthContextValue {
   user: FirebaseUser | null;
@@ -54,21 +55,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     firebaseReady: Boolean(auth),
     async signInWithEmail(email, password) {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
-      await signInWithEmailAndPassword(auth, sanitizeEmail(email), password);
+      const instancia = auth;
+      await medirDuracao("auth.signInWithEmail", () =>
+        signInWithEmailAndPassword(instancia, sanitizeEmail(email), password)
+      );
     },
     async signUpWithEmail(email, password) {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
+      const instancia = auth;
       // Reforço no cliente: mesmo que uma tela esqueça de validar antes de
       // chamar o provider, nenhuma conta é criada com senha fora da política
       // (ver src/lib/passwordPolicy.ts).
       const erroSenha = validatePassword(password);
       if (erroSenha) throw new Error(erroSenha);
-      const cred = await createUserWithEmailAndPassword(auth, sanitizeEmail(email), password);
+      const cred = await medirDuracao("auth.signUpWithEmail", () =>
+        createUserWithEmailAndPassword(instancia, sanitizeEmail(email), password)
+      );
       return cred.user;
     },
     async signInWithGoogle() {
       if (!auth) throw new Error(NOT_CONFIGURED_MESSAGE);
-      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      const instancia = auth;
+      const cred = await medirDuracao("auth.signInWithGoogle", () =>
+        signInWithPopup(instancia, new GoogleAuthProvider())
+      );
       return cred.user;
     },
     async sendPasswordReset(email) {

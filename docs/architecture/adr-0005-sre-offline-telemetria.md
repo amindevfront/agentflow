@@ -1,0 +1,53 @@
+# ADR-0005 — Prontidão para escala global: offline-first, telemetria de SRE e smoke tests
+
+**Status:** Aceita
+**Data:** 2026-10-25
+**Decisor:** @architect / SRE / growth (papéis assumidos por Claude Code a pedido explícito do usuário)
+**Contexto de origem:** fase final de produção pós-ADR-0004 (FinOps de cache, hardening Zero Trust) — tornar o AgentFlow operável por operadores em campo com rede instável (galpão logístico, canteiro de obras), observável por ferramentas corporativas, e validado por smoke tests de ponta a ponta.
+
+---
+
+## 1. Resiliência offline-first — delegar ao SDK, não reimplementá-lo
+
+**Decisão:** `src/lib/firebase.ts` passa a inicializar o Firestore com `initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) })`, com fallback em cascata:
+
+1. Sem `window.indexedDB` (SSR, navegador sem suporte) → `memoryLocalCache()` — mesmo comportamento de antes.
+2. `initializeFirestore` lança (HMR em dev reexecutando o módulo, ou um navegador que declara `indexedDB` mas nega acesso de fato — ex.: modo privado restrito) → `getFirestore(app)`, que devolve a instância já inicializada em vez de lançar.
+
+**Rejeitado deliberadamente:** a função citada no pedido original, `enableIndexedDbPersistence()`. Ela está depreciada desde o Firestore v9.19 — a API de settings (`initializeFirestore` + `localCache`) é o caminho atual, e resolve de fábrica, via `persistentMultipleTabManager`, o erro clássico (`failed-precondition`) de um operador com o AgentFlow aberto em mais de uma aba, que na API antiga só a primeira aba conseguia reivindicar.
+
+**Fila de reenvio otimista — o que de fato faltava:** com a persistência habilitada, o próprio Firestore já (a) aplica toda escrita ao cache local IMEDIATAMENTE — qualquer `onSnapshot` ativo reflete o novo valor antes do servidor confirmar — e (b) reenfileira e reenvia a escrita sozinho, de forma durável, quando a conexão volta. Reimplementar essa fila seria retrabalho com mais chance de divergir do SDK do que de melhorá-lo.
+
+O que realmente faltava era **visibilidade**: nada dizia ao operador "há N alterações aguardando o servidor", e uma escrita que falhasse por um motivo real (não apenas "sem rede") desaparecia sem reportar. `src/lib/offlineQueue.ts` resolve exatamente isso — `enfileirarEscrita(descricao, fn)` registra a operação numa lista observável, remove quando `fn()` resolve, e reporta via `reportarErro` (ADR-0004) quando rejeita por um motivo genuíno. Devolve a MESMA Promise de `fn()`: não muda a semântica de quem chama, só adiciona observabilidade.
+
+Aplicado em `src/lib/firestore.ts` (`createFlow`, `updateFlow`, `createConnector`, `createInvite`, `markInviteAccepted`, `updateWorkspaceName`) e `src/lib/inbox/firestore.ts` (`criarConversa`, `enviarMensagemOperador`) — as escritas interativas de Fluxos e Neural Inbox citadas no pedido. **Deliberadamente não aplicado** a `persistWorkspace`/`upsertAppUser`/`prepareWorkspace`: esses três já têm resiliência bespoke própria desde o ADR-0003 (retry com backoff, fallback otimista em `pendingWorkspace.ts`), e sobrepor um segundo mecanismo genérico ali confundiria, não ajudaria. Também não aplicado a `registrarMensagemCliente` (Neural Inbox): é um pipeline de várias etapas (selo no servidor, leitura de histórico, abertura condicional de ticket P1), não uma escrita atômica — já tem resiliência própria documentada inline, e envolvê-lo inteiro na fila trataria leitura+múltiplas escritas+chamada de API como uma única "escrita pendente" opaca, o que seria impreciso.
+
+`src/components/layout/AppShell.tsx` assina `assinarOperacoesPendentes`/`assinarConectividade` (`navigator.onLine` + eventos `online`/`offline`) e mostra dois banners (reaproveitando `Banner`, já no design system): um para "você está offline, continue trabalhando" e outro para "N alterações aguardando confirmação do servidor".
+
+## 2. Observabilidade — console estruturado pronto para ingestão corporativa, sem fingir uma integração que não existe
+
+**Decisão:** `src/lib/telemetry/logger.ts` ganha três campos pensados para ingestão por Datadog/New Relic/Sentry: `level` (alias em inglês de `nivel` — a maioria dos agentes desses provedores procura por padrão essa chave), `service: "agentflow"` e `ambiente` (lido de `NODE_ENV`). Sem esses campos, um agregador de logs multi-serviço não teria como separar o AgentFlow de qualquer outro serviço no mesmo projeto.
+
+`definirSink(sink)`/`restaurarSinkPadrao()` são o ponto de extensão: conectar um APM real (ex.: um `fetch` para o endpoint de intake do Datadog) é uma mudança LOCAL a `logger.ts` — nenhum dos ~15 call sites de `logger.*`/`reportarErro` precisa mudar. **Não instalamos nenhum SDK real de Sentry/Datadog/New Relic nesta ADR**: isso exigiria um DSN/API key que não foi fornecido, e fabricar uma integração "funcional" sem credenciais reais para validar seria exatamente o tipo de trabalho não verificável que este processo rejeita. O que está pronto AGORA é o formato de log que essas ferramentas sabem ingerir — ligar o sink real é configuração, não código novo.
+
+**Rastreamento de performance:** `src/lib/telemetry/performance.ts` (`medirDuracao`) mede operações de resposta única — latência de `signInWithEmail`/`signUpWithEmail`/`signInWithGoogle` (`src/lib/auth.tsx`) e das leituras one-shot do Firestore (`getWorkspace`, `getAppUser`, `getInviteById` em `src/lib/firestore.ts`). Deliberadamente NÃO instrumentado nos listeners `onSnapshot` (`subscribeFlows`, `subscribeConversations` etc.): "tempo de resposta" não é um conceito bem definido para um listener que fica aberto indefinidamente e dispara de novo a cada mudança — medir só a primeira chamada misturaria rede, cache local e "coleção vazia" num único número que enganaria mais do que ajudaria.
+
+`src/lib/telemetry/useRoutePerformance.ts` (`useMedirCarregamentoRota`) mede transição de rota em dois níveis de precisão, por desenho: em `/flows`, do mount até o primeiro snapshot de fluxos E de execuções já terem chegado (sinal real de "dados prontos"); em `/inbox`, do mount até o próprio mount (`NeuralInbox` gerencia o carregamento internamente — instrumentar o componente inteiro, que não foi auditado a fundo nesta passada, ficou fora de escopo deliberadamente para não introduzir risco num componente grande e já complexo).
+
+## 3. Smoke tests — o que este ambiente pode e não pode validar, dito explicitamente
+
+**Bloqueio real encontrado:** testar `firestore.rules` de verdade exige `@firebase/rules-unit-testing` + o Firestore Emulator, que por sua vez exige **JDK 11+**. Este ambiente só tem **JDK 8** (`java -version` → `1.8.0_51`). Tentamos instalar `firebase-tools` + `@firebase/rules-unit-testing` (ambos instalam corretamente) e rodar `firebase emulators:exec --only firestore` — o próprio `firebase-tools` recusa com `"firebase-tools no longer supports Java versions before 11"`. Desinstalamos os dois pacotes de volta (não ficam no `package.json`) em vez de deixar uma dependência morta que nenhum teste deste repositório usa.
+
+**Decisão, honesta sobre o que cobre:** `tests/firestoreRulesAudit.test.ts` faz uma auditoria ESTÁTICA do texto de `firestore.rules` — extrai o corpo de cada bloco `match` (respeitando chaves aninhadas de sub-coleção) e garante que toda coleção escopada por tenant referencia `belongsToWorkspace`/`isAdminOf`, que nenhuma coleção tem uma linha `allow ...: if true` fora das DUAS exceções já documentadas no próprio arquivo de regras (`workspaces.create` e `invites.get`), e que as coleções de cofre/infra (`credentialSecrets`, `messageVaults`, `recipientVaults`, `_rateLimits`, `auditLogs`, `auditChainHead`, `flowRuns`) continuam negando leitura/escrita de cliente. Isto NÃO executa a CEL nem verifica que a função está semanticamente correta — pega a classe de regressão mais comum e mais perigosa (alguém afrouxando uma regra, ou esquecendo de escopar uma coleção nova), não qualquer regressão possível. Rodar o teste real contra o emulador fica documentado como próximo passo, condicionado a JDK 11+ no ambiente de CI.
+
+`tests/smokeCriticalFlow.test.ts` exercita a ORQUESTRAÇÃO DE DADOS real do fluxo Registro → Onboarding → Criação de Workspace → Inicialização de Conector, chamando os módulos de produção de verdade (`signupSchema`, `prepareWorkspace`, `persistWorkspace`, `upsertAppUser`, `createConnector`) contra um Firestore falso minimalista (só `doc`/`collection`/`setDoc`/`addDoc`/`getDoc`/`updateDoc`, escopado exatamente ao que este fluxo toca — não uma reimplementação geral do SDK). Também honesto sobre o limite: este projeto não usa React Testing Library (todo o resto da suíte é lógica pura, sem DOM — ver `vitest.config.ts`), então o teste não renderiza `SignupPage`/`OnboardingPage`/`ConnectorsPage` nem simula clique de usuário; ele prova que os dados fluem corretos e sanitizados de uma etapa para a próxima (o `workspaceId` gerado no onboarding chega inalterado até o conector, o nome do workspace sai sanitizado de HTML malicioso, uma senha fraca nunca chega a gerar uma escrita). Testar a camada de UI de fato exigiria introduzir RTL — decisão que caberia a uma ADR própria, não embutida silenciosamente aqui.
+
+## 4. Validação
+
+`npm test`: **304/304** (25 arquivos, 6 novos: `offlineQueue`, `performance`, `firestoreRulesAudit`, `smokeCriticalFlow`, mais extensões em `telemetryLogger`). `npx tsc --noEmit`: limpo. `next lint`: sem warnings. `next build`: sucesso, todas as rotas geradas.
+
+## Consequências
+
+**Positivas:** operadores em campo continuam lendo/escrevendo normalmente sob rede instável, com feedback visível em vez de telas "travadas" sem explicação; qualquer falha de escrita genuína (não apenas offline) é reportada, nunca silenciosa; o formato de log já está no shape que Datadog/New Relic/Sentry esperam, sem esperar uma integração futura para já ser útil nos logs do Vercel/console; uma regressão de `firestore.rules` que afrouxe isolamento de tenant quebra um teste determinístico em menos de 50ms, sem depender de infraestrutura externa.
+
+**Negativas / custos aceitos:** a auditoria de regras é estrutural, não comportamental — uma regra que REFERENCIA `belongsToWorkspace` mas com uma lógica sutilmente errada dentro da função não seria pega por este teste (a função em si já tem seus próprios usos corretos auditados manualmente nos ADRs anteriores). O smoke test não cobre a camada de UI. O rastreamento de performance de `/inbox` é mais grosso que o de `/flows`. Nenhum dos três é um substituto de observabilidade/teste real em produção — são o máximo verificável dentro dos limites deste ambiente (JDK 8, sem RTL, sem DSN de APM), documentados como tal em vez de maquiados como completos.

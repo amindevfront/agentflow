@@ -16,6 +16,8 @@ import {
 import { db } from "./firebase";
 import { NICHE_PRESETS } from "./niches";
 import { sanitizeEmailInput, sanitizeText, sanitizeUrl } from "./sanitize";
+import { enfileirarEscrita } from "./offlineQueue";
+import { medirDuracao } from "./telemetry/performance";
 import type {
   AppUser,
   Connector,
@@ -79,14 +81,18 @@ export function workspaceRef(workspaceId: string) {
 }
 
 export async function getWorkspace(workspaceId: string): Promise<Workspace | null> {
-  const database = requireDb();
-  const snap = await getDoc(doc(database, "workspaces", workspaceId));
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Workspace) : null;
+  return medirDuracao("firestore.getWorkspace", async () => {
+    const database = requireDb();
+    const snap = await getDoc(doc(database, "workspaces", workspaceId));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as Workspace) : null;
+  });
 }
 
 export async function updateWorkspaceName(workspaceId: string, nome: string): Promise<void> {
-  const database = requireDb();
-  await setDoc(doc(database, "workspaces", workspaceId), { nome: sanitizeText(nome, 80) }, { merge: true });
+  return enfileirarEscrita("Atualizar nome do workspace", async () => {
+    const database = requireDb();
+    await setDoc(doc(database, "workspaces", workspaceId), { nome: sanitizeText(nome, 80) }, { merge: true });
+  });
 }
 
 export async function upsertAppUser(user: AppUser): Promise<void> {
@@ -95,17 +101,21 @@ export async function upsertAppUser(user: AppUser): Promise<void> {
 }
 
 export async function getAppUser(uid: string): Promise<AppUser | null> {
-  const database = requireDb();
-  const snap = await getDoc(doc(database, "users", uid));
-  return snap.exists() ? (snap.data() as AppUser) : null;
+  return medirDuracao("firestore.getAppUser", async () => {
+    const database = requireDb();
+    const snap = await getDoc(doc(database, "users", uid));
+    return snap.exists() ? (snap.data() as AppUser) : null;
+  });
 }
 
 // ---------- Invites ----------
 
 export async function getInviteById(inviteId: string): Promise<Invite | null> {
-  const database = requireDb();
-  const snap = await getDoc(doc(database, "invites", inviteId));
-  return snap.exists() ? ({ id: snap.id, ...snap.data() } as Invite) : null;
+  return medirDuracao("firestore.getInviteById", async () => {
+    const database = requireDb();
+    const snap = await getDoc(doc(database, "invites", inviteId));
+    return snap.exists() ? ({ id: snap.id, ...snap.data() } as Invite) : null;
+  });
 }
 
 export async function createInvite(
@@ -114,21 +124,25 @@ export async function createInvite(
   workspaceId: string,
   criadoPor: string
 ): Promise<string> {
-  const database = requireDb();
-  const ref = await addDoc(collection(database, "invites"), {
-    email: sanitizeEmailInput(email),
-    papel,
-    workspaceId,
-    status: "pendente" satisfies Invite["status"],
-    criadoPor,
-    criadoEm: new Date().toISOString(),
+  return enfileirarEscrita("Criar convite", async () => {
+    const database = requireDb();
+    const ref = await addDoc(collection(database, "invites"), {
+      email: sanitizeEmailInput(email),
+      papel,
+      workspaceId,
+      status: "pendente" satisfies Invite["status"],
+      criadoPor,
+      criadoEm: new Date().toISOString(),
+    });
+    return ref.id;
   });
-  return ref.id;
 }
 
 export async function markInviteAccepted(inviteId: string): Promise<void> {
-  const database = requireDb();
-  await updateDoc(doc(database, "invites", inviteId), { status: "aceito" });
+  return enfileirarEscrita("Aceitar convite", async () => {
+    const database = requireDb();
+    await updateDoc(doc(database, "invites", inviteId), { status: "aceito" });
+  });
 }
 
 // ---------- Flows ----------
@@ -161,20 +175,24 @@ export async function createFlow(
   workspaceId: string,
   input: Omit<Flow, "id" | "workspaceId" | "atualizadoEm">
 ): Promise<string> {
-  const database = requireDb();
-  const ref = await addDoc(collection(database, "flows"), {
-    ...sanitizeFlowFields(input),
-    workspaceId,
-    atualizadoEm: new Date().toISOString(),
+  return enfileirarEscrita("Criar fluxo", async () => {
+    const database = requireDb();
+    const ref = await addDoc(collection(database, "flows"), {
+      ...sanitizeFlowFields(input),
+      workspaceId,
+      atualizadoEm: new Date().toISOString(),
+    });
+    return ref.id;
   });
-  return ref.id;
 }
 
 export async function updateFlow(flowId: string, patch: Partial<Flow>): Promise<void> {
-  const database = requireDb();
-  await updateDoc(doc(database, "flows", flowId), {
-    ...sanitizeFlowFields(patch),
-    atualizadoEm: new Date().toISOString(),
+  return enfileirarEscrita("Salvar fluxo", async () => {
+    const database = requireDb();
+    await updateDoc(doc(database, "flows", flowId), {
+      ...sanitizeFlowFields(patch),
+      atualizadoEm: new Date().toISOString(),
+    });
   });
 }
 
@@ -218,14 +236,16 @@ export async function createConnector(
   workspaceId: string,
   input: Omit<Connector, "id" | "workspaceId" | "atualizadoEm">
 ): Promise<string> {
-  const database = requireDb();
-  const ref = await addDoc(collection(database, "connectors"), {
-    ...input,
-    nome: sanitizeText(input.nome, 80),
-    workspaceId,
-    atualizadoEm: new Date().toISOString(),
+  return enfileirarEscrita("Criar conector", async () => {
+    const database = requireDb();
+    const ref = await addDoc(collection(database, "connectors"), {
+      ...input,
+      nome: sanitizeText(input.nome, 80),
+      workspaceId,
+      atualizadoEm: new Date().toISOString(),
+    });
+    return ref.id;
   });
-  return ref.id;
 }
 
 // ---------- Team ----------

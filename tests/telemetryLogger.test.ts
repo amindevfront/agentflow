@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { formatarRegistro } from "@/lib/telemetry/logger";
+import { afterEach, describe, expect, it } from "vitest";
+import { definirSink, formatarRegistro, logger, restaurarSinkPadrao, type RegistroLog } from "@/lib/telemetry/logger";
 
 describe("formatarRegistro", () => {
   it("monta um registro estruturado com nível, mensagem e timestamp ISO", () => {
@@ -33,5 +33,39 @@ describe("formatarRegistro", () => {
     const circular: Record<string, unknown> = {};
     circular.self = circular;
     expect(() => formatarRegistro("error", "falha", { dados: { circular } })).not.toThrow();
+  });
+
+  it("inclui 'level' (alias em inglês de 'nivel'), 'service' e 'ambiente' — convenção de observabilidade corporativa", () => {
+    const registro = formatarRegistro("warn", "aviso");
+    expect(registro.level).toBe("warn");
+    expect(registro.level).toBe(registro.nivel);
+    expect(registro.service).toBe("agentflow");
+    expect(typeof registro.ambiente).toBe("string");
+  });
+});
+
+describe("definirSink / restaurarSinkPadrao", () => {
+  afterEach(() => {
+    restaurarSinkPadrao();
+  });
+
+  it("permite substituir o destino dos logs sem alterar os call sites de `logger.*`", () => {
+    const capturados: RegistroLog[] = [];
+    definirSink((registro) => capturados.push(registro));
+
+    logger.error("falha capturada pelo sink customizado", { contexto: "teste" });
+
+    expect(capturados).toHaveLength(1);
+    expect(capturados[0]).toMatchObject({ nivel: "error", level: "error", contexto: "teste" });
+  });
+
+  it("restaurarSinkPadrao devolve o destino para o console estruturado", () => {
+    const capturados: RegistroLog[] = [];
+    definirSink((registro) => capturados.push(registro));
+    restaurarSinkPadrao();
+
+    logger.info("não deveria ir para o array customizado");
+
+    expect(capturados).toHaveLength(0);
   });
 });

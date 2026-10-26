@@ -5,6 +5,7 @@ import { subscribeFlows, subscribeFlowRuns } from "@/lib/firestore";
 import { formatRelativeTime } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { useMedirCarregamentoRota } from "@/lib/telemetry/useRoutePerformance";
 import { ListRow } from "@/components/ui/ListRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -26,14 +27,24 @@ export default function FlowsPage() {
   const { data: workspace } = useWorkspaceDoc(workspaceId);
   const playbooksSugeridos = workspace?.playbooksSugeridos ?? [];
 
+  const [carregouFlows, setCarregouFlows] = useState(false);
+  const [carregouRuns, setCarregouRuns] = useState(false);
+  useMedirCarregamentoRota("/flows", carregouFlows && carregouRuns);
+
   useEffect(() => {
     if (!workspaceId) return;
-    return subscribeFlows(workspaceId, setFlows);
+    return subscribeFlows(workspaceId, (lista) => {
+      setFlows(lista);
+      setCarregouFlows(true);
+    });
   }, [workspaceId]);
 
   useEffect(() => {
     if (!workspaceId) return;
-    return subscribeFlowRuns(workspaceId, setRuns);
+    return subscribeFlowRuns(workspaceId, (lista) => {
+      setRuns(lista);
+      setCarregouRuns(true);
+    });
   }, [workspaceId]);
 
   useEffect(() => {

@@ -50,6 +50,7 @@ import { interceptarMensagem, processarMensagemEntrante } from "@/lib/guardrails
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
 import { abrirTransbordo } from "@/lib/humanInTheLoop";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
+import { enfileirarEscrita } from "@/lib/offlineQueue";
 
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
@@ -195,36 +196,38 @@ export interface CriarConversaInput {
  * `conversations/{id}.participante.identificadorMascarado`.
  */
 export async function criarConversa(entrada: CriarConversaInput): Promise<Conversation> {
-  const database = requireDb();
-  const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
-  const agora = new Date().toISOString();
+  return enfileirarEscrita("Criar conversa", async () => {
+    const database = requireDb();
+    const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
+    const agora = new Date().toISOString();
 
-  const { textoMascarado: identificadorMascarado } = interceptarMensagem(entrada.identificadorParticipante);
+    const { textoMascarado: identificadorMascarado } = interceptarMensagem(entrada.identificadorParticipante);
 
-  const conversa: Conversation = {
-    id: novoId("conv"),
-    workspaceId,
-    canal: entrada.canal,
-    participante: {
-      nome: entrada.nomeParticipante,
-      identificadorMascarado,
-    },
-    assunto: entrada.assunto,
-    status: "aberta",
-    prioridade: "p3",
-    atribuidoTipo: "nenhum",
-    frustrationIndex: 0,
-    frustrationTendencia: "estavel",
-    circuitBreakerAtivo: false,
-    ultimaMensagemPreview: "",
-    ultimaMensagemEm: agora,
-    criadaEm: agora,
-    totalMensagens: 0,
-    totalMensagensCliente: 0,
-  };
+    const conversa: Conversation = {
+      id: novoId("conv"),
+      workspaceId,
+      canal: entrada.canal,
+      participante: {
+        nome: entrada.nomeParticipante,
+        identificadorMascarado,
+      },
+      assunto: entrada.assunto,
+      status: "aberta",
+      prioridade: "p3",
+      atribuidoTipo: "nenhum",
+      frustrationIndex: 0,
+      frustrationTendencia: "estavel",
+      circuitBreakerAtivo: false,
+      ultimaMensagemPreview: "",
+      ultimaMensagemEm: agora,
+      criadaEm: agora,
+      totalMensagens: 0,
+      totalMensagensCliente: 0,
+    };
 
-  await setDoc(doc(database, COLECAO_CONVERSAS, conversa.id), conversa);
-  return conversa;
+    await setDoc(doc(database, COLECAO_CONVERSAS, conversa.id), conversa);
+    return conversa;
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -423,48 +426,50 @@ export async function enviarMensagemOperador(entrada: {
   canal: Canal;
   workspaceId?: string;
 }): Promise<ConversationMessage> {
-  const database = requireDb();
-  const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
-  const agora = new Date();
-  const messageId = novoId("msg");
+  return enfileirarEscrita("Enviar resposta na Neural Inbox", async () => {
+    const database = requireDb();
+    const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
+    const agora = new Date();
+    const messageId = novoId("msg");
 
-  // A resposta do operador também passa pelo Shield-Layer: um atendente pode
-  // colar, sem querer, um trecho com dado pessoal do cliente ao redigir.
-  const { textoMascarado, piiDetectada } = interceptarMensagem(entrada.texto);
+    // A resposta do operador também passa pelo Shield-Layer: um atendente pode
+    // colar, sem querer, um trecho com dado pessoal do cliente ao redigir.
+    const { textoMascarado, piiDetectada } = interceptarMensagem(entrada.texto);
 
-  const mensagem: ConversationMessage = {
-    id: messageId,
-    conversationId: entrada.conversationId,
-    workspaceId,
-    canal: entrada.canal,
-    remetente: entrada.remetente,
-    remetenteId: entrada.remetenteId,
-    texto: textoMascarado,
-    piiDetectada,
-    enviadaEm: agora.toISOString(),
-    // O cofre de compliance (selo no servidor) é reservado a mensagens do
-    // CLIENTE — ver `registrarMensagemCliente`. Uma resposta do operador que
-    // acidentalmente contém PII é mascarada aqui da mesma forma, mas não gera
-    // uma segunda cópia selada: o titular dos dados, nesse caso, é o cliente
-    // mencionado pelo operador, não o próprio operador.
-    temVersaoOriginalSelada: false,
-  };
+    const mensagem: ConversationMessage = {
+      id: messageId,
+      conversationId: entrada.conversationId,
+      workspaceId,
+      canal: entrada.canal,
+      remetente: entrada.remetente,
+      remetenteId: entrada.remetenteId,
+      texto: textoMascarado,
+      piiDetectada,
+      enviadaEm: agora.toISOString(),
+      // O cofre de compliance (selo no servidor) é reservado a mensagens do
+      // CLIENTE — ver `registrarMensagemCliente`. Uma resposta do operador que
+      // acidentalmente contém PII é mascarada aqui da mesma forma, mas não gera
+      // uma segunda cópia selada: o titular dos dados, nesse caso, é o cliente
+      // mencionado pelo operador, não o próprio operador.
+      temVersaoOriginalSelada: false,
+    };
 
-  await setDoc(doc(database, COLECAO_CONVERSAS, entrada.conversationId, SUBCOLECAO_MENSAGENS, messageId), mensagem);
+    await setDoc(doc(database, COLECAO_CONVERSAS, entrada.conversationId, SUBCOLECAO_MENSAGENS, messageId), mensagem);
 
-  const refConversa = doc(database, COLECAO_CONVERSAS, entrada.conversationId);
-  const conversaSnap = await getDoc(refConversa);
-  const totalAtual = conversaSnap.exists() ? (conversaSnap.data() as Conversation).totalMensagens : 0;
+    const refConversa = doc(database, COLECAO_CONVERSAS, entrada.conversationId);
+    const conversaSnap = await getDoc(refConversa);
+    const totalAtual = conversaSnap.exists() ? (conversaSnap.data() as Conversation).totalMensagens : 0;
 
-  await updateDoc(refConversa, {
-    ultimaMensagemPreview: textoMascarado.slice(0, 160),
-    ultimaMensagemEm: agora.toISOString(),
-    ultimaMensagemRemetente: entrada.remetente satisfies MessageSender,
-    totalMensagens: totalAtual + 1,
-    status: "em-atendimento" satisfies ConversationStatus,
+    await updateDoc(refConversa, {
+      ultimaMensagemPreview: textoMascarado.slice(0, 160),
+      ultimaMensagemEm: agora.toISOString(),
+      ultimaMensagemRemetente: entrada.remetente satisfies MessageSender,
+      totalMensagens: totalAtual + 1,
+      status: "em-atendimento" satisfies ConversationStatus,
+    });
+
+    return mensagem;
   });
-
-  return mensagem;
 }
 
 // ---------------------------------------------------------------------------
