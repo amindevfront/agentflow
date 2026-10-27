@@ -6,6 +6,7 @@ import { useAuth } from "./auth";
 import { getAppUser, getWorkspace, persistWorkspace, workspaceRef } from "./firestore";
 import { withTimeout, retryWithTimeout } from "./promiseUtils";
 import { readPendingProfile, clearPendingProfile } from "./pendingWorkspace";
+import { readConfirmedProfile, saveConfirmedProfile } from "./confirmedProfileCache";
 import type { AppUser } from "@/types";
 
 const READ_TIMEOUT_MS = 3000;
@@ -71,6 +72,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (found) {
           setAppUser(found);
           setStatus("ready");
+          saveConfirmedProfile(user.uid, found);
 
           const pending = readPendingProfile(user.uid);
           if (!pending) {
@@ -120,6 +122,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         if (pending) {
           setAppUser(pending.appUser);
           setPendingSync(true);
+          setStatus("ready");
+          return;
+        }
+        // Timeout/erro de rede, mas este navegador já confirmou este
+        // perfil antes (ver confirmedProfileCache.ts) — o documento existe,
+        // só a leitura de agora falhou. Não bloqueia a sessão nem força o
+        // usuário a recriar o workspace por uma instabilidade pontual.
+        const confirmed = readConfirmedProfile(user.uid);
+        if (confirmed) {
+          setAppUser(confirmed);
+          setPendingSync(false);
           setStatus("ready");
           return;
         }

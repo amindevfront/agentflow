@@ -143,7 +143,7 @@ export default function OnboardingPage() {
     return (
       <EmptyState
         title="Não foi possível verificar sua conta"
-        description="A conexão com o servidor demorou demais ou falhou. Tente novamente, ou continue mesmo assim para configurar seu workspace."
+        description="A conexão com o servidor demorou demais ou falhou. Tente novamente, continue mesmo assim para configurar seu workspace, ou volte para o login."
         action={
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => setCheckAttempt((n) => n + 1)}>
@@ -151,6 +151,9 @@ export default function OnboardingPage() {
             </Button>
             <Button size="sm" variant="secondary" onClick={() => setStep("workspace")}>
               Continuar mesmo assim
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => router.push("/login")}>
+              Ir para o Login
             </Button>
           </div>
         }
