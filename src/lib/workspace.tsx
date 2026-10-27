@@ -7,11 +7,11 @@ import { getAppUser, getWorkspace, persistWorkspace, workspaceRef } from "./fire
 import { withTimeout, retryWithTimeout } from "./promiseUtils";
 import { readPendingProfile, clearPendingProfile } from "./pendingWorkspace";
 import { readConfirmedProfile, saveConfirmedProfile } from "./confirmedProfileCache";
+import { codigoErroFirestore } from "./firestoreErrors";
+import { reportarErro } from "./telemetry/errorReporting";
 import type { AppUser } from "@/types";
 
 const READ_TIMEOUT_MS = 3000;
-
-type Status = "loading" | "ready" | "error";
 
 interface WorkspaceContextValue {
   appUser: AppUser | null;
@@ -19,8 +19,7 @@ interface WorkspaceContextValue {
   loading: boolean;
   /** `true` enquanto existe gravação de workspace/perfil ainda não confirmada no Firestore. */
   pendingSync: boolean;
-  /** Falha definitiva (timeout/erro) sem nenhum perfil — nem confirmado, nem otimista — para mostrar. */
-  error: boolean;
+  /** Força uma nova tentativa de leitura/reconciliação — usado pelo banner de sincronização pendente. */
   retry: () => void;
 }
 
@@ -31,112 +30,126 @@ const RECONCILE_TIMEOUT_MS = 5000;
 const RECONCILE_BASE_DELAY_MS = 2000;
 
 /**
- * Resolve o perfil (`AppUser`) e o workspace do usuário autenticado —
- * com resiliência de rede de ponta a ponta (ver ADR-0003):
+ * Resolve o perfil (`AppUser`) e o workspace do usuário autenticado — com
+ * resiliência de rede de ponta a ponta e SEM nenhum estado de erro
+ * bloqueante (ver ADR-0006, que substitui o item 4 do ADR-0003):
  *
- *   1. Lê `users/{uid}` com limite de 3s (`withTimeout`).
- *   2. Doc não existe (resposta rápida e definitiva) → sem fallback pendente
- *      → é onboarding de verdade, manda para `/onboarding`.
- *   3. Doc não existe/timeout/erro, MAS existe um perfil otimista local
- *      (gravado por `/onboarding` quando a sincronização com o Firestore
- *      não confirmou a tempo) → usa esse perfil imediatamente. A app nunca
- *      trava em "Carregando…" por causa disso.
- *   4. Doc EXISTE (perfil confirmado) mas ainda há um registro pendente para
+ *   1. Só dispara a leitura com o estado do Firebase Auth já resolvido
+ *      (`onAuthStateChanged` concluído) e com `user` presente — nunca uma
+ *      consulta órfã/não autenticada.
+ *   2. Lê `users/{uid}` com limite rígido de 3s (`withTimeout`).
+ *   3. Doc não existe (resposta definitiva) → sem fallback pendente/confirmado
+ *      → onboarding de verdade → `/onboarding`.
+ *   4. Doc não existe/timeout/erro (qualquer código — `permission-denied`,
+ *      `unavailable`, `deadline-exceeded` ou outro, sempre logado via
+ *      `reportarErro` antes de decidir), MAS existe um perfil otimista local
+ *      (gravação do onboarding ainda sincronizando) → usa esse perfil.
+ *   5. Doc não existe/timeout/erro, mas este navegador já confirmou este
+ *      perfil antes (`confirmedProfileCache`) → usa a cópia confirmada; uma
+ *      instabilidade pontual não força um usuário existente a recriar o
+ *      workspace.
+ *   6. Doc EXISTE (perfil confirmado) mas ainda há um registro pendente para
  *      este uid → o perfil já é real, só o workspace pode não ter
  *      confirmado a própria gravação (ex.: a aba foi recarregada no meio da
- *      sincronização em segundo plano do onboarding, que não sobrevive a um
- *      reload). Continua tentando `persistWorkspace` em segundo plano até
- *      confirmar, sem bloquear a navegação.
- *   5. Timeout/erro SEM perfil otimista (ex.: usuário antigo, rede ruim) →
- *      estado de erro recuperável (`retry`) — nunca um spinner infinito, e
- *      nunca um redirecionamento "cego" para `/onboarding` (que arriscaria
- *      criar um SEGUNDO workspace para quem já tem um).
+ *      sincronização em segundo plano do onboarding). Continua tentando
+ *      `persistWorkspace` em segundo plano até confirmar, sem bloquear a
+ *      navegação.
+ *   7. Nenhum dos fallbacks acima se aplica → `router.replace("/onboarding")`
+ *      imediato. Nunca um spinner infinito, nunca uma tela de erro estática
+ *      com "Tentar novamente" — o pior caso possível é o onboarding guiar a
+ *      criação de um workspace que, em teoria, já existia (ver ADR-0006).
  */
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
   const [appUser, setAppUser] = useState<AppUser | null>(null);
   const [pendingSync, setPendingSync] = useState(false);
-  const [status, setStatus] = useState<Status>("loading");
+  const [loadingPerfil, setLoadingPerfil] = useState(true);
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (authLoading || !user) return;
+    // Requisito de segurança: nenhuma consulta ao Firestore antes do
+    // `onAuthStateChanged` resolver E de termos um usuário autenticado.
+    if (authLoading) return;
+    if (!user) {
+      setLoadingPerfil(false);
+      return;
+    }
+
     let cancelled = false;
-    setStatus("loading");
+    setLoadingPerfil(true);
+
+    /** Último recurso antes do redirecionamento: perfil otimista > perfil confirmado > onboarding. */
+    function resolverSemLeituraConfirmada(uid: string) {
+      if (cancelled) return;
+
+      const pending = readPendingProfile(uid);
+      if (pending) {
+        setAppUser(pending.appUser);
+        setPendingSync(true);
+        setLoadingPerfil(false);
+        return;
+      }
+
+      const confirmed = readConfirmedProfile(uid);
+      if (confirmed) {
+        setAppUser(confirmed);
+        setPendingSync(false);
+        setLoadingPerfil(false);
+        return;
+      }
+
+      router.replace("/onboarding");
+    }
 
     withTimeout(getAppUser(user.uid), READ_TIMEOUT_MS)
       .then(async (found) => {
         if (cancelled) return;
 
-        if (found) {
-          setAppUser(found);
-          setStatus("ready");
-          saveConfirmedProfile(user.uid, found);
-
-          const pending = readPendingProfile(user.uid);
-          if (!pending) {
-            setPendingSync(false);
-            return;
-          }
-          // Perfil já é real; falta só confirmar se o workspace em si
-          // chegou a ser gravado (ver item 4 do docblock acima).
-          setPendingSync(true);
-          const existing = await getWorkspace(found.workspaceId).catch(() => null);
-          if (cancelled) return;
-          if (existing) {
-            clearPendingProfile(user.uid);
-            setPendingSync(false);
-            return;
-          }
-          const result = await retryWithTimeout(
-            () => persistWorkspace(workspaceRef(found.workspaceId), pending.workspace),
-            {
-              maxAttempts: RECONCILE_MAX_ATTEMPTS,
-              timeoutMs: RECONCILE_TIMEOUT_MS,
-              baseDelayMs: RECONCILE_BASE_DELAY_MS,
-            }
-          );
-          if (cancelled) return;
-          if (result.ok) {
-            clearPendingProfile(user.uid);
-            setPendingSync(false);
-          } else {
-            console.error("[workspace] reconciliação em segundo plano esgotou as tentativas:", result.error);
-          }
+        if (!found) {
+          resolverSemLeituraConfirmada(user.uid);
           return;
         }
 
+        setAppUser(found);
+        setLoadingPerfil(false);
+        saveConfirmedProfile(user.uid, found);
+
         const pending = readPendingProfile(user.uid);
-        if (pending) {
-          setAppUser(pending.appUser);
-          setPendingSync(true);
-          setStatus("ready");
-          return;
-        }
-        router.replace("/onboarding");
-      })
-      .catch(() => {
-        if (cancelled) return;
-        const pending = readPendingProfile(user.uid);
-        if (pending) {
-          setAppUser(pending.appUser);
-          setPendingSync(true);
-          setStatus("ready");
-          return;
-        }
-        // Timeout/erro de rede, mas este navegador já confirmou este
-        // perfil antes (ver confirmedProfileCache.ts) — o documento existe,
-        // só a leitura de agora falhou. Não bloqueia a sessão nem força o
-        // usuário a recriar o workspace por uma instabilidade pontual.
-        const confirmed = readConfirmedProfile(user.uid);
-        if (confirmed) {
-          setAppUser(confirmed);
+        if (!pending) {
           setPendingSync(false);
-          setStatus("ready");
           return;
         }
-        setStatus("error");
+        // Perfil já é real; falta só confirmar se o workspace em si
+        // chegou a ser gravado (ver item 6 do docblock acima).
+        setPendingSync(true);
+        const existing = await getWorkspace(found.workspaceId).catch(() => null);
+        if (cancelled) return;
+        if (existing) {
+          clearPendingProfile(user.uid);
+          setPendingSync(false);
+          return;
+        }
+        const result = await retryWithTimeout(
+          () => persistWorkspace(workspaceRef(found.workspaceId), pending.workspace),
+          {
+            maxAttempts: RECONCILE_MAX_ATTEMPTS,
+            timeoutMs: RECONCILE_TIMEOUT_MS,
+            baseDelayMs: RECONCILE_BASE_DELAY_MS,
+          }
+        );
+        if (cancelled) return;
+        if (result.ok) {
+          clearPendingProfile(user.uid);
+          setPendingSync(false);
+        } else {
+          reportarErro(result.error, "workspace:reconciliacao-pendente");
+        }
+      })
+      .catch((erro) => {
+        if (cancelled) return;
+        reportarErro(erro, `workspace:getAppUser:${codigoErroFirestore(erro)}`);
+        resolverSemLeituraConfirmada(user.uid);
       });
 
     return () => {
@@ -146,7 +159,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const retry = useCallback(() => setAttempt((n) => n + 1), []);
 
-  const loading = authLoading || !user || status === "loading";
+  const loading = authLoading || !user || loadingPerfil;
 
   return (
     <WorkspaceContext.Provider
@@ -155,7 +168,6 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         workspaceId: appUser?.workspaceId ?? null,
         loading,
         pendingSync,
-        error: status === "error",
         retry,
       }}
     >

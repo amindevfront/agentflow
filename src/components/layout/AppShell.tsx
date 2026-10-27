@@ -10,7 +10,6 @@ import { Topbar } from "./Topbar";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 const TITLE_BY_PATH: Array<[string, string]> = [
   ["/inbox", "Neural Inbox"],
@@ -26,7 +25,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { appUser, loading: workspaceLoading, pendingSync, error: workspaceError, retry } = useWorkspace();
+  const { appUser, loading: workspaceLoading, pendingSync, retry } = useWorkspace();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pausedGlobally, setPausedGlobally] = useState(false);
@@ -56,26 +55,6 @@ export function AppShell({ children }: { children: ReactNode }) {
     return (
       <div className="flex min-h-screen items-center justify-center text-sm text-ink-400">
         Carregando…
-      </div>
-    );
-  }
-
-  // Timeout/erro na leitura do perfil (users/{uid}) sem nenhum fallback
-  // otimista disponível — ver src/lib/workspace.tsx. Estado recuperável, não
-  // um loop: o usuário sempre tem uma ação (tentar de novo) em vez de ficar
-  // olhando "Carregando…" para sempre.
-  if (workspaceError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <EmptyState
-          title="Não foi possível carregar seu workspace"
-          description="A conexão com o servidor demorou demais ou falhou. Verifique sua internet e tente novamente."
-          action={
-            <Button size="sm" onClick={retry}>
-              Tentar novamente
-            </Button>
-          }
-        />
       </div>
     );
   }
