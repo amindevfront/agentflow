@@ -8,7 +8,7 @@ import { useAuth } from "@/lib/auth";
  * Roteamento inicial — regra única e blindada, sem round-trip ao Firestore:
  * decide apenas pela sessão do Firebase Auth.
  *
- *   - sem sessão → `/onboarding` instantâneo.
+ *   - sem sessão → `/login` instantâneo.
  *   - sessão ativa → `/flows`.
  *
  * A verificação de workspace (se o usuário autenticado já tem perfil em
@@ -22,7 +22,7 @@ export default function Home() {
 
   useEffect(() => {
     if (loading) return;
-    router.replace(user ? "/flows" : "/onboarding");
+    router.replace(user ? "/flows" : "/login");
   }, [user, loading, router]);
 
   return (
