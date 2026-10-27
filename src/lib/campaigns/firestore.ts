@@ -17,6 +17,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import type { Campaign, CampaignRecipient, Canal, JitterConfig, OptOutEntry } from "@/types";
@@ -24,6 +25,7 @@ import { auth, db } from "@/lib/firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "@/lib/firestore";
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { hashDestino, planejarLotes } from "./stochasticEngine";
+import { assinarComFallbackDeIndice } from "@/lib/firestoreResilience";
 
 const COLECAO_CAMPANHAS = "campaigns";
 const SUBCOLECAO_DESTINATARIOS = "destinatarios";
@@ -73,27 +75,32 @@ async function selarDestinatario(entrada: {
 
 export function subscribeCampaigns(
   onChange: (campanhas: Campaign[]) => void,
-  opcoes: { workspaceId?: string; onError?: (erro: Error) => void } = {}
+  // `onError` nunca recebe o erro — quem consome mostra um texto amigável
+  // fixo; índice ausente é absorvido de forma transparente (ver
+  // `assinarComFallbackDeIndice`) e nem chega a chamar isto.
+  opcoes: { workspaceId?: string; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
     return () => {};
   }
-  const consulta = query(
-    collection(db, COLECAO_CAMPANHAS),
-    where("workspaceId", "==", opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID),
-    orderBy("criadaEm", "desc"),
-    limit(100)
-  );
-  return onSnapshot(
-    consulta,
-    (snapshot) => onChange(snapshot.docs.map((d) => ({ ...(d.data() as Campaign), id: d.id }))),
-    (erro) => {
-      console.error("[campanhas] falha ao assinar campanhas:", erro);
-      opcoes.onError?.(erro);
-      onChange([]);
-    }
-  );
+  const workspaceId = opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID;
+  const mapearCampanha = (d: QueryDocumentSnapshot) => ({ ...(d.data() as Campaign), id: d.id });
+
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, COLECAO_CAMPANHAS),
+      where("workspaceId", "==", workspaceId),
+      orderBy("criadaEm", "desc"),
+      limit(100)
+    ),
+    consultaFallback: query(collection(db, COLECAO_CAMPANHAS), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearCampanha,
+    ordenarFallback: (lista) => [...lista].sort((a, b) => b.criadaEm.localeCompare(a.criadaEm)).slice(0, 100),
+    onChange,
+    aoFalharDeFormaIrrecuperavel: opcoes.onError,
+    contexto: "campanhas",
+  });
 }
 
 export function subscribeRecipients(
@@ -112,7 +119,10 @@ export function subscribeRecipients(
   return onSnapshot(
     consulta,
     (snapshot) => onChange(snapshot.docs.map((d) => ({ ...(d.data() as CampaignRecipient), id: d.id }))),
-    (erro) => console.error(`[campanhas] falha ao assinar destinatários de ${campaignId}:`, erro)
+    (erro) => {
+      console.error(`[campanhas] falha ao assinar destinatários de ${campaignId}:`, erro);
+      onChange([]);
+    }
   );
 }
 
@@ -128,7 +138,10 @@ export function subscribeOptOuts(
   return onSnapshot(
     consulta,
     (snapshot) => onChange(snapshot.docs.map((d) => ({ ...(d.data() as OptOutEntry), id: d.id }))),
-    (erro) => console.error("[campanhas] falha ao assinar opt-outs:", erro)
+    (erro) => {
+      console.error("[campanhas] falha ao assinar opt-outs:", erro);
+      onChange([]);
+    }
   );
 }
 

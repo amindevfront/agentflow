@@ -285,7 +285,8 @@ export async function revogarCredencial(
 /** Assina a lista de credenciais do workspace em tempo real (apenas metadados). */
 export function subscribeCredenciais(
   onChange: (credenciais: CredentialMetadata[]) => void,
-  opcoes: { workspaceId?: string; onError?: (erro: Error) => void } = {}
+  // `onError` nunca recebe o erro — quem consome mostra um texto amigável fixo.
+  opcoes: { workspaceId?: string; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
@@ -310,7 +311,7 @@ export function subscribeCredenciais(
     },
     (erro) => {
       console.error("[cofre] falha ao assinar credenciais:", erro);
-      opcoes.onError?.(erro);
+      opcoes.onError?.();
       onChange([]);
     }
   );

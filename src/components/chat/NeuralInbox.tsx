@@ -157,7 +157,9 @@ export function NeuralInbox() {
 
   useEffect(() => {
     const cancelamentos = [
-      subscribeConversations(setConversas, { onError: (e) => setErro(e.message) }),
+      subscribeConversations(setConversas, {
+        onError: () => setErro("Não foi possível carregar as conversas agora. Tente novamente em instantes."),
+      }),
       subscribeOperatorProfiles(setOperadores),
       subscribeAgentProfiles(setAgentes),
     ];
@@ -170,7 +172,7 @@ export function NeuralInbox() {
       return;
     }
     return subscribeMessages(selecionadaId, setMensagens, {
-      onError: (e) => setErro(e.message),
+      onError: () => setErro("Não foi possível carregar as mensagens desta conversa agora. Tente novamente em instantes."),
     });
   }, [selecionadaId]);
 

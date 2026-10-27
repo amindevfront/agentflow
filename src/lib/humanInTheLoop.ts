@@ -21,12 +21,12 @@ import {
   doc,
   getDocs,
   limit,
-  onSnapshot,
   orderBy,
   query,
   setDoc,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import type {
@@ -44,6 +44,7 @@ import type { SolicitacaoTransbordo } from "@/lib/guardrails";
 import { auth, db } from "./firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "./firestore";
 import { registrarEventoAuditoriaSilencioso } from "./auditLog";
+import { assinarComFallbackDeIndice } from "./firestoreResilience";
 
 const COLECAO = "hitlTickets";
 
@@ -439,31 +440,34 @@ export async function expirarTicketsVencidos(workspaceId = DEFAULT_WORKSPACE_ID)
 /** Assina a fila de transbordo em tempo real. */
 export function subscribeFilaTransbordo(
   onChange: (tickets: HandoffTicket[]) => void,
-  opcoes: { workspaceId?: string; limite?: number; onError?: (erro: Error) => void } = {}
+  // `onError` nunca recebe o erro — quem consome mostra um texto amigável
+  // fixo; índice ausente é absorvido de forma transparente (ver
+  // `assinarComFallbackDeIndice`) e nem chega a chamar isto.
+  opcoes: { workspaceId?: string; limite?: number; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
     return () => {};
   }
 
-  const consulta = query(
-    collection(db, COLECAO),
-    where("workspaceId", "==", opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID),
-    orderBy("criadoEm", "desc"),
-    limit(opcoes.limite ?? 100)
-  );
+  const workspaceId = opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID;
+  const limite = opcoes.limite ?? 100;
+  const mapearTicket = (d: QueryDocumentSnapshot) => ({ ...(d.data() as HandoffTicket), id: d.id });
 
-  return onSnapshot(
-    consulta,
-    (snapshot) => {
-      onChange(snapshot.docs.map((d) => ({ ...(d.data() as HandoffTicket), id: d.id })));
-    },
-    (erro) => {
-      console.error("[transbordo] falha ao assinar a fila:", erro);
-      opcoes.onError?.(erro);
-      onChange([]);
-    }
-  );
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, COLECAO),
+      where("workspaceId", "==", workspaceId),
+      orderBy("criadoEm", "desc"),
+      limit(limite)
+    ),
+    consultaFallback: query(collection(db, COLECAO), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearTicket,
+    ordenarFallback: (lista) => [...lista].sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)).slice(0, limite),
+    onChange,
+    aoFalharDeFormaIrrecuperavel: opcoes.onError,
+    contexto: "transbordo",
+  });
 }
 
 /**

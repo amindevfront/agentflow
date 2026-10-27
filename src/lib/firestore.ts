@@ -11,6 +11,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import { db } from "./firebase";
@@ -18,6 +19,8 @@ import { NICHE_PRESETS } from "./niches";
 import { sanitizeEmailInput, sanitizeText, sanitizeUrl } from "./sanitize";
 import { enfileirarEscrita } from "./offlineQueue";
 import { medirDuracao } from "./telemetry/performance";
+import { assinarComFallbackDeIndice } from "./firestoreResilience";
+import { codigoErroFirestore } from "./firestoreErrors";
 import type {
   AppUser,
   Connector,
@@ -152,13 +155,18 @@ export function subscribeFlows(workspaceId: string, onChange: (flows: Flow[]) =>
     onChange([]);
     return () => {};
   }
-  const q = query(
-    collection(db, "flows"),
-    where("workspaceId", "==", workspaceId),
-    orderBy("atualizadoEm", "desc")
-  );
-  return onSnapshot(q, (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Flow));
+  const mapearFlow = (d: QueryDocumentSnapshot) => ({ id: d.id, ...d.data() }) as Flow;
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, "flows"),
+      where("workspaceId", "==", workspaceId),
+      orderBy("atualizadoEm", "desc")
+    ),
+    consultaFallback: query(collection(db, "flows"), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearFlow,
+    ordenarFallback: (lista) => [...lista].sort((a, b) => b.atualizadoEm.localeCompare(a.atualizadoEm)),
+    onChange,
+    contexto: "flows",
   });
 }
 
@@ -206,13 +214,18 @@ export function subscribeFlowRuns(workspaceId: string, onChange: (runs: FlowRun[
     onChange([]);
     return () => {};
   }
-  const q = query(
-    collection(db, "flowRuns"),
-    where("workspaceId", "==", workspaceId),
-    orderBy("iniciadoEm", "desc")
-  );
-  return onSnapshot(q, (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as FlowRun));
+  const mapearRun = (d: QueryDocumentSnapshot) => ({ id: d.id, ...d.data() }) as FlowRun;
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, "flowRuns"),
+      where("workspaceId", "==", workspaceId),
+      orderBy("iniciadoEm", "desc")
+    ),
+    consultaFallback: query(collection(db, "flowRuns"), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearRun,
+    ordenarFallback: (lista) => [...lista].sort((a, b) => b.iniciadoEm.localeCompare(a.iniciadoEm)),
+    onChange,
+    contexto: "flowRuns",
   });
 }
 
@@ -227,9 +240,14 @@ export function subscribeConnectors(
     return () => {};
   }
   const q = query(collection(db, "connectors"), where("workspaceId", "==", workspaceId));
-  return onSnapshot(q, (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Connector));
-  });
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Connector)),
+    (erro) => {
+      console.error(`[connectors] falha ao assinar, código ${codigoErroFirestore(erro)}:`, erro);
+      onChange([]);
+    }
+  );
 }
 
 export async function createConnector(
@@ -259,21 +277,28 @@ export function subscribeTeamMembers(
     return () => {};
   }
   const q = query(collection(db, "users"), where("workspaceId", "==", workspaceId));
-  return onSnapshot(q, (snap) => {
-    onChange(
-      snap.docs.map((d) => {
-        const data = d.data() as AppUser;
-        return {
-          id: d.id,
-          workspaceId: data.workspaceId,
-          nome: data.nome,
-          email: data.email,
-          papel: data.papel,
-          avatarUrl: data.avatarUrl,
-        } satisfies TeamMember;
-      })
-    );
-  });
+  return onSnapshot(
+    q,
+    (snap) => {
+      onChange(
+        snap.docs.map((d) => {
+          const data = d.data() as AppUser;
+          return {
+            id: d.id,
+            workspaceId: data.workspaceId,
+            nome: data.nome,
+            email: data.email,
+            papel: data.papel,
+            avatarUrl: data.avatarUrl,
+          } satisfies TeamMember;
+        })
+      );
+    },
+    (erro) => {
+      console.error(`[team] falha ao assinar membros, código ${codigoErroFirestore(erro)}:`, erro);
+      onChange([]);
+    }
+  );
 }
 
 export function subscribePendingInvites(
@@ -289,9 +314,14 @@ export function subscribePendingInvites(
     where("workspaceId", "==", workspaceId),
     where("status", "==", "pendente")
   );
-  return onSnapshot(q, (snap) => {
-    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Invite));
-  });
+  return onSnapshot(
+    q,
+    (snap) => onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() }) as Invite)),
+    (erro) => {
+      console.error(`[invites] falha ao assinar convites pendentes, código ${codigoErroFirestore(erro)}:`, erro);
+      onChange([]);
+    }
+  );
 }
 
 export { serverTimestamp, getDocs, requireDb };

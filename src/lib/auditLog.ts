@@ -21,10 +21,11 @@
 // registro de um evento de segurança. Eventos que não puderam ser enviados ao
 // servidor vão para uma fila local e são reenviados na próxima oportunidade.
 
-import { collection, limit, onSnapshot, orderBy, query, where, type Unsubscribe } from "firebase/firestore";
+import { collection, limit, orderBy, query, where, type QueryDocumentSnapshot, type Unsubscribe } from "firebase/firestore";
 import type { AuditChainVerification, AuditEntry, AuditEventBody, AuditEventType, AuditOutcome, GuardrailSeverity } from "@/types";
 import { auth, db } from "./firebase";
 import { DEFAULT_WORKSPACE_ID } from "./firestore";
+import { assinarComFallbackDeIndice } from "./firestoreResilience";
 
 const COLECAO = "auditLogs";
 const CHAVE_FILA = "agentflow.auditoria.fila";
@@ -214,31 +215,38 @@ export async function drenarFilaAuditoria(): Promise<{ enviados: number; pendent
  */
 export function subscribeTrilhaAuditoria(
   onChange: (entradas: AuditEntry[]) => void,
-  opcoes: { limite?: number; workspaceId?: string; onError?: (erro: Error) => void } = {}
+  // `onError` nunca recebe o erro — por design: quem consome deve mostrar um
+  // texto amigável fixo, nunca a mensagem técnica do Firestore (índice
+  // ausente já é absorvido de forma transparente, nem chega a chamar isto).
+  opcoes: { limite?: number; workspaceId?: string; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
     return () => {};
   }
 
-  const consulta = query(
-    collection(db, COLECAO),
-    where("workspaceId", "==", opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID),
-    orderBy("seq", "desc"),
-    limit(opcoes.limite ?? 100)
-  );
+  const workspaceId = opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID;
+  const limite = opcoes.limite ?? 100;
+  const mapearEntrada = (d: QueryDocumentSnapshot) => ({ ...(d.data() as AuditEntry), id: d.id });
 
-  return onSnapshot(
-    consulta,
-    (snapshot) => {
-      onChange(snapshot.docs.map((d) => ({ ...(d.data() as AuditEntry), id: d.id })));
-    },
-    (erro) => {
-      console.error("[auditoria] falha ao assinar a trilha:", erro);
-      opcoes.onError?.(erro);
-      onChange([]);
-    }
-  );
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, COLECAO),
+      where("workspaceId", "==", workspaceId),
+      orderBy("seq", "desc"),
+      limit(limite)
+    ),
+    // Sem índice composto disponível: busca só pelo workspace (sem orderBy
+    // nem limit na própria query — um `limit` sem `orderBy` devolveria N
+    // entradas arbitrárias, não as mais recentes) e reordena/corta em
+    // memória, preservando a mesma semântica "mais recentes primeiro".
+    consultaFallback: query(collection(db, COLECAO), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearEntrada,
+    ordenarFallback: (lista) => [...lista].sort((a, b) => b.seq - a.seq).slice(0, limite),
+    onChange,
+    aoFalharDeFormaIrrecuperavel: opcoes.onError,
+    contexto: "auditoria",
+  });
 }
 
 interface RespostaVerificacao {

@@ -41,7 +41,7 @@ export function AuditTrailPanel() {
   useEffect(() => {
     return subscribeTrilhaAuditoria(setEntradas, {
       limite: 200,
-      onError: (e) => setErro(e.message),
+      onError: () => setErro("Não foi possível carregar a trilha de auditoria agora. Tente novamente em instantes."),
     });
   }, []);
 

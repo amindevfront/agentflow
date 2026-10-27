@@ -100,18 +100,18 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
       subscribeFilaTransbordo(setTickets, {
         workspaceId,
         limite: 300,
-        onError: (e) => setErro(`Fila de transbordo indisponível: ${e.message}`),
+        onError: () => setErro("Fila de transbordo indisponível no momento. Os demais números continuam atualizados."),
       }),
       // Neural Inbox e campanhas alimentam o MESMO snapshot de ROI — ver a
       // nota "Unificação financeira" em `calcularRoi`.
       subscribeConversations(setConversas, {
         workspaceId,
         limite: 500,
-        onError: (e) => setErro(`Neural Inbox indisponível: ${e.message}`),
+        onError: () => setErro("Neural Inbox indisponível no momento. Os demais números continuam atualizados."),
       }),
       subscribeCampaigns(setCampanhas, {
         workspaceId,
-        onError: (e) => setErro(`Campanhas indisponíveis: ${e.message}`),
+        onError: () => setErro("Campanhas indisponíveis no momento. Os demais números continuam atualizados."),
       }),
       subscribeRoiConfig((nova) => {
         setConfig(nova);

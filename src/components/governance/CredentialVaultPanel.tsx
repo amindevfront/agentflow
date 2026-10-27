@@ -60,7 +60,9 @@ export function CredentialVaultPanel() {
   const [revogacaoAlvo, setRevogacaoAlvo] = useState<CredentialMetadata | null>(null);
 
   useEffect(() => {
-    return subscribeCredenciais(setCredenciais, { onError: (e) => setErro(e.message) });
+    return subscribeCredenciais(setCredenciais, {
+      onError: () => setErro("Não foi possível carregar o cofre de credenciais agora. Tente novamente em instantes."),
+    });
   }, []);
 
   async function handleCriar() {

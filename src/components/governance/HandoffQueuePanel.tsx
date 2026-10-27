@@ -71,7 +71,7 @@ export function HandoffQueuePanel() {
   useEffect(() => {
     return subscribeFilaTransbordo(setTickets, {
       limite: 200,
-      onError: (e) => setErro(e.message),
+      onError: () => setErro("Não foi possível carregar a fila de transbordo agora. Tente novamente em instantes."),
     });
   }, []);
 

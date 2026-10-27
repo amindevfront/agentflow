@@ -32,6 +32,7 @@ import {
   setDoc,
   updateDoc,
   where,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
 import type {
@@ -51,6 +52,7 @@ import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/
 import { abrirTransbordo } from "@/lib/humanInTheLoop";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { enfileirarEscrita } from "@/lib/offlineQueue";
+import { assinarComFallbackDeIndice } from "@/lib/firestoreResilience";
 
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
@@ -86,35 +88,41 @@ async function idToken(): Promise<string> {
 
 export function subscribeConversations(
   onChange: (conversas: Conversation[]) => void,
-  opcoes: { workspaceId?: string; limite?: number; onError?: (erro: Error) => void } = {}
+  // `onError` nunca recebe o erro — quem consome mostra um texto amigável
+  // fixo; índice ausente é absorvido de forma transparente (ver
+  // `assinarComFallbackDeIndice`) e nem chega a chamar isto.
+  opcoes: { workspaceId?: string; limite?: number; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
     return () => {};
   }
 
-  const consulta = query(
-    collection(db, COLECAO_CONVERSAS),
-    where("workspaceId", "==", opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID),
-    orderBy("ultimaMensagemEm", "desc"),
-    limit(opcoes.limite ?? 200)
-  );
+  const workspaceId = opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID;
+  const limite = opcoes.limite ?? 200;
+  const mapearConversa = (d: QueryDocumentSnapshot) => ({ ...(d.data() as Conversation), id: d.id });
 
-  return onSnapshot(
-    consulta,
-    (snapshot) => onChange(snapshot.docs.map((d) => ({ ...(d.data() as Conversation), id: d.id }))),
-    (erro) => {
-      console.error("[inbox] falha ao assinar conversas:", erro);
-      opcoes.onError?.(erro);
-      onChange([]);
-    }
-  );
+  return assinarComFallbackDeIndice({
+    consultaPrincipal: query(
+      collection(db, COLECAO_CONVERSAS),
+      where("workspaceId", "==", workspaceId),
+      orderBy("ultimaMensagemEm", "desc"),
+      limit(limite)
+    ),
+    consultaFallback: query(collection(db, COLECAO_CONVERSAS), where("workspaceId", "==", workspaceId)),
+    mapearDoc: mapearConversa,
+    ordenarFallback: (lista) =>
+      [...lista].sort((a, b) => b.ultimaMensagemEm.localeCompare(a.ultimaMensagemEm)).slice(0, limite),
+    onChange,
+    aoFalharDeFormaIrrecuperavel: opcoes.onError,
+    contexto: "inbox:conversas",
+  });
 }
 
 export function subscribeMessages(
   conversationId: string,
   onChange: (mensagens: ConversationMessage[]) => void,
-  opcoes: { limite?: number; onError?: (erro: Error) => void } = {}
+  opcoes: { limite?: number; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
@@ -132,7 +140,7 @@ export function subscribeMessages(
     (snapshot) => onChange(snapshot.docs.map((d) => ({ ...(d.data() as ConversationMessage), id: d.id }))),
     (erro) => {
       console.error(`[inbox] falha ao assinar mensagens de ${conversationId}:`, erro);
-      opcoes.onError?.(erro);
+      opcoes.onError?.();
       onChange([]);
     }
   );
