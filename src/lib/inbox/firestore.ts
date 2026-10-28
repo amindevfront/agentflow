@@ -50,6 +50,7 @@ import { DEFAULT_WORKSPACE_ID, requireDb } from "@/lib/firestore";
 import { interceptarMensagem, processarMensagemEntrante } from "@/lib/guardrails/piiVault";
 import { detectarCompliancePreventivo, maiorSeveridade } from "@/lib/guardrails";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import { detectarLeadAltoPadrao } from "@/lib/inbox/highEndLead";
 import { abrirTransbordo } from "@/lib/humanInTheLoop";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { enfileirarEscrita } from "@/lib/offlineQueue";
@@ -355,6 +356,12 @@ export async function registrarMensagemCliente(entrada: {
 
   const circuitBreakerDisparadoAgora = frustration.circuitBreakerAtivado && !conversaAtual.circuitBreakerAtivo;
 
+  // Lead Qualificado de Alto Padrão (nicho Imobiliário/Construtoras) — mesmo
+  // histórico recente usado na frustração, outra lente sobre o mesmo texto.
+  // A exibição é que é restrita por nicho na UI; o cálculo em si roda sempre
+  // (é barato e não é sensível a falso positivo em outros setores).
+  const leadAltoPadrao = detectarLeadAltoPadrao(mensagensClienteRecentes);
+
   await updateDoc(refConversa, {
     ultimaMensagemPreview: selo.textoMascarado.slice(0, 160),
     ultimaMensagemEm: agora.toISOString(),
@@ -364,6 +371,9 @@ export async function registrarMensagemCliente(entrada: {
     frustrationIndex: frustration.indice,
     frustrationTendencia: frustration.tendencia,
     circuitBreakerAtivo: frustration.circuitBreakerAtivado,
+    leadAltoPadrao: leadAltoPadrao.qualificado,
+    leadSinaisCapacidade: leadAltoPadrao.sinaisCapacidade,
+    leadSinaisUrgencia: leadAltoPadrao.sinaisUrgencia,
     status: conversaAtual.status === "resolvida" ? "aberta" : conversaAtual.status,
   });
 

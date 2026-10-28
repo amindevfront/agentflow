@@ -43,7 +43,12 @@ import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
+import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { BusinessROIWidget } from "@/components/BusinessROIWidget";
+import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
+import { AppointmentRemindersPanel } from "@/components/niche/AppointmentRemindersPanel";
+import { CargoTriagePanel } from "@/components/niche/CargoTriagePanel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -135,6 +140,11 @@ function corresponde(conversa: Conversation, filtro: FiltroInbox): boolean {
 }
 
 export function NeuralInbox() {
+  const { workspaceId } = useWorkspace();
+  // Determina o nicho ativo (Quiz de onboarding) para os módulos de
+  // refinamento por setor abaixo — cada um só aparece no workspace a que
+  // de fato se aplica (ver Dual-Layer/Onboarding Cognitivo).
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
   const [conversas, setConversas] = useState<Conversation[]>([]);
   const [operadores, setOperadores] = useState<OperatorProfile[]>([]);
   const [agentes, setAgentes] = useState<AgentProfile[]>([]);
@@ -335,6 +345,11 @@ export function NeuralInbox() {
     }
   }
 
+  /** Insere um texto pronto (anexo de nicho, resposta sugerida de rastreio) na caixa de resposta, sem sobrescrever o que já foi digitado. */
+  function inserirNaResposta(texto: string) {
+    setResposta((atual) => (atual.trim().length > 0 ? `${atual}\n${texto}` : texto));
+  }
+
   async function handleCriarConversa() {
     if (novoNomeCliente.trim().length === 0 || novoContatoCliente.trim().length === 0) return;
     setProcessando(true);
@@ -396,6 +411,25 @@ export function NeuralInbox() {
           quem não acessa Governança ainda vê o essencial do ROI sem sair do
           atendimento diário (ver Dual-Layer Workspace View, `@/components/layout/navAcesso`). */}
       <BusinessROIWidget compacto />
+
+      {/* Refinamento funcional por nicho (Onboarding Cognitivo): cada módulo
+          só aparece no setor a que se aplica — nenhum workspace vê os três. */}
+      {workspace?.setor === "construtora-imobiliaria" && (
+        <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+          <NicheAttachmentsPanel onInsert={inserirNaResposta} />
+        </section>
+      )}
+      {workspace?.setor === "clinica-alto-padrao" && (
+        <AppointmentRemindersPanel
+          conversaSelecionada={selecionada ? { id: selecionada.id, nome: selecionada.participante.nome } : null}
+        />
+      )}
+      {workspace?.setor === "logistica-portuaria" && (
+        <CargoTriagePanel
+          textoParaExtrairCodigo={[...mensagens].reverse().find((m) => m.remetente === "cliente")?.texto}
+          onInsertResposta={inserirNaResposta}
+        />
+      )}
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
 
@@ -476,6 +510,14 @@ export function NeuralInbox() {
                               P1
                             </span>
                           )}
+                          {workspace?.setor === "construtora-imobiliaria" && conversa.leadAltoPadrao && (
+                            <span
+                              className="mono flex-none rounded-full bg-signal-100 px-1.5 py-0.5 text-[10px] font-medium text-signal-700"
+                              title="Lead Qualificado de Alto Padrão — capacidade de investimento + urgência de compra detectadas"
+                            >
+                              ALTO PADRÃO
+                            </span>
+                          )}
                         </div>
                         <p className="truncate text-xs text-ink-500">{conversa.ultimaMensagemPreview || conversa.assunto}</p>
                       </div>
@@ -510,6 +552,14 @@ export function NeuralInbox() {
                     </span>
                   </div>
                   <p className="mono text-xs text-ink-400">{selecionada.participante.identificadorMascarado}</p>
+                  {workspace?.setor === "construtora-imobiliaria" && selecionada.leadAltoPadrao && (
+                    <span
+                      className="mono mt-1 inline-flex items-center gap-1 rounded-full bg-signal-100 px-2 py-0.5 text-[11px] font-medium text-signal-700"
+                      title={[...(selecionada.leadSinaisCapacidade ?? []), ...(selecionada.leadSinaisUrgencia ?? [])].join(", ")}
+                    >
+                      Lead Qualificado de Alto Padrão
+                    </span>
+                  )}
                 </div>
                 <div className="flex w-44 flex-none flex-col items-end gap-1">
                   <span className={cn("mono whitespace-nowrap text-sm font-medium", corFrustracao(selecionada.frustrationIndex))}>

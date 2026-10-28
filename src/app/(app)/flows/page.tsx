@@ -13,6 +13,7 @@ import { FlowRail } from "@/components/ui/FlowRail";
 import { FlowSettingsForm } from "@/components/flows/FlowSettingsForm";
 import { PayloadSimulator } from "@/components/flows/PayloadSimulator";
 import { RealExecutionPanel } from "@/components/flows/RealExecutionPanel";
+import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
 import type { Flow, FlowRun } from "@/types";
 
 export default function FlowsPage() {
@@ -123,6 +124,12 @@ export default function FlowsPage() {
             <FlowSettingsForm flow={selectedFlow} onSaved={(id) => setSelectedId(id)} />
           )}
         </section>
+
+        {workspace?.setor === "construtora-imobiliaria" && (
+          <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+            <NicheAttachmentsPanel />
+          </section>
+        )}
 
         {selectedFlow && (
           <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">

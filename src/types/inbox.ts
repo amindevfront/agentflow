@@ -89,6 +89,16 @@ export interface Conversation {
   /** Ticket de transbordo (HandoffTicket) aberto quando o circuit breaker disparou. */
   slaTicketId?: string | null;
 
+  /**
+   * Lead Qualificado de Alto Padrão (nicho Imobiliário/Construtoras):
+   * `true` quando sinais de capacidade de investimento E de urgência de
+   * compra foram detectados nas mensagens do cliente — ver
+   * `@/lib/inbox/highEndLead`. Recalculado junto do índice de frustração.
+   */
+  leadAltoPadrao?: boolean;
+  leadSinaisCapacidade?: string[];
+  leadSinaisUrgencia?: string[];
+
   ultimaMensagemPreview: string;
   ultimaMensagemEm: string;
   /** Remetente da última mensagem — usado para medir latência de resposta ao cliente. */
@@ -262,4 +272,76 @@ export interface ComplianceCheckResult {
   permitido: boolean;
   motivo?: string;
   destinoHash: string;
+}
+
+// ---------------------------------------------------------------------------
+// Anexos rápidos por nicho (Imobiliário/Construtoras) — memorial descritivo,
+// plantas e tabela de disponibilidade. Guardados como LINKS (não upload de
+// arquivo): o projeto tem Firebase Storage inicializado, mas sem
+// `storage.rules` nem bucket configurado em `firebase.json` — adicionar
+// upload real exigiria endurecer essa superfície antes de usá-la. Um
+// catálogo de links já resolve "anexo rápido" sem essa dívida de segurança.
+// ---------------------------------------------------------------------------
+
+export type NicheAttachmentTipo = "memorial-descritivo" | "planta" | "tabela-disponibilidade" | "outro";
+
+export interface NicheAttachment {
+  id: string;
+  workspaceId: string;
+  nome: string;
+  tipo: NicheAttachmentTipo;
+  url: string;
+  criadoEm: string;
+  criadoPor: string;
+}
+
+// ---------------------------------------------------------------------------
+// Agendamentos — anti-no-show e preparo pré-procedimento (Clínicas)
+// ---------------------------------------------------------------------------
+
+export type AppointmentStatus = "agendado" | "confirmado" | "realizado" | "no-show" | "cancelado";
+
+export interface Appointment {
+  id: string;
+  workspaceId: string;
+  /** Conversa da Neural Inbox pela qual a confirmação/preparo são enviados, quando houver. */
+  conversationId?: string | null;
+  pacienteNome: string;
+  procedimento: string;
+  /** Data/hora do procedimento, ISO. */
+  dataHora: string;
+  status: AppointmentStatus;
+  /** Instruções de preparo pré-procedimento, enviadas na janela de 24h. */
+  diretrizesPreparo?: string;
+  confirmacao24hEnviadaEm?: string | null;
+  confirmacao2hEnviadaEm?: string | null;
+  criadoEm: string;
+  criadoPor: string;
+}
+
+// ---------------------------------------------------------------------------
+// Rastreio de carga e desvio de SLA (Logística)
+// ---------------------------------------------------------------------------
+
+export type ShipmentStatus = "coletado" | "em-transito" | "aduana" | "atrasado" | "entregue";
+
+export interface ShipmentEvent {
+  status: ShipmentStatus;
+  local?: string;
+  ocorridoEm: string;
+}
+
+export interface Shipment {
+  id: string;
+  workspaceId: string;
+  /** Código de rastreio informado pelo cliente — chave de busca na triagem da Neural Inbox. */
+  codigoRastreio: string;
+  origem: string;
+  destino: string;
+  status: ShipmentStatus;
+  /** Prazo de entrega combinado (SLA) — base do cálculo de desvio. */
+  previsaoEntrega: string;
+  atualizadoEm: string;
+  criadoEm: string;
+  historico: ShipmentEvent[];
 }

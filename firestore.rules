@@ -298,6 +298,31 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ---------- Refinamento funcional por nicho ----------
+    //
+    // Catálogo de anexos rápidos (Imobiliário/Construtoras), agendamentos
+    // com janelas anti-no-show (Clínicas) e cargas rastreadas (Logística).
+    // Nenhuma destas coleções é mais sensível que `flows`/`connectors` — são
+    // dados operacionais do próprio workspace, não segredo nem PII em claro
+    // — por isso seguem o mesmo padrão simples de leitura/escrita por
+    // pertencimento, sem a camada extra de `isAdminOf` que as coleções de
+    // governança exigem.
+
+    match /nicheAttachments/{attachmentId} {
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    match /appointments/{appointmentId} {
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    match /shipments/{shipmentId} {
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
     match /optOuts/{optOutId} {
       // Opt-out é checado por hash, nunca pelo valor em claro — ver
       // `hashDestino()`. Qualquer membro do workspace pode registrar um
