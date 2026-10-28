@@ -15,7 +15,16 @@
 // `BusinessROIWidget`, com a mesma fonte de dados em tempo real (Firestore).
 
 import { useEffect, useMemo, useState } from "react";
-import type { Campaign, Conversation, FlowRun, HandoffTicket, Moeda, RoiConfig, RoiSnapshot } from "@/types";
+import type {
+  Campaign,
+  Conversation,
+  FlowRun,
+  HandoffTicket,
+  Moeda,
+  RegimeEncargos,
+  RoiConfig,
+  RoiSnapshot,
+} from "@/types";
 import { subscribeFlowRuns } from "@/lib/firestore";
 import { useWorkspace } from "@/lib/workspace";
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
@@ -23,6 +32,7 @@ import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
 import {
   ROI_CONFIG_PADRAO,
+  cambioParaMoeda,
   calcularRoi,
   formatarMoeda,
   formatarPercentual,
@@ -36,6 +46,12 @@ import { EmptyState } from "@/components/ui/EmptyState";
 const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
   { valor: "BRL", label: "R$" },
   { valor: "USD", label: "US$" },
+  { valor: "GBP", label: "£" },
+];
+
+const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
+  { valor: "clt-br", label: "CLT (Brasil)" },
+  { valor: "payroll-us-uk", label: "Payroll (EUA/UK)" },
 ];
 
 interface LinhaEncargo {
@@ -52,6 +68,10 @@ export function OpexTaxShieldPanel() {
   const [campanhas, setCampanhas] = useState<Campaign[]>([]);
   const [config, setConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
   const [moeda, setMoeda] = useState<Moeda>(ROI_CONFIG_PADRAO.moedaExibicao);
+  // Lente do Tax Shield: puramente de visualização — as duas decomposições
+  // (CLT e Payroll) já vêm calculadas no snapshot, então alternar aqui nunca
+  // recalcula nem descarta histórico (ver nota em `RoiSnapshot`).
+  const [regime, setRegime] = useState<RegimeEncargos>(ROI_CONFIG_PADRAO.regimeEncargos);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [referencia] = useState(() => new Date());
@@ -80,6 +100,7 @@ export function OpexTaxShieldPanel() {
       subscribeRoiConfig((nova) => {
         setConfig(nova);
         setMoeda(nova.moedaExibicao);
+        setRegime(nova.regimeEncargos);
       }, workspaceId),
     ];
     return () => cancelamentos.forEach((cancelar) => cancelar());
@@ -99,48 +120,96 @@ export function OpexTaxShieldPanel() {
     [execucoes, tickets, conversas, campanhas, config, referencia]
   );
 
-  const moedaDoValor = (valor: number) => formatarMoeda(valor, moeda, config.cambioUsdBrl);
+  const moedaDoValor = (valor: number) => formatarMoeda(valor, moeda, cambioParaMoeda(config, moeda));
   const semDados =
     snapshot.execucoesTotais === 0 && snapshot.conversasTotais === 0 && snapshot.campanhasExecutadas === 0;
 
-  const linhasEncargo: LinhaEncargo[] = [
-    {
-      rotulo: "INSS patronal",
-      valorBrl: snapshot.encargosInssBrl,
-      percentual: config.composicaoClt.percentualInssPatronal,
-    },
-    { rotulo: "FGTS", valorBrl: snapshot.encargosFgtsBrl, percentual: config.composicaoClt.percentualFgts },
-    {
-      rotulo: "13º salário",
-      valorBrl: snapshot.encargosDecimoTerceiroBrl,
-      percentual: config.composicaoClt.percentualDecimoTerceiro,
-    },
-    { rotulo: "Férias + 1/3", valorBrl: snapshot.encargosFeriasBrl, percentual: config.composicaoClt.percentualFerias },
-    {
-      rotulo: "Provisão de rescisão",
-      valorBrl: snapshot.encargosProvisaoRescisaoBrl,
-      percentual: config.composicaoClt.percentualProvisaoRescisao,
-    },
-  ];
+  const ehClt = regime === "clt-br";
+
+  const salarioBaseEvitado = ehClt ? snapshot.salarioBaseEvitadoBrl : snapshot.salarioBaseEvitadoPayrollBrl;
+  const encargosTotais = ehClt ? snapshot.encargosTotaisBrl : snapshot.encargosTotaisPayrollBrl;
+  const rotuloSalario = ehClt ? "Equivalente salarial CLT evitado" : "Equivalente salarial (W2) evitado";
+  const rotuloEncargos = ehClt ? "Encargos patronais evitados (CLT)" : "Payroll Tax & BPO evitados";
+
+  const linhasEncargo: LinhaEncargo[] = ehClt
+    ? [
+        {
+          rotulo: "INSS patronal",
+          valorBrl: snapshot.encargosInssBrl,
+          percentual: config.composicaoClt.percentualInssPatronal,
+        },
+        { rotulo: "FGTS", valorBrl: snapshot.encargosFgtsBrl, percentual: config.composicaoClt.percentualFgts },
+        {
+          rotulo: "13º salário",
+          valorBrl: snapshot.encargosDecimoTerceiroBrl,
+          percentual: config.composicaoClt.percentualDecimoTerceiro,
+        },
+        {
+          rotulo: "Férias + 1/3",
+          valorBrl: snapshot.encargosFeriasBrl,
+          percentual: config.composicaoClt.percentualFerias,
+        },
+        {
+          rotulo: "Provisão de rescisão",
+          valorBrl: snapshot.encargosProvisaoRescisaoBrl,
+          percentual: config.composicaoClt.percentualProvisaoRescisao,
+        },
+      ]
+    : [
+        {
+          rotulo: "FICA patronal",
+          valorBrl: snapshot.encargosFicaBrl,
+          percentual: config.composicaoPayroll.percentualFicaPatronal,
+        },
+        {
+          rotulo: "FUTA/SUTA",
+          valorBrl: snapshot.encargosFutaSutaBrl,
+          percentual: config.composicaoPayroll.percentualFutaSuta,
+        },
+        {
+          rotulo: "Workers' comp",
+          valorBrl: snapshot.encargosWorkersCompBrl,
+          percentual: config.composicaoPayroll.percentualWorkersComp,
+        },
+        {
+          rotulo: "Benefícios",
+          valorBrl: snapshot.encargosBeneficiosBrl,
+          percentual: config.composicaoPayroll.percentualBeneficios,
+        },
+        {
+          rotulo: "Overhead de BPO",
+          valorBrl: snapshot.encargosBpoOverheadBrl,
+          percentual: config.composicaoPayroll.percentualBpoOverhead,
+        },
+      ];
 
   return (
     <section
-      aria-label="OpEx e encargos CLT poupados"
+      aria-label="OpEx e encargos patronais poupados"
       className="flex flex-col gap-4 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4"
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-ink-950">OpEx &amp; Tax Shield</h2>
           <p className="mt-0.5 text-xs text-ink-400">
-            {snapshot.periodo.rotulo} · o que o custo humano evitado representaria se fosse uma folha CLT
+            {snapshot.periodo.rotulo} · o que o custo humano evitado representaria se fosse{" "}
+            {ehClt ? "uma folha CLT" : "uma folha W2/Payroll"}
           </p>
         </div>
-        <SegmentedFilter
-          rotuloGrupo="Moeda de exibição"
-          opcoes={OPCOES_MOEDA}
-          selecionado={moeda}
-          onChange={setMoeda}
-        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <SegmentedFilter
+            rotuloGrupo="Regime de encargos"
+            opcoes={OPCOES_REGIME}
+            selecionado={regime}
+            onChange={setRegime}
+          />
+          <SegmentedFilter
+            rotuloGrupo="Moeda de exibição"
+            opcoes={OPCOES_MOEDA}
+            selecionado={moeda}
+            onChange={setMoeda}
+          />
+        </div>
       </header>
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
@@ -156,20 +225,28 @@ export function OpexTaxShieldPanel() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              rotulo="Equivalente salarial CLT evitado"
-              valor={moedaDoValor(snapshot.salarioBaseEvitadoBrl)}
+              rotulo={rotuloSalario}
+              valor={moedaDoValor(salarioBaseEvitado)}
               detalhe="salário base, sem encargos"
               tom="neutro"
-              dica="Fração do custo humano evitado correspondente apenas ao salário base — sem INSS, FGTS, 13º, férias ou rescisão."
+              dica={
+                ehClt
+                  ? "Fração do custo humano evitado correspondente apenas ao salário base — sem INSS, FGTS, 13º, férias ou rescisão."
+                  : "Fração do custo humano evitado correspondente apenas ao salário base W2 — sem FICA, FUTA/SUTA, workers' comp, benefícios ou overhead de BPO."
+              }
             />
             <MetricCard
-              rotulo="Encargos patronais evitados"
-              valor={moedaDoValor(snapshot.encargosTotaisBrl)}
+              rotulo={rotuloEncargos}
+              valor={moedaDoValor(encargosTotais)}
               detalhe={`${formatarPercentual(
-                snapshot.custoHumanoEvitadoBrl > 0 ? snapshot.encargosTotaisBrl / snapshot.custoHumanoEvitadoBrl : 0
+                snapshot.custoHumanoEvitadoBrl > 0 ? encargosTotais / snapshot.custoHumanoEvitadoBrl : 0
               )} do custo humano evitado`}
               tom="marca"
-              dica="Soma de INSS patronal, FGTS, 13º salário, férias e provisão de rescisão — ver detalhamento abaixo."
+              dica={
+                ehClt
+                  ? "Soma de INSS patronal, FGTS, 13º salário, férias e provisão de rescisão — ver detalhamento abaixo."
+                  : "Soma de FICA patronal, FUTA/SUTA, workers' comp, benefícios e overhead de BPO — ver detalhamento abaixo."
+              }
             />
             <MetricCard
               rotulo="Dinheiro líquido retido no caixa"
@@ -179,7 +256,7 @@ export function OpexTaxShieldPanel() {
               dica="Custo humano evitado menos o custo total de operar a automação (IA + revisão humana + rateio de plataforma) — o mesmo número do painel de ROI."
             />
             <MetricCard
-              rotulo="Custo-hora CLT de referência"
+              rotulo="Custo-hora de referência"
               valor={moedaDoValor(config.custoHoraOperadorBrl)}
               detalhe="totalmente carregado, configurável nos Parâmetros"
               tom="neutro"
@@ -188,7 +265,7 @@ export function OpexTaxShieldPanel() {
 
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
-              Detalhamento dos encargos patronais poupados
+              Detalhamento dos encargos {ehClt ? "patronais (CLT)" : "Payroll/BPO"} poupados
             </p>
             <ul className="flex flex-col gap-1.5">
               {linhasEncargo.map((linha) => (
@@ -207,8 +284,11 @@ export function OpexTaxShieldPanel() {
           </div>
 
           <p className="text-[11px] text-ink-400">
-            Estimativa de referência do regime geral (CLT, fora do Simples Nacional) — ajuste os percentuais na aba
-            Parâmetros para refletir o regime tributário real do seu negócio. Não substitui orientação contábil.
+            {ehClt
+              ? "Estimativa de referência do regime geral (CLT, fora do Simples Nacional)"
+              : "Estimativa de referência para empregado W2 ou BPO terceirizado nos EUA/Reino Unido"}{" "}
+            — ajuste os percentuais na aba Parâmetros para refletir o regime tributário real do seu negócio. Não
+            substitui orientação contábil ou jurídica.
           </p>
         </>
       )}

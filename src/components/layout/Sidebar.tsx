@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Avatar } from "@/components/ui/Avatar";
+import { ROTAS_ADMIN_EXCLUSIVO } from "./navAcesso";
 import type { UserRole } from "@/types";
 
 const NAV_ITEMS = [
@@ -15,6 +16,17 @@ const NAV_ITEMS = [
   { href: "/governance", label: "Governança" },
   { href: "/settings", label: "Configurações" },
 ];
+
+/**
+ * Dual-Layer Workspace View: `operacoes` (uso diário — cliente/operador) vê
+ * só Inbox, Fluxos, Execuções e Configurações. Conectores/Equipe/Governança
+ * são "administração técnica avançada", exclusivos de `admin` — ver
+ * `./navAcesso` para a mesma lista usada no guard de rota do `AppShell`.
+ */
+function itensVisiveis(papel: UserRole) {
+  if (papel === "admin") return NAV_ITEMS;
+  return NAV_ITEMS.filter((item) => !ROTAS_ADMIN_EXCLUSIVO.some((rota) => item.href.startsWith(rota)));
+}
 
 const ROLE_LABEL: Record<UserRole, string> = {
   operacoes: "operações",
@@ -64,7 +76,7 @@ export function Sidebar({ isOpen, onClose, userName, userRole }: SidebarProps) {
       >
         <Brand />
         <div className="flex flex-1 flex-col gap-0.5 px-2">
-          {NAV_ITEMS.map((item) => {
+          {itensVisiveis(userRole).map((item) => {
             const active = pathname?.startsWith(item.href);
             return (
               <Link

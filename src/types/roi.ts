@@ -1,6 +1,19 @@
 // Tipos do motor de ROI e métricas financeiras.
 
-export type Moeda = "BRL" | "USD";
+export type Moeda = "BRL" | "USD" | "GBP";
+
+/**
+ * Regime de encargos usado para decompor o custo humano evitado.
+ * - `clt-br`: INSS patronal, FGTS, 13º, férias, provisão de rescisão.
+ * - `payroll-us-uk`: FICA patronal, FUTA/SUTA, workers' comp, benefícios e
+ *   overhead de BPO (call center terceirizado) — ver `ComposicaoCustoPayroll`.
+ *
+ * As DUAS decomposições são sempre calculadas em `calcularRoi`, independente
+ * deste campo — ele só escolhe qual lente o painel mostra por padrão.
+ * Trocar o regime nunca recalcula nem descarta histórico: ambas as visões
+ * derivam do mesmo `custoHumanoEvitadoBrl`.
+ */
+export type RegimeEncargos = "clt-br" | "payroll-us-uk";
 
 /**
  * Preço de um modelo em USD por 1 milhão de tokens.
@@ -39,6 +52,31 @@ export interface ComposicaoCustoClt {
 }
 
 /**
+ * Decomposição equivalente de `ComposicaoCustoClt`, para operações em
+ * regime de Payroll Tax dos EUA/Reino Unido (empregado W2 ou atendimento
+ * terceirizado via BPO/call center). Mesma regra: cada campo é um percentual
+ * (0..1) do custo-hora total; o residual é salário base.
+ *
+ * Valores padrão (`COMPOSICAO_PAYROLL_PADRAO`, em `@/lib/roi`) são estimativa
+ * de referência (FICA patronal tem base legal — 7,65% —, os demais são
+ * médias de mercado), documentada ali, não um dado fiscal fechado. Workers
+ * classificados como 1099 (contractor) não têm a maior parte destes
+ * encargos — o preset assume W2 por ser o caso que de fato gera passivo.
+ */
+export interface ComposicaoCustoPayroll {
+  /** Social Security (6,2%) + Medicare (1,45%) — parte patronal, base legal nos EUA. */
+  percentualFicaPatronal: number;
+  /** FUTA (federal) + SUTA (estadual) — seguro-desemprego, média combinada. */
+  percentualFutaSuta: number;
+  /** Workers' compensation insurance. */
+  percentualWorkersComp: number;
+  /** Benefícios (saúde, dental, aposentadoria) — carga patronal típica de SMB. */
+  percentualBeneficios: number;
+  /** Overhead de gestão de BPO/call center terceirizado, quando aplicável. */
+  percentualBpoOverhead: number;
+}
+
+/**
  * Parâmetros econômicos do workspace. Persistido em
  * `workspaces/{id}.roiConfig` e editável por administradores.
  */
@@ -47,6 +85,12 @@ export interface RoiConfig {
   custoHoraOperadorBrl: number;
   /** Decomposição do custo-hora acima em componentes de encargo CLT. */
   composicaoClt: ComposicaoCustoClt;
+  /** Decomposição equivalente em Payroll Tax (EUA/Reino Unido). */
+  composicaoPayroll: ComposicaoCustoPayroll;
+  /** Lente padrão de exibição do Tax Shield — não afeta o cálculo, só a visão inicial. */
+  regimeEncargos: RegimeEncargos;
+  /** Taxa de conversão GBP → BRL, para exibição em libras. */
+  cambioGbpBrl: number;
   /** Minutos que um humano gastaria para executar manualmente um fluxo. */
   minutosManuaisPorExecucao: number;
   /** Minutos consumidos por um operador em cada transbordo (custo da revisão). */
@@ -129,6 +173,18 @@ export interface RoiSnapshot {
   encargosProvisaoRescisaoBrl: number;
   /** Soma dos cinco encargos acima — NÃO inclui o salário base. */
   encargosTotaisBrl: number;
+
+  // (Dual-Region Tax Shield) Mesma decomposição acima, na lente Payroll
+  // Tax EUA/Reino Unido — SEMPRE calculada a partir do mesmo
+  // `custoHumanoEvitadoBrl`, em paralelo à decomposição CLT. Nenhum
+  // histórico é perdido ao trocar `regimeEncargos`: as duas lentes convivem.
+  salarioBaseEvitadoPayrollBrl: number;
+  encargosFicaBrl: number;
+  encargosFutaSutaBrl: number;
+  encargosWorkersCompBrl: number;
+  encargosBeneficiosBrl: number;
+  encargosBpoOverheadBrl: number;
+  encargosTotaisPayrollBrl: number;
 
   // (c) Autonomia
   /** Execuções concluídas sem nenhuma intervenção humana ÷ execuções terminais. */

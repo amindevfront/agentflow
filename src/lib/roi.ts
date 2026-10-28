@@ -15,10 +15,12 @@ import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/fire
 import type {
   Campaign,
   ComposicaoCustoClt,
+  ComposicaoCustoPayroll,
   Conversation,
   FlowRun,
   HandoffTicket,
   Moeda,
+  RegimeEncargos,
   RoiConfig,
   RoiPeriodo,
   RoiSnapshot,
@@ -58,12 +60,36 @@ export const COMPOSICAO_CLT_PADRAO: ComposicaoCustoClt = {
   percentualProvisaoRescisao: 0.032,
 };
 
+/**
+ * Decomposição padrão em Payroll Tax EUA/Reino Unido — estimativa de
+ * referência, não tabela fiscal oficial:
+ *
+ *  - FICA patronal: 7,65% (Social Security 6,2% + Medicare 1,45% — base legal fixa nos EUA);
+ *  - FUTA/SUTA (seguro-desemprego federal + estadual, média combinada): 3%;
+ *  - Workers' compensation: 1,5%;
+ *  - Benefícios (saúde, dental, aposentadoria, carga típica de SMB): 12%;
+ *  - Overhead de BPO/call center terceirizado: 8%.
+ *
+ * Soma ≈ 32,15% do custo-hora — o residual (~67,85%) é salário base. Cada
+ * workspace deve recalibrar ao seu próprio arranjo (W2 próprio vs. BPO).
+ */
+export const COMPOSICAO_PAYROLL_PADRAO: ComposicaoCustoPayroll = {
+  percentualFicaPatronal: 0.0765,
+  percentualFutaSuta: 0.03,
+  percentualWorkersComp: 0.015,
+  percentualBeneficios: 0.12,
+  percentualBpoOverhead: 0.08,
+};
+
 export const ROI_CONFIG_PADRAO: RoiConfig = {
   // Custo-hora totalmente carregado de um analista de operações no Brasil
   // (salário + encargos + benefícios + overhead). Valor de partida conservador;
   // cada workspace ajusta ao seu próprio custo real.
   custoHoraOperadorBrl: 62,
   composicaoClt: COMPOSICAO_CLT_PADRAO,
+  composicaoPayroll: COMPOSICAO_PAYROLL_PADRAO,
+  regimeEncargos: "clt-br",
+  cambioGbpBrl: 6.9,
   minutosManuaisPorExecucao: 12,
   minutosRevisaoHumana: 8,
   // Uma conversa de chat manual típica (ler, entender, responder, registrar)
@@ -166,6 +192,46 @@ function composicaoCltValida(bruta: Partial<ComposicaoCustoClt> | undefined): Co
   };
 }
 
+/** Mesma normalização de `composicaoCltValida`, para a decomposição Payroll EUA/Reino Unido. */
+function composicaoPayrollValida(bruta: Partial<ComposicaoCustoPayroll> | undefined): ComposicaoCustoPayroll {
+  const base = { ...COMPOSICAO_PAYROLL_PADRAO, ...(bruta ?? {}) };
+  const clamp01 = (valor: unknown, padrao: number): number => {
+    const numero = Number(valor);
+    if (!Number.isFinite(numero) || numero < 0) return padrao;
+    return Math.min(numero, 1);
+  };
+
+  const normalizado: ComposicaoCustoPayroll = {
+    percentualFicaPatronal: clamp01(base.percentualFicaPatronal, COMPOSICAO_PAYROLL_PADRAO.percentualFicaPatronal),
+    percentualFutaSuta: clamp01(base.percentualFutaSuta, COMPOSICAO_PAYROLL_PADRAO.percentualFutaSuta),
+    percentualWorkersComp: clamp01(base.percentualWorkersComp, COMPOSICAO_PAYROLL_PADRAO.percentualWorkersComp),
+    percentualBeneficios: clamp01(base.percentualBeneficios, COMPOSICAO_PAYROLL_PADRAO.percentualBeneficios),
+    percentualBpoOverhead: clamp01(base.percentualBpoOverhead, COMPOSICAO_PAYROLL_PADRAO.percentualBpoOverhead),
+  };
+
+  const soma =
+    normalizado.percentualFicaPatronal +
+    normalizado.percentualFutaSuta +
+    normalizado.percentualWorkersComp +
+    normalizado.percentualBeneficios +
+    normalizado.percentualBpoOverhead;
+
+  if (soma <= 0.95) return normalizado;
+
+  const fator = 0.95 / soma;
+  return {
+    percentualFicaPatronal: normalizado.percentualFicaPatronal * fator,
+    percentualFutaSuta: normalizado.percentualFutaSuta * fator,
+    percentualWorkersComp: normalizado.percentualWorkersComp * fator,
+    percentualBeneficios: normalizado.percentualBeneficios * fator,
+    percentualBpoOverhead: normalizado.percentualBpoOverhead * fator,
+  };
+}
+
+function regimeEncargosValido(bruto: unknown): RegimeEncargos {
+  return bruto === "payroll-us-uk" ? "payroll-us-uk" : "clt-br";
+}
+
 function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
   const base = { ...ROI_CONFIG_PADRAO, ...(bruta ?? {}) };
   // Configuração vem do Firestore e é entrada não confiável: um valor negativo
@@ -178,6 +244,9 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
 
   return {
     composicaoClt: composicaoCltValida(base.composicaoClt),
+    composicaoPayroll: composicaoPayrollValida(base.composicaoPayroll),
+    regimeEncargos: regimeEncargosValido(base.regimeEncargos),
+    cambioGbpBrl: positivo(base.cambioGbpBrl, ROI_CONFIG_PADRAO.cambioGbpBrl, 1000),
     custoHoraOperadorBrl: positivo(base.custoHoraOperadorBrl, ROI_CONFIG_PADRAO.custoHoraOperadorBrl, 100_000),
     minutosManuaisPorExecucao: positivo(base.minutosManuaisPorExecucao, ROI_CONFIG_PADRAO.minutosManuaisPorExecucao, 10_080),
     minutosRevisaoHumana: positivo(base.minutosRevisaoHumana, ROI_CONFIG_PADRAO.minutosRevisaoHumana, 10_080),
@@ -193,7 +262,8 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
     ),
     cambioUsdBrl: positivo(base.cambioUsdBrl, ROI_CONFIG_PADRAO.cambioUsdBrl, 1000),
     custoPlataformaMensalBrl: positivo(base.custoPlataformaMensalBrl, 0, 10_000_000),
-    moedaExibicao: base.moedaExibicao === "USD" ? "USD" : "BRL",
+    moedaExibicao:
+      base.moedaExibicao === "USD" || base.moedaExibicao === "GBP" ? base.moedaExibicao : "BRL",
     precoModeloPadrao: {
       modelo: base.precoModeloPadrao?.modelo ?? ROI_CONFIG_PADRAO.precoModeloPadrao.modelo,
       entradaUsdPorMilhao: positivo(
@@ -428,6 +498,17 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
     encargosInssBrl + encargosFgtsBrl + encargosDecimoTerceiroBrl + encargosFeriasBrl + encargosProvisaoRescisaoBrl;
   const salarioBaseEvitadoBrl = Math.max(0, custoHumanoEvitadoBrl - encargosTotaisBrl);
 
+  // --- Dual-Region Tax Shield: mesma decomposição, lente Payroll EUA/Reino
+  // Unido — sempre calculada, independente de `config.regimeEncargos`. ---
+  const encargosFicaBrl = custoHumanoEvitadoBrl * config.composicaoPayroll.percentualFicaPatronal;
+  const encargosFutaSutaBrl = custoHumanoEvitadoBrl * config.composicaoPayroll.percentualFutaSuta;
+  const encargosWorkersCompBrl = custoHumanoEvitadoBrl * config.composicaoPayroll.percentualWorkersComp;
+  const encargosBeneficiosBrl = custoHumanoEvitadoBrl * config.composicaoPayroll.percentualBeneficios;
+  const encargosBpoOverheadBrl = custoHumanoEvitadoBrl * config.composicaoPayroll.percentualBpoOverhead;
+  const encargosTotaisPayrollBrl =
+    encargosFicaBrl + encargosFutaSutaBrl + encargosWorkersCompBrl + encargosBeneficiosBrl + encargosBpoOverheadBrl;
+  const salarioBaseEvitadoPayrollBrl = Math.max(0, custoHumanoEvitadoBrl - encargosTotaisPayrollBrl);
+
   return {
     execucoesTotais: execucoes.length,
     execucoesConcluidas: concluidas,
@@ -455,6 +536,14 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
     encargosFeriasBrl: arredondar(encargosFeriasBrl),
     encargosProvisaoRescisaoBrl: arredondar(encargosProvisaoRescisaoBrl),
     encargosTotaisBrl: arredondar(encargosTotaisBrl),
+
+    salarioBaseEvitadoPayrollBrl: arredondar(salarioBaseEvitadoPayrollBrl),
+    encargosFicaBrl: arredondar(encargosFicaBrl),
+    encargosFutaSutaBrl: arredondar(encargosFutaSutaBrl),
+    encargosWorkersCompBrl: arredondar(encargosWorkersCompBrl),
+    encargosBeneficiosBrl: arredondar(encargosBeneficiosBrl),
+    encargosBpoOverheadBrl: arredondar(encargosBpoOverheadBrl),
+    encargosTotaisPayrollBrl: arredondar(encargosTotaisPayrollBrl),
 
     taxaZeroTouch: arredondar(razaoSegura(zeroTouch, terminais), 4),
     taxaSucesso: arredondar(razaoSegura(concluidas, terminais), 4),
@@ -491,11 +580,37 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
  * apresentação. Isso mantém uma única moeda de referência nos cálculos e evita
  * erro de arredondamento acumulado por conversões intermediárias.
  */
-export function formatarMoeda(valorBrl: number, moeda: Moeda, cambioUsdBrl = ROI_CONFIG_PADRAO.cambioUsdBrl): string {
-  const valor = moeda === "USD" ? valorBrl / (cambioUsdBrl || 1) : valorBrl;
+const LOCALE_POR_MOEDA: Record<Moeda, string> = {
+  BRL: "pt-BR",
+  USD: "en-US",
+  GBP: "en-GB",
+};
+
+/**
+ * Taxa de conversão (1 unidade da moeda → BRL) a aplicar na exibição.
+ * BRL é a moeda de cálculo interna — sempre 1. Centraliza a escolha entre
+ * `cambioUsdBrl`/`cambioGbpBrl` para que nenhum componente repita a mesma
+ * ternária em cada card.
+ */
+export function cambioParaMoeda(config: Pick<RoiConfig, "cambioUsdBrl" | "cambioGbpBrl">, moeda: Moeda): number {
+  if (moeda === "USD") return config.cambioUsdBrl;
+  if (moeda === "GBP") return config.cambioGbpBrl;
+  return 1;
+}
+
+/**
+ * Formata um valor monetário.
+ *
+ * O snapshot é calculado sempre em BRL; `cambioParaBrl` é "quantos BRL vale 1
+ * unidade de `moeda`" — passe `config.cambioUsdBrl`/`config.cambioGbpBrl`
+ * (ou use `cambioParaMoeda`) de acordo com a moeda escolhida. BRL nunca
+ * converte, qualquer que seja o valor passado aqui.
+ */
+export function formatarMoeda(valorBrl: number, moeda: Moeda, cambioParaBrl = ROI_CONFIG_PADRAO.cambioUsdBrl): string {
+  const valor = moeda === "BRL" ? valorBrl : valorBrl / (cambioParaBrl || 1);
   const seguro = Number.isFinite(valor) ? valor : 0;
 
-  return new Intl.NumberFormat(moeda === "USD" ? "en-US" : "pt-BR", {
+  return new Intl.NumberFormat(LOCALE_POR_MOEDA[moeda], {
     style: "currency",
     currency: moeda,
     maximumFractionDigits: Math.abs(seguro) >= 1000 ? 0 : 2,

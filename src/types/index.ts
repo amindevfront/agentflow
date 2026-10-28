@@ -10,6 +10,7 @@ export * from "./roi";
 export * from "./inbox";
 
 import type { RunCostMetrics } from "./roi";
+import type { GuardrailPolicy } from "./guardrails";
 
 export type UserRole = "operacoes" | "admin";
 
@@ -32,7 +33,31 @@ export type NicheKey =
   | "construtora-imobiliaria"
   | "logistica-portuaria"
   | "clinica-alto-padrao"
+  | "servicos-luxo"
+  | "ecommerce"
   | "outros";
+
+/**
+ * Região/idioma da operação, capturada no Onboarding Cognitivo
+ * (`DynamicNicheQuizModal`). Determina o regime legal de referência exibido
+ * na UI (LGPD vs. CCPA/GDPR) e os valores padrão de moeda/regime de encargos
+ * aplicados ao `RoiConfig` do workspace — ver `@/lib/onboardingQuiz`.
+ */
+export type RegiaoOperacao = "br" | "global";
+
+/**
+ * Maior ralo de caixa relatado no Quiz de onboarding — mapeado para ajustes
+ * concretos de guardrail em `Workspace.guardrailOverrides` (ver
+ * `PAIN_POINT_PRESETS` em `@/lib/onboardingQuiz`). Duas categorias (atrito
+ * fora do horário e no-show de agendamento) não têm um módulo dedicado nesta
+ * versão — o preset documenta isso explicitamente em vez de fingir cobertura.
+ */
+export type PainPointKey =
+  | "whatsapp-fora-horario"
+  | "no-show-agendamento"
+  | "passivo-clt-overtime"
+  | "vazamento-pii"
+  | "outro";
 
 export interface Workspace {
   id: string;
@@ -41,6 +66,18 @@ export interface Workspace {
   criadoEm?: string;
   /** Nomes de fluxo sugeridos para o nicho escolhido (ver NICHE_PRESETS). */
   playbooksSugeridos?: string[];
+
+  // --- Onboarding Cognitivo (Quiz dinâmico de setup por nicho) ---
+  regiaoOperacao?: RegiaoOperacao;
+  ralogDeCaixa?: PainPointKey;
+  /**
+   * Ajustes de política de guardrail derivados do ralo de caixa informado no
+   * quiz. Mesclado como `sobrescritas` ao resolver a política padrão do
+   * workspace (ver `GuardrailInspectorPanel` e `resolverPolitica`).
+   */
+  guardrailOverrides?: Partial<GuardrailPolicy>;
+  /** Presença indica que o quiz já foi respondido — controla a reexibição do modal. */
+  quizRespondidoEm?: string;
 }
 
 export type InviteStatus = "pendente" | "aceito" | "expirado";

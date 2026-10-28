@@ -7,7 +7,7 @@
 // cálculo: ele reconhece o próprio custo-hora e confere a conta.
 
 import { useEffect, useState } from "react";
-import type { ComposicaoCustoClt, Moeda, RoiConfig } from "@/types";
+import type { ComposicaoCustoClt, ComposicaoCustoPayroll, Moeda, RegimeEncargos, RoiConfig } from "@/types";
 import {
   PRECOS_REFERENCIA,
   ROI_CONFIG_PADRAO,
@@ -17,6 +17,12 @@ import {
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
+
+const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
+  { valor: "clt-br", label: "CLT (Brasil)" },
+  { valor: "payroll-us-uk", label: "Payroll Tax (EUA/UK)" },
+];
 
 const MODELOS = Object.keys(PRECOS_REFERENCIA);
 
@@ -46,6 +52,16 @@ export function RoiConfigPanel() {
     }));
   }
 
+  /** Mesma conversão de `atualizarPercentualClt`, para a decomposição Payroll EUA/Reino Unido. */
+  function atualizarPercentualPayroll(campo: keyof ComposicaoCustoPayroll, bruto: string) {
+    const percentual = Number(bruto.replace(",", ".")) / 100;
+    setSalvo(false);
+    setConfig((atual) => ({
+      ...atual,
+      composicaoPayroll: { ...atual.composicaoPayroll, [campo]: Number.isFinite(percentual) ? percentual : 0 },
+    }));
+  }
+
   /**
    * Converte fração (0..1) em ponto percentual para exibição no `<input>`.
    * Evita `.toFixed(1)` deliberadamente: forçar uma casa decimal a cada
@@ -66,6 +82,14 @@ export function RoiConfigPanel() {
     config.composicaoClt.percentualFerias +
     config.composicaoClt.percentualProvisaoRescisao;
   const percentualSalarioBase = Math.max(0, 1 - somaEncargosClt);
+
+  const somaEncargosPayroll =
+    config.composicaoPayroll.percentualFicaPatronal +
+    config.composicaoPayroll.percentualFutaSuta +
+    config.composicaoPayroll.percentualWorkersComp +
+    config.composicaoPayroll.percentualBeneficios +
+    config.composicaoPayroll.percentualBpoOverhead;
+  const percentualSalarioBasePayroll = Math.max(0, 1 - somaEncargosPayroll);
 
   async function salvar() {
     setErro(null);
@@ -139,6 +163,15 @@ export function RoiConfigPanel() {
           helpText="Aplicado ao custo de tokens, cotado em dólar."
         />
         <Field
+          label="Câmbio GBP → BRL"
+          type="number"
+          min={0}
+          step="0.01"
+          value={String(config.cambioGbpBrl)}
+          onChange={(e) => atualizarNumero("cambioGbpBrl", e.target.value)}
+          helpText="Aplicado quando a moeda de exibição é libra (£)."
+        />
+        <Field
           label="Custo mensal da plataforma (R$)"
           type="number"
           min={0}
@@ -163,9 +196,28 @@ export function RoiConfigPanel() {
           >
             <option value="BRL">Real (R$)</option>
             <option value="USD">Dólar (US$)</option>
+            <option value="GBP">Libra (£)</option>
           </select>
           <span className="text-xs text-ink-400">
-            O cálculo é sempre em BRL; a conversão ocorre apenas na exibição.
+            O cálculo é sempre em BRL; a conversão ocorre apenas na exibição. Este é o seletor regional/moeda único
+            — Governança e Configurações refletem o mesmo valor em tempo real, sem recalcular nem perder histórico.
+          </span>
+        </div>
+
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm font-medium text-ink-700">Regime de encargos (Tax Shield)</span>
+          <SegmentedFilter
+            rotuloGrupo="Regime de encargos"
+            opcoes={OPCOES_REGIME}
+            selecionado={config.regimeEncargos}
+            onChange={(valor) => {
+              setSalvo(false);
+              setConfig((atual) => ({ ...atual, regimeEncargos: valor }));
+            }}
+          />
+          <span className="text-xs text-ink-400">
+            Define qual decomposição aparece por padrão no painel OpEx &amp; Tax Shield — as duas são sempre
+            calculadas, então trocar aqui não descarta nada.
           </span>
         </div>
 
@@ -255,6 +307,70 @@ export function RoiConfigPanel() {
       <p className="mono text-xs text-ink-400">
         Salário base residual: {(percentualSalarioBase * 100).toFixed(1)}% do custo-hora. Se a soma dos encargos
         exceder 95%, os valores são normalizados proporcionalmente ao salvar.
+      </p>
+
+      <div>
+        <h4 className="text-sm font-semibold text-ink-950">Composição Payroll Tax (EUA/Reino Unido)</h4>
+        <p className="mt-0.5 text-xs text-ink-400">
+          Equivalente à composição CLT acima, para operações fora do Brasil (empregado W2 ou call center
+          terceirizado). FICA patronal tem base legal fixa nos EUA; os demais são médias de mercado — ajuste ao seu
+          arranjo real.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Field
+          label="FICA patronal (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoPayroll.percentualFicaPatronal)}
+          onChange={(e) => atualizarPercentualPayroll("percentualFicaPatronal", e.target.value)}
+          helpText="Social Security 6,2% + Medicare 1,45%."
+        />
+        <Field
+          label="FUTA/SUTA (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoPayroll.percentualFutaSuta)}
+          onChange={(e) => atualizarPercentualPayroll("percentualFutaSuta", e.target.value)}
+          helpText="Seguro-desemprego federal + estadual."
+        />
+        <Field
+          label="Workers' comp (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoPayroll.percentualWorkersComp)}
+          onChange={(e) => atualizarPercentualPayroll("percentualWorkersComp", e.target.value)}
+        />
+        <Field
+          label="Benefícios (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoPayroll.percentualBeneficios)}
+          onChange={(e) => atualizarPercentualPayroll("percentualBeneficios", e.target.value)}
+          helpText="Saúde, dental, aposentadoria."
+        />
+        <Field
+          label="Overhead de BPO (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoPayroll.percentualBpoOverhead)}
+          onChange={(e) => atualizarPercentualPayroll("percentualBpoOverhead", e.target.value)}
+          helpText="Call center terceirizado, se aplicável."
+        />
+      </div>
+      <p className="mono text-xs text-ink-400">
+        Salário base residual: {(percentualSalarioBasePayroll * 100).toFixed(1)}% do custo-hora.
       </p>
 
       <div className="flex items-center gap-3">

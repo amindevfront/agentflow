@@ -98,6 +98,19 @@ export async function updateWorkspaceName(workspaceId: string, nome: string): Pr
   });
 }
 
+/**
+ * Grava um patch parcial do workspace (merge) — usado por telas que ajustam
+ * configuração além do nome, como o Quiz de onboarding (`@/lib/onboardingQuiz`).
+ * Mantido genérico aqui porque `workspaces/{id}` é gravado só a partir deste
+ * módulo; centralizar evita que cada feature reimplemente `doc`+`setDoc`.
+ */
+export async function patchWorkspace(workspaceId: string, patch: Partial<Workspace>): Promise<void> {
+  return enfileirarEscrita("Atualizar configuração do workspace", async () => {
+    const database = requireDb();
+    await setDoc(doc(database, "workspaces", workspaceId), patch, { merge: true });
+  });
+}
+
 export async function upsertAppUser(user: AppUser): Promise<void> {
   const database = requireDb();
   await setDoc(doc(database, "users", user.uid), { ...user, nome: sanitizeText(user.nome, 120) }, { merge: true });

@@ -44,6 +44,26 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
       "Lembrete de retorno/manutenção",
     ],
   },
+  "servicos-luxo": {
+    key: "servicos-luxo",
+    label: "Serviços de Luxo",
+    descricao: "Concierge, reservas exclusivas e atendimento personalizado de alto padrão.",
+    playbooksSugeridos: [
+      "Triagem e concierge de alta prioridade",
+      "Confirmação de reserva/experiência exclusiva",
+      "Follow-up pós-experiência",
+    ],
+  },
+  ecommerce: {
+    key: "ecommerce",
+    label: "E-commerce",
+    descricao: "Status de pedido, rastreio, trocas/devoluções e recuperação de carrinho.",
+    playbooksSugeridos: [
+      "Status de pedido e rastreio",
+      "Recuperação de carrinho abandonado",
+      "Triagem de troca/devolução",
+    ],
+  },
   outros: {
     key: "outros",
     label: "Outros",
@@ -54,7 +74,9 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
 
 export const NICHE_ORDER: NicheKey[] = [
   "construtora-imobiliaria",
-  "logistica-portuaria",
   "clinica-alto-padrao",
+  "logistica-portuaria",
+  "servicos-luxo",
+  "ecommerce",
   "outros",
 ];

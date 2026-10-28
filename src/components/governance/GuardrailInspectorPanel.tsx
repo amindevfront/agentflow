@@ -19,6 +19,8 @@ import type {
 } from "@/types";
 import { POLITICAS_PREDEFINIDAS, ROTULO_POR_KIND } from "@/lib/guardrails";
 import { auth } from "@/lib/firebase";
+import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { Button } from "@/components/ui/Button";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { cn } from "@/lib/utils";
@@ -57,6 +59,15 @@ interface RespostaInspecao {
 }
 
 export function GuardrailInspectorPanel() {
+  const { workspaceId } = useWorkspace();
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
+  // Ajustes derivados do Quiz de onboarding (`@/lib/onboardingQuiz`), via
+  // `Workspace.guardrailOverrides` — mesclados sobre a política escolhida
+  // abaixo, sempre que o workspace os tiver. É o que torna o "ralo de caixa"
+  // respondido no quiz um efeito real, não só um dado decorativo.
+  const sobrescritasDoWorkspace = workspace?.guardrailOverrides ?? {};
+  const temSobrescritas = Object.keys(sobrescritasDoWorkspace).length > 0;
+
   const [politica, setPolitica] = useState<IdPolitica>("padrao");
   const [payload, setPayload] = useState(PAYLOAD_EXEMPLO);
   const [amostras, setAmostras] = useState("");
@@ -91,6 +102,7 @@ export function GuardrailInspectorPanel() {
         body: JSON.stringify({
           payload,
           politica,
+          sobrescritas: sobrescritasDoWorkspace,
           amostras: listaAmostras,
           contextos: listaContextos,
         }),
@@ -142,6 +154,12 @@ export function GuardrailInspectorPanel() {
             <dt>Máx. visitas por nó</dt>
             <dd className="mono text-ink-700">{definicao.maxVisitasPorNo}</dd>
           </dl>
+          {temSobrescritas && (
+            <p className="rounded-[var(--radius-sm)] border border-signal-500 bg-signal-50 px-2.5 py-1.5 text-[11px] text-signal-700">
+              Ajustes do Onboarding Cognitivo em vigor (ralo de caixa: {workspace?.ralogDeCaixa ?? "—"}) — aplicados
+              por cima da política acima nesta inspeção.
+            </p>
+          )}
         </div>
 
         <div className="flex flex-col gap-1.5">

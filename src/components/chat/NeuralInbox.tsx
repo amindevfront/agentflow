@@ -24,6 +24,7 @@ import type {
   Conversation,
   ConversationMessage,
   OperatorProfile,
+  RoiConfig,
 } from "@/types";
 import {
   atribuirConversaManual,
@@ -40,8 +41,9 @@ import {
 import { rotear } from "@/lib/inbox/swarm";
 import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
-import { formatarPercentual } from "@/lib/roi";
+import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
+import { BusinessROIWidget } from "@/components/BusinessROIWidget";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -137,6 +139,9 @@ export function NeuralInbox() {
   const [operadores, setOperadores] = useState<OperatorProfile[]>([]);
   const [agentes, setAgentes] = useState<AgentProfile[]>([]);
   const [mensagens, setMensagens] = useState<ConversationMessage[]>([]);
+  // Dual-currency: a mesma moeda/regime configurados em Governança →
+  // Parâmetros, refletidos aqui em tempo real — nenhum seletor próprio.
+  const [roiConfig, setRoiConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
 
   const [filtro, setFiltro] = useState<FiltroInbox>("ativas");
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
@@ -163,6 +168,7 @@ export function NeuralInbox() {
       }),
       subscribeOperatorProfiles(setOperadores),
       subscribeAgentProfiles(setAgentes),
+      subscribeRoiConfig(setRoiConfig),
     ];
     return () => cancelamentos.forEach((cancelar) => cancelar());
   }, []);
@@ -198,6 +204,18 @@ export function NeuralInbox() {
   // fechada e o cliente foi atendido assim mesmo"). Ver `@/lib/inbox/revenueRescue`
   // sobre por que isto conta volume real em vez de inventar um valor em R$.
   const receitaMadrugada = useMemo(() => calcularReceitaRecuperadaMadrugada(conversas), [conversas]);
+
+  // Custo humano evitado só nessas conversas — mesma fórmula honesta já
+  // usada em `calcularRoi` (minutos manuais configurados × custo-hora),
+  // nunca um valor de negócio inventado. Dual-currency: usa a mesma
+  // moeda/regime configurados em Governança, recalculando automaticamente.
+  const custoEvitadoMadrugadaBrl =
+    (receitaMadrugada.totalConversas * roiConfig.minutosManuaisPorConversa * roiConfig.custoHoraOperadorBrl) / 60;
+  const custoEvitadoMadrugadaFormatado = formatarMoeda(
+    custoEvitadoMadrugadaBrl,
+    roiConfig.moedaExibicao,
+    cambioParaMoeda(roiConfig, roiConfig.moedaExibicao)
+  );
 
   const opcoesFiltro = [
     { valor: "ativas" as const, label: "Ativas", contagem: contagens.ativas },
@@ -365,11 +383,19 @@ export function NeuralInbox() {
         <MetricCard
           rotulo="Receita recuperada de madrugada"
           valor={String(receitaMadrugada.totalConversas)}
-          detalhe={`${receitaMadrugada.totalAltaIntencaoComercial} de alta intenção comercial · fora do expediente`}
+          detalhe={`${receitaMadrugada.totalAltaIntencaoComercial} de alta intenção comercial · ${
+            receitaMadrugada.totalConversas > 0 ? `${custoEvitadoMadrugadaFormatado} evitados` : "fora do expediente"
+          }`}
           tom={receitaMadrugada.totalConversas > 0 ? "marca" : "neutro"}
-          dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem atendimento automatizado, teria esperado o próximo dia útil ou sido perdida."
+          dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem atendimento automatizado, teria esperado o próximo dia útil ou sido perdida. O valor evitado usa a mesma fórmula do painel de ROI (minutos manuais × custo-hora configurados), nunca um valor de negócio estimado."
         />
       </div>
+
+      {/* Relatório de Economia & Resgate de Receita — mesmo widget da
+          Governança, embutido aqui para a visão simplificada (`operacoes`):
+          quem não acessa Governança ainda vê o essencial do ROI sem sair do
+          atendimento diário (ver Dual-Layer Workspace View, `@/components/layout/navAcesso`). */}
+      <BusinessROIWidget compacto />
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
 
