@@ -7,7 +7,7 @@
 // pessoal; é o princípio de minimização da LGPD aplicado à interface.
 
 import { useEffect, useMemo, useState } from "react";
-import type { HandoffDecision, HandoffStatus, HandoffTicket } from "@/types";
+import type { HandoffDecision, HandoffReason, HandoffStatus, HandoffTicket } from "@/types";
 import {
   ROTULO_DECISAO,
   ROTULO_MOTIVO,
@@ -51,8 +51,13 @@ function corresponde(ticket: HandoffTicket, filtro: FiltroFila): boolean {
   return ticket.status === (filtro as HandoffStatus);
 }
 
-export function HandoffQueuePanel() {
-  const [tickets, setTickets] = useState<HandoffTicket[]>([]);
+interface HandoffQueuePanelProps {
+  /** Restringe a fila a motivos específicos — usado pelo painel de Compliance Preventivo. */
+  motivoFiltro?: HandoffReason[];
+}
+
+export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {}) {
+  const [ticketsBrutos, setTicketsBrutos] = useState<HandoffTicket[]>([]);
   const [filtro, setFiltro] = useState<FiltroFila>("ativos");
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
   const [decisaoAberta, setDecisaoAberta] = useState<HandoffDecision | null>(null);
@@ -69,11 +74,19 @@ export function HandoffQueuePanel() {
   }, []);
 
   useEffect(() => {
-    return subscribeFilaTransbordo(setTickets, {
+    return subscribeFilaTransbordo(setTicketsBrutos, {
       limite: 200,
       onError: () => setErro("Não foi possível carregar a fila de transbordo agora. Tente novamente em instantes."),
     });
   }, []);
+
+  // Filtro por motivo é aplicado ANTES das estatísticas/ordenação: o painel de
+  // Compliance Preventivo mostra métricas escopadas só aos seus próprios
+  // tickets, não a fila inteira de transbordo.
+  const tickets = useMemo(
+    () => (motivoFiltro ? ticketsBrutos.filter((t) => motivoFiltro.includes(t.motivo)) : ticketsBrutos),
+    [ticketsBrutos, motivoFiltro]
+  );
 
   useEffect(() => {
     // Varredura de expiração ao montar: sem worker server-side nesta versão, a

@@ -14,12 +14,39 @@ export interface ModelPricing {
 }
 
 /**
+ * Decomposição do custo-hora "totalmente carregado" (`custoHoraOperadorBrl`)
+ * nos componentes do encargo patronal CLT — o que permite ao painel de OpEx
+ * mostrar não só "quanto foi economizado", mas "em que isso se traduziria se
+ * fosse um funcionário CLT": salário base vs. INSS patronal, FGTS, 13º,
+ * férias e provisão de rescisão.
+ *
+ * Cada campo é um percentual (0..1) do custo-hora total. A soma dos cinco
+ * encargos é subtraída de 1 para obter o percentual de salário base — por
+ * isso não há um campo `percentualSalarioBase` separado, o que evitaria os
+ * dois números divergirem.
+ *
+ * Os valores padrão (`COMPOSICAO_CLT_PADRAO`, em `@/lib/roi`) refletem uma
+ * estimativa de referência do regime geral (CLT, sem Simples Nacional) —
+ * documentada ali, não codificada como fato. Cada workspace deve ajustar ao
+ * seu próprio regime tributário.
+ */
+export interface ComposicaoCustoClt {
+  percentualInssPatronal: number;
+  percentualFgts: number;
+  percentualDecimoTerceiro: number;
+  percentualFerias: number;
+  percentualProvisaoRescisao: number;
+}
+
+/**
  * Parâmetros econômicos do workspace. Persistido em
  * `workspaces/{id}.roiConfig` e editável por administradores.
  */
 export interface RoiConfig {
   /** Custo total por hora de um operador humano (salário + encargos + overhead). */
   custoHoraOperadorBrl: number;
+  /** Decomposição do custo-hora acima em componentes de encargo CLT. */
+  composicaoClt: ComposicaoCustoClt;
   /** Minutos que um humano gastaria para executar manualmente um fluxo. */
   minutosManuaisPorExecucao: number;
   /** Minutos consumidos por um operador em cada transbordo (custo da revisão). */
@@ -91,6 +118,17 @@ export interface RoiSnapshot {
   custoPorExecucaoBrl: number;
   /** Retorno sobre o investimento: economia líquida ÷ custo total da automação. */
   roiPercentual: number;
+
+  // (Tax Shield) Decomposição de `custoHumanoEvitadoBrl` nos componentes do
+  // encargo patronal CLT, via `composicaoClt` — ver `ComposicaoCustoClt`.
+  salarioBaseEvitadoBrl: number;
+  encargosInssBrl: number;
+  encargosFgtsBrl: number;
+  encargosDecimoTerceiroBrl: number;
+  encargosFeriasBrl: number;
+  encargosProvisaoRescisaoBrl: number;
+  /** Soma dos cinco encargos acima — NÃO inclui o salário base. */
+  encargosTotaisBrl: number;
 
   // (c) Autonomia
   /** Execuções concluídas sem nenhuma intervenção humana ÷ execuções terminais. */

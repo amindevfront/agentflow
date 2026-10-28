@@ -18,7 +18,9 @@ export type HandoffReason =
   | "erro-execucao"
   | "solicitacao-manual"
   /** Radar de sentimento da Neural Inbox: índice de frustração cruzou o limiar crítico. */
-  | "frustracao-critica";
+  | "frustracao-critica"
+  /** Compliance Preventivo: mensagem de operador/IA com risco de passivo trabalhista ou propaganda enganosa. */
+  | "compliance-preventivo";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 

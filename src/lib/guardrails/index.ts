@@ -64,6 +64,8 @@ export {
   maiorSeveridade,
   resolverPolitica,
 } from "./policy";
+export { detectarCompliancePreventivo } from "./compliancePreventivo";
+export type { CompliancePreventivoResultado } from "./compliancePreventivo";
 
 /** Gera um identificador de correlação. Usa UUID nativo quando disponível. */
 export function novoTraceId(): string {

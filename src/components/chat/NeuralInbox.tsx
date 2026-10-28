@@ -38,6 +38,7 @@ import {
   subscribeOperatorProfiles,
 } from "@/lib/inbox/firestore";
 import { rotear } from "@/lib/inbox/swarm";
+import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { formatarPercentual } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
@@ -192,6 +193,12 @@ export function NeuralInbox() {
     return { ativas, circuitBreaker, semAtribuicao, resolvidas, frustracaoMedia };
   }, [conversas]);
 
+  // Motor de Resgate de Receita Perdida: conversas de alta intenção comercial
+  // resolvidas fora do expediente — prova de ROI imediato ("a empresa estaria
+  // fechada e o cliente foi atendido assim mesmo"). Ver `@/lib/inbox/revenueRescue`
+  // sobre por que isto conta volume real em vez de inventar um valor em R$.
+  const receitaMadrugada = useMemo(() => calcularReceitaRecuperadaMadrugada(conversas), [conversas]);
+
   const opcoesFiltro = [
     { valor: "ativas" as const, label: "Ativas", contagem: contagens.ativas },
     { valor: "circuit-breaker" as const, label: "Circuit Breaker", contagem: contagens.circuitBreaker },
@@ -335,7 +342,7 @@ export function NeuralInbox() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <MetricCard
           rotulo="Conversas ativas"
           valor={String(contagens.ativas)}
@@ -355,6 +362,13 @@ export function NeuralInbox() {
           tom={contagens.frustracaoMedia >= LIMIAR_FRUSTRACAO_CRITICA ? "erro" : contagens.frustracaoMedia >= 40 ? "atencao" : "positivo"}
         />
         <MetricCard rotulo="Resolvidas" valor={String(contagens.resolvidas)} detalhe="neste carregamento" tom="positivo" />
+        <MetricCard
+          rotulo="Receita recuperada de madrugada"
+          valor={String(receitaMadrugada.totalConversas)}
+          detalhe={`${receitaMadrugada.totalAltaIntencaoComercial} de alta intenção comercial · fora do expediente`}
+          tom={receitaMadrugada.totalConversas > 0 ? "marca" : "neutro"}
+          dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem atendimento automatizado, teria esperado o próximo dia útil ou sido perdida."
+        />
       </div>
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}

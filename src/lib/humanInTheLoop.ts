@@ -80,6 +80,7 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "erro-execucao": "Erro de execução",
   "solicitacao-manual": "Solicitação manual",
   "frustracao-critica": "Frustração crítica do cliente",
+  "compliance-preventivo": "Compliance preventivo (trabalhista/LGPD)",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {

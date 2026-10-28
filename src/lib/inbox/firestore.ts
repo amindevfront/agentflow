@@ -48,6 +48,7 @@ import type {
 import { auth, db } from "@/lib/firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "@/lib/firestore";
 import { interceptarMensagem, processarMensagemEntrante } from "@/lib/guardrails/piiVault";
+import { detectarCompliancePreventivo, maiorSeveridade } from "@/lib/guardrails";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
 import { abrirTransbordo } from "@/lib/humanInTheLoop";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
@@ -466,7 +467,8 @@ export async function enviarMensagemOperador(entrada: {
 
     const refConversa = doc(database, COLECAO_CONVERSAS, entrada.conversationId);
     const conversaSnap = await getDoc(refConversa);
-    const totalAtual = conversaSnap.exists() ? (conversaSnap.data() as Conversation).totalMensagens : 0;
+    const conversaAtual = conversaSnap.exists() ? (conversaSnap.data() as Conversation) : null;
+    const totalAtual = conversaAtual?.totalMensagens ?? 0;
 
     await updateDoc(refConversa, {
       ultimaMensagemPreview: textoMascarado.slice(0, 160),
@@ -475,6 +477,46 @@ export async function enviarMensagemOperador(entrada: {
       totalMensagens: totalAtual + 1,
       status: "em-atendimento" satisfies ConversationStatus,
     });
+
+    // Compliance Preventivo: varre a resposta do operador/IA por risco de
+    // passivo trabalhista (assédio, linguagem ofensiva) ou propaganda
+    // enganosa (promessa comercial indevida) — NUNCA bloqueia o envio
+    // (já ocorreu), só abre um alerta preventivo para revisão humana, no
+    // mesmo padrão do Circuit Breaker de frustração em `registrarMensagemCliente`.
+    const compliance = detectarCompliancePreventivo(textoMascarado);
+    if (compliance.violacoes.length > 0) {
+      try {
+        const ticket = await abrirTransbordo({
+          solicitacao: {
+            traceId: `inbox_${messageId}`,
+            politicaId: "padrao",
+            severidade: maiorSeveridade(compliance.violacoes.map((v) => v.severidade)),
+            veredito: "transbordo",
+            violacoes: compliance.violacoes,
+            payloadMascarado: textoMascarado,
+          },
+          flowId: entrada.conversationId,
+          flowNome: conversaAtual?.assunto || `Conversa ${entrada.canal}`,
+          conversationId: entrada.conversationId,
+          motivoForcado: "compliance-preventivo",
+          workspaceId,
+          criadoPor: entrada.remetenteId,
+        });
+
+        await registrarEventoAuditoriaSilencioso({
+          tipo: "guardrail.transbordo.acionado",
+          recurso: `${COLECAO_CONVERSAS}/${entrada.conversationId}`,
+          workspaceId,
+          traceId: `inbox_${messageId}`,
+          severidade: ticket.severidade,
+          detalhes: { motivo: "compliance-preventivo", categorias: compliance.categorias.join(", "), ticketId: ticket.id },
+        });
+      } catch (erro) {
+        // A mensagem já foi enviada — perder o alerta preventivo é um
+        // incidente de observabilidade, não motivo para reverter o envio.
+        console.error("[inbox] falha ao abrir alerta de compliance preventivo:", erro);
+      }
+    }
 
     return mensagem;
   });

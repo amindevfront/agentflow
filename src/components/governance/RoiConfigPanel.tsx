@@ -7,7 +7,7 @@
 // cálculo: ele reconhece o próprio custo-hora e confere a conta.
 
 import { useEffect, useState } from "react";
-import type { Moeda, RoiConfig } from "@/types";
+import type { ComposicaoCustoClt, Moeda, RoiConfig } from "@/types";
 import {
   PRECOS_REFERENCIA,
   ROI_CONFIG_PADRAO,
@@ -35,6 +35,24 @@ export function RoiConfigPanel() {
     setSalvo(false);
     setConfig((atual) => ({ ...atual, [campo]: Number.isFinite(valor) ? valor : 0 }));
   }
+
+  /** Campos de `composicaoClt` são editados em pontos percentuais (ex.: "20"), não em fração (0,2). */
+  function atualizarPercentualClt(campo: keyof ComposicaoCustoClt, bruto: string) {
+    const percentual = Number(bruto.replace(",", ".")) / 100;
+    setSalvo(false);
+    setConfig((atual) => ({
+      ...atual,
+      composicaoClt: { ...atual.composicaoClt, [campo]: Number.isFinite(percentual) ? percentual : 0 },
+    }));
+  }
+
+  const somaEncargosClt =
+    config.composicaoClt.percentualInssPatronal +
+    config.composicaoClt.percentualFgts +
+    config.composicaoClt.percentualDecimoTerceiro +
+    config.composicaoClt.percentualFerias +
+    config.composicaoClt.percentualProvisaoRescisao;
+  const percentualSalarioBase = Math.max(0, 1 - somaEncargosClt);
 
   async function salvar() {
     setErro(null);
@@ -165,6 +183,66 @@ export function RoiConfigPanel() {
           </span>
         </div>
       </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-ink-950">Composição do encargo CLT (Tax Shield)</h4>
+        <p className="mt-0.5 text-xs text-ink-400">
+          Decompõe o custo-hora acima em salário base + encargos patronais, usado pelo painel OpEx &amp; Tax Shield.
+          Estimativa do regime geral — ajuste ao regime tributário real (ex.: Simples Nacional).
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Field
+          label="INSS patronal (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={(config.composicaoClt.percentualInssPatronal * 100).toFixed(1)}
+          onChange={(e) => atualizarPercentualClt("percentualInssPatronal", e.target.value)}
+        />
+        <Field
+          label="FGTS (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={(config.composicaoClt.percentualFgts * 100).toFixed(1)}
+          onChange={(e) => atualizarPercentualClt("percentualFgts", e.target.value)}
+        />
+        <Field
+          label="13º salário (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={(config.composicaoClt.percentualDecimoTerceiro * 100).toFixed(1)}
+          onChange={(e) => atualizarPercentualClt("percentualDecimoTerceiro", e.target.value)}
+        />
+        <Field
+          label="Férias + 1/3 (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={(config.composicaoClt.percentualFerias * 100).toFixed(1)}
+          onChange={(e) => atualizarPercentualClt("percentualFerias", e.target.value)}
+        />
+        <Field
+          label="Provisão de rescisão (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={(config.composicaoClt.percentualProvisaoRescisao * 100).toFixed(1)}
+          onChange={(e) => atualizarPercentualClt("percentualProvisaoRescisao", e.target.value)}
+        />
+      </div>
+      <p className="mono text-xs text-ink-400">
+        Salário base residual: {(percentualSalarioBase * 100).toFixed(1)}% do custo-hora. Se a soma dos encargos
+        exceder 95%, os valores são normalizados proporcionalmente ao salvar.
+      </p>
 
       <div className="flex items-center gap-3">
         <Button size="sm" loading={salvando} onClick={salvar}>

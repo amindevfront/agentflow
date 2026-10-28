@@ -52,7 +52,11 @@ export type GuardrailRuleId =
   | "orcamento-tokens"
   | "erro-interno-guardrail"
   /** Radar de sentimento da Neural Inbox: usado em `GuardrailViolation` de tickets de frustração crítica. */
-  | "frustracao-critica";
+  | "frustracao-critica"
+  /** Compliance Preventivo: promessa comercial/financeira fora do padrão regulatório (ver `@/lib/guardrails/compliancePreventivo`). */
+  | "promessa-comercial-indevida"
+  /** Compliance Preventivo: linguagem ofensiva, assédio ou aproximação pessoal indevida de operador/IA ao cliente. */
+  | "conduta-inadequada";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;

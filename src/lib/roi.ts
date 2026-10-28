@@ -14,6 +14,7 @@
 import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
 import type {
   Campaign,
+  ComposicaoCustoClt,
   Conversation,
   FlowRun,
   HandoffTicket,
@@ -33,11 +34,36 @@ import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "./pricing";
 // servidor. Nenhum comportamento muda para quem já importava daqui.
 export { PRECOS_REFERENCIA, estimarCustoModeloUsd };
 
+/**
+ * Decomposição padrão do custo-hora em encargos CLT — estimativa de
+ * referência do regime geral (empregador fora do Simples Nacional), NÃO uma
+ * tabela fiscal oficial embutida como fato:
+ *
+ *  - INSS patronal: 20% sobre a folha (regime geral);
+ *  - FGTS: 8% mensal;
+ *  - 13º salário: 1/12 do salário ≈ 8,33%;
+ *  - Férias + 1/3 constitucional: (1/12 + 1/3 de 1/12) ≈ 11,11%;
+ *  - Provisão de rescisão: multa de 40% sobre o FGTS depositado (40% × 8%) = 3,2%.
+ *
+ * Some os cinco e restam ~49,4% do custo-hora como salário base — a outra
+ * metade é o "Tax Shield" que o painel de OpEx expõe. Cada workspace com
+ * regime tributário diferente (ex.: Simples Nacional, que recolhe o INSS
+ * patronal dentro de uma alíquota única) deve recalibrar estes percentuais.
+ */
+export const COMPOSICAO_CLT_PADRAO: ComposicaoCustoClt = {
+  percentualInssPatronal: 0.2,
+  percentualFgts: 0.08,
+  percentualDecimoTerceiro: 0.0833,
+  percentualFerias: 0.1111,
+  percentualProvisaoRescisao: 0.032,
+};
+
 export const ROI_CONFIG_PADRAO: RoiConfig = {
   // Custo-hora totalmente carregado de um analista de operações no Brasil
   // (salário + encargos + benefícios + overhead). Valor de partida conservador;
   // cada workspace ajusta ao seu próprio custo real.
   custoHoraOperadorBrl: 62,
+  composicaoClt: COMPOSICAO_CLT_PADRAO,
   minutosManuaisPorExecucao: 12,
   minutosRevisaoHumana: 8,
   // Uma conversa de chat manual típica (ler, entender, responder, registrar)
@@ -98,6 +124,48 @@ function arredondar(valor: number, casas = 2): number {
   return Math.round(valor * fator) / fator;
 }
 
+/**
+ * Normaliza a decomposição CLT: cada percentual é limitado a 0..1, e se a
+ * soma dos cinco encargos exceder 95% (deixando menos de 5% para o salário
+ * base — um sinal claro de configuração malformada), todos são escalados
+ * proporcionalmente até caber no teto. Isso impede que uma configuração ruim
+ * no Firestore produza um "salário base negativo" no painel de Tax Shield.
+ */
+function composicaoCltValida(bruta: Partial<ComposicaoCustoClt> | undefined): ComposicaoCustoClt {
+  const base = { ...COMPOSICAO_CLT_PADRAO, ...(bruta ?? {}) };
+  const clamp01 = (valor: unknown, padrao: number): number => {
+    const numero = Number(valor);
+    if (!Number.isFinite(numero) || numero < 0) return padrao;
+    return Math.min(numero, 1);
+  };
+
+  const normalizado: ComposicaoCustoClt = {
+    percentualInssPatronal: clamp01(base.percentualInssPatronal, COMPOSICAO_CLT_PADRAO.percentualInssPatronal),
+    percentualFgts: clamp01(base.percentualFgts, COMPOSICAO_CLT_PADRAO.percentualFgts),
+    percentualDecimoTerceiro: clamp01(base.percentualDecimoTerceiro, COMPOSICAO_CLT_PADRAO.percentualDecimoTerceiro),
+    percentualFerias: clamp01(base.percentualFerias, COMPOSICAO_CLT_PADRAO.percentualFerias),
+    percentualProvisaoRescisao: clamp01(base.percentualProvisaoRescisao, COMPOSICAO_CLT_PADRAO.percentualProvisaoRescisao),
+  };
+
+  const soma =
+    normalizado.percentualInssPatronal +
+    normalizado.percentualFgts +
+    normalizado.percentualDecimoTerceiro +
+    normalizado.percentualFerias +
+    normalizado.percentualProvisaoRescisao;
+
+  if (soma <= 0.95) return normalizado;
+
+  const fator = 0.95 / soma;
+  return {
+    percentualInssPatronal: normalizado.percentualInssPatronal * fator,
+    percentualFgts: normalizado.percentualFgts * fator,
+    percentualDecimoTerceiro: normalizado.percentualDecimoTerceiro * fator,
+    percentualFerias: normalizado.percentualFerias * fator,
+    percentualProvisaoRescisao: normalizado.percentualProvisaoRescisao * fator,
+  };
+}
+
 function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
   const base = { ...ROI_CONFIG_PADRAO, ...(bruta ?? {}) };
   // Configuração vem do Firestore e é entrada não confiável: um valor negativo
@@ -109,6 +177,7 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
   };
 
   return {
+    composicaoClt: composicaoCltValida(base.composicaoClt),
     custoHoraOperadorBrl: positivo(base.custoHoraOperadorBrl, ROI_CONFIG_PADRAO.custoHoraOperadorBrl, 100_000),
     minutosManuaisPorExecucao: positivo(base.minutosManuaisPorExecucao, ROI_CONFIG_PADRAO.minutosManuaisPorExecucao, 10_080),
     minutosRevisaoHumana: positivo(base.minutosRevisaoHumana, ROI_CONFIG_PADRAO.minutosRevisaoHumana, 10_080),
@@ -349,6 +418,16 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
 
   const zeroTouch = Math.max(0, concluidas - comIntervencao);
 
+  // --- Tax Shield: decompõe o custo humano evitado nos encargos CLT ---
+  const encargosInssBrl = custoHumanoEvitadoBrl * config.composicaoClt.percentualInssPatronal;
+  const encargosFgtsBrl = custoHumanoEvitadoBrl * config.composicaoClt.percentualFgts;
+  const encargosDecimoTerceiroBrl = custoHumanoEvitadoBrl * config.composicaoClt.percentualDecimoTerceiro;
+  const encargosFeriasBrl = custoHumanoEvitadoBrl * config.composicaoClt.percentualFerias;
+  const encargosProvisaoRescisaoBrl = custoHumanoEvitadoBrl * config.composicaoClt.percentualProvisaoRescisao;
+  const encargosTotaisBrl =
+    encargosInssBrl + encargosFgtsBrl + encargosDecimoTerceiroBrl + encargosFeriasBrl + encargosProvisaoRescisaoBrl;
+  const salarioBaseEvitadoBrl = Math.max(0, custoHumanoEvitadoBrl - encargosTotaisBrl);
+
   return {
     execucoesTotais: execucoes.length,
     execucoesConcluidas: concluidas,
@@ -368,6 +447,14 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
     reducaoOpexPercentual: arredondar(razaoSegura(economiaLiquidaBrl, custoHumanoEvitadoBrl), 4),
     custoPorExecucaoBrl: arredondar(razaoSegura(custoTotalAutomacao, terminais)),
     roiPercentual: arredondar(razaoSegura(economiaLiquidaBrl, custoTotalAutomacao), 4),
+
+    salarioBaseEvitadoBrl: arredondar(salarioBaseEvitadoBrl),
+    encargosInssBrl: arredondar(encargosInssBrl),
+    encargosFgtsBrl: arredondar(encargosFgtsBrl),
+    encargosDecimoTerceiroBrl: arredondar(encargosDecimoTerceiroBrl),
+    encargosFeriasBrl: arredondar(encargosFeriasBrl),
+    encargosProvisaoRescisaoBrl: arredondar(encargosProvisaoRescisaoBrl),
+    encargosTotaisBrl: arredondar(encargosTotaisBrl),
 
     taxaZeroTouch: arredondar(razaoSegura(zeroTouch, terminais), 4),
     taxaSucesso: arredondar(razaoSegura(concluidas, terminais), 4),
