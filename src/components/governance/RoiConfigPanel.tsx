@@ -46,6 +46,19 @@ export function RoiConfigPanel() {
     }));
   }
 
+  /**
+   * Converte fração (0..1) em ponto percentual para exibição no `<input>`.
+   * Evita `.toFixed(1)` deliberadamente: forçar uma casa decimal a cada
+   * keystroke (ex.: "2" virar "2.0") reformata o valor controlado a cada
+   * tecla e trava a digitação. `Math.round(.. * 1000) / 10` ainda absorve o
+   * ruído de ponto flutuante (0.2 * 100 != 20 exato em alguns casos), mas só
+   * imprime decimais que de fato existem — mesmo comportamento de `String()`
+   * já usado nos demais campos deste painel.
+   */
+  function percentualParaCampo(fracao: number): string {
+    return String(Math.round(fracao * 1000) / 10);
+  }
+
   const somaEncargosClt =
     config.composicaoClt.percentualInssPatronal +
     config.composicaoClt.percentualFgts +
@@ -199,7 +212,7 @@ export function RoiConfigPanel() {
           min={0}
           max={100}
           step="0.1"
-          value={(config.composicaoClt.percentualInssPatronal * 100).toFixed(1)}
+          value={percentualParaCampo(config.composicaoClt.percentualInssPatronal)}
           onChange={(e) => atualizarPercentualClt("percentualInssPatronal", e.target.value)}
         />
         <Field
@@ -208,7 +221,7 @@ export function RoiConfigPanel() {
           min={0}
           max={100}
           step="0.1"
-          value={(config.composicaoClt.percentualFgts * 100).toFixed(1)}
+          value={percentualParaCampo(config.composicaoClt.percentualFgts)}
           onChange={(e) => atualizarPercentualClt("percentualFgts", e.target.value)}
         />
         <Field
@@ -217,7 +230,7 @@ export function RoiConfigPanel() {
           min={0}
           max={100}
           step="0.1"
-          value={(config.composicaoClt.percentualDecimoTerceiro * 100).toFixed(1)}
+          value={percentualParaCampo(config.composicaoClt.percentualDecimoTerceiro)}
           onChange={(e) => atualizarPercentualClt("percentualDecimoTerceiro", e.target.value)}
         />
         <Field
@@ -226,7 +239,7 @@ export function RoiConfigPanel() {
           min={0}
           max={100}
           step="0.1"
-          value={(config.composicaoClt.percentualFerias * 100).toFixed(1)}
+          value={percentualParaCampo(config.composicaoClt.percentualFerias)}
           onChange={(e) => atualizarPercentualClt("percentualFerias", e.target.value)}
         />
         <Field
@@ -235,7 +248,7 @@ export function RoiConfigPanel() {
           min={0}
           max={100}
           step="0.1"
-          value={(config.composicaoClt.percentualProvisaoRescisao * 100).toFixed(1)}
+          value={percentualParaCampo(config.composicaoClt.percentualProvisaoRescisao)}
           onChange={(e) => atualizarPercentualClt("percentualProvisaoRescisao", e.target.value)}
         />
       </div>
