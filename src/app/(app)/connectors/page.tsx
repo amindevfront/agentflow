@@ -142,9 +142,9 @@ export default function ConnectorsPage() {
             {gerarWidgetEmbedSnippet({ workspaceId, baseUrl: window.location.origin })}
           </pre>
           <p className="text-[11px] text-ink-400">
-            A ingestão pública de mensagens anônimas deste widget ainda é trabalho futuro — este snippet já aponta
-            para o host e o workspace corretos, mas o endpoint de recebimento exige seu próprio desenho de
-            rate-limiting antes de ir ao ar.
+            Já funciona de ponta a ponta: mensagens enviadas pelo widget chegam na Neural Inbox passando pelo mesmo
+            Shield-Layer, Radar de Sentimento e Circuit Breaker dos demais canais. Ainda não há exibição de resposta
+            do atendente em tempo real dentro do próprio widget — essa resposta chega por fora, hoje.
           </p>
         </div>
       )}

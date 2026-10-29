@@ -84,4 +84,20 @@ describe("construirTicketAdmin", () => {
     });
     expect(ticket.prioridade).toBe("p2");
   });
+
+  it("carrega conversationId e respeita motivoForcado — paridade com o Circuit Breaker da Neural Inbox (inclusive Web Widget)", () => {
+    const ticket = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "critica" }),
+      flowId: "conv-widget-1",
+      flowNome: "Contato via Web Widget",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      conversationId: "conv-widget-1",
+      motivoForcado: "frustracao-critica",
+      agora: AGORA,
+    });
+
+    expect(ticket.conversationId).toBe("conv-widget-1");
+    expect(ticket.motivo).toBe("frustracao-critica");
+  });
 });

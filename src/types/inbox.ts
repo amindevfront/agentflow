@@ -104,6 +104,15 @@ export interface Conversation {
   slaTicketId?: string | null;
 
   /**
+   * Identificador de sessão do visitante anônimo do Web Widget Corporativo
+   * (gerado e persistido no navegador pelo próprio `widget.js`) — usado para
+   * reencontrar a mesma conversa entre mensagens. Deliberadamente NÃO
+   * mascarado: é um token aleatório sem significado pessoal por si só (ver
+   * `@/lib/server/inboxWidgetAdmin`), diferente de telefone/e-mail.
+   */
+  widgetVisitorId?: string | null;
+
+  /**
    * Auto-Feedback de Conversão: desfecho comercial registrado pelo operador
    * ao concluir o atendimento. Alimenta `calcularInsightsConversao`
    * (`@/lib/inbox/conversionFeedback`), que por sua vez atualiza

@@ -74,6 +74,10 @@ export interface ConstruirTicketAdminInput {
   noCritico?: boolean;
   workspaceId: string;
   criadoPor: string;
+  /** Presente quando o ticket se origina da Neural Inbox (inclusive do Web Widget), não de um fluxo — espelha `ConstruirTicketInput` do lado cliente. */
+  conversationId?: string;
+  /** Sobrepõe o motivo derivado das violações — espelha `ConstruirTicketInput` do lado cliente. */
+  motivoForcado?: HandoffReason;
   agora?: Date;
   gerarId?: () => string;
 }
@@ -92,9 +96,10 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     flowId: entrada.flowId,
     flowNome: entrada.flowNome,
     runId: entrada.runId,
+    conversationId: entrada.conversationId,
     nodeId: solicitacao.nodeId,
     traceId: solicitacao.traceId,
-    motivo: derivarMotivo(solicitacao.violacoes, solicitacao.veredito),
+    motivo: entrada.motivoForcado ?? derivarMotivo(solicitacao.violacoes, solicitacao.veredito),
     status: "aberto",
     prioridade,
     severidade: solicitacao.severidade,

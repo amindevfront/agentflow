@@ -127,13 +127,12 @@ export interface GerarEmbedSnippetInput {
  * Gera o snippet de embed do Web Widget Corporativo — copiável e colável no
  * `<head>` do site do cliente.
  *
- * O snippet é real (aponta para o host e o workspace corretos). O que ainda
- * NÃO existe nesta versão é a rota pública de ingestão que ele chamaria
- * (`/api/inbox/webhook/widget`) — abrir um endpoint de escrita sem sessão
- * para tráfego anônimo de terceiros exige seu próprio desenho de
- * rate-limiting e validação de origem, documentado como trabalho futuro em
- * vez de implementado às pressas (mesmo padrão de honestidade do webhook do
- * Meta em `src/app/api/inbox/webhook/route.ts`).
+ * Ponta a ponta real: `public/widget.js` é o script servido em
+ * `${baseUrl}/widget.js`, e `POST /api/inbox/webhook/widget` é a rota de
+ * ingestão que ele chama — ver `@/lib/server/inboxWidgetAdmin` para o
+ * pipeline (Shield-Layer, Radar de Sentimento, Circuit Breaker, idêntico ao
+ * dos demais canais). A workspace precisa ter um conector deste tipo
+ * cadastrado para a ingestão ser aceita (prova de opt-in).
  */
 export function gerarWidgetEmbedSnippet(input: GerarEmbedSnippetInput): string {
   const origem = input.origemPermitida ?? "https://seusite.com.br";
