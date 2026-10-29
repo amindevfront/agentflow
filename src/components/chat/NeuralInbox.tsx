@@ -68,6 +68,7 @@ const ROTULO_CANAL: Record<Canal, string> = {
   instagram: "Instagram",
   facebook: "Facebook",
   email: "E-mail",
+  sms: "SMS",
 };
 
 const corStatus: Record<Conversation["status"], string> = {

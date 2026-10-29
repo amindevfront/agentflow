@@ -44,6 +44,8 @@ export {
   validarCnpj,
   validarCpf,
   validarLuhn,
+  validarNin,
+  validarSsn,
   ROTULO_POR_KIND,
   CLASSIFICACAO_POR_KIND,
 } from "./pii";

@@ -15,12 +15,18 @@ import {
   validarCnpj,
   validarCpf,
   validarLuhn,
+  validarNin,
+  validarSsn,
 } from "@/lib/guardrails";
 
 // Valores de teste conhecidamente válidos pelos dígitos verificadores.
 const CPF_VALIDO = "529.982.247-25";
 const CNPJ_VALIDO = "11.222.333/0001-81";
 const CARTAO_VALIDO = "4111 1111 1111 1111";
+// SSN sem dígito verificador (não existe um) — só precisa respeitar as faixas nunca emitidas.
+const SSN_VALIDO = "123-45-6789";
+// NIN sem os prefixos/letras nunca emitidos pelo HMRC.
+const NIN_VALIDO = "AB123456C";
 
 describe("validadores de documento", () => {
   it("aceita CPF e CNPJ com dígito verificador correto", () => {
@@ -42,6 +48,50 @@ describe("validadores de documento", () => {
   it("valida cartão pelo algoritmo de Luhn", () => {
     expect(validarLuhn(CARTAO_VALIDO)).toBe(true);
     expect(validarLuhn("4111 1111 1111 1112")).toBe(false);
+  });
+});
+
+describe("validadores internacionais (Canais Globais — EUA/UK)", () => {
+  it("aceita um SSN dentro das faixas válidas", () => {
+    expect(validarSsn(SSN_VALIDO)).toBe(true);
+    expect(validarSsn("123456789")).toBe(true);
+  });
+
+  it("rejeita um SSN nas faixas nunca emitidas pela SSA (área 000/666/900+, grupo 00, serial 0000)", () => {
+    expect(validarSsn("000-45-6789")).toBe(false);
+    expect(validarSsn("666-45-6789")).toBe(false);
+    expect(validarSsn("900-45-6789")).toBe(false);
+    expect(validarSsn("123-00-6789")).toBe(false);
+    expect(validarSsn("123-45-0000")).toBe(false);
+  });
+
+  it("rejeita um SSN com os nove dígitos repetidos", () => {
+    expect(validarSsn("111-11-1111")).toBe(false);
+  });
+
+  it("rejeita entrada que não tem 9 dígitos", () => {
+    expect(validarSsn("123-45-678")).toBe(false);
+  });
+
+  it("aceita um NIN britânico bem formado", () => {
+    expect(validarNin(NIN_VALIDO)).toBe(true);
+    expect(validarNin("ab 12 34 56 c")).toBe(true); // minúsculas e espaços são normalizados
+  });
+
+  it("rejeita prefixos de dois-letras que o HMRC nunca emite", () => {
+    expect(validarNin("GB123456C")).toBe(false);
+    expect(validarNin("BG123456C")).toBe(false);
+    expect(validarNin("ZZ123456C")).toBe(false);
+  });
+
+  it("rejeita a primeira ou a segunda letra fora das permitidas", () => {
+    expect(validarNin("DA123456C")).toBe(false); // D é proibido na 1ª posição
+    expect(validarNin("AO123456C")).toBe(false); // O é proibido na 2ª posição
+  });
+
+  it("rejeita sufixo fora de A-D ou formato totalmente errado", () => {
+    expect(validarNin("AB123456E")).toBe(false);
+    expect(validarNin("AB12345C")).toBe(false); // 5 dígitos em vez de 6
   });
 });
 
@@ -115,6 +165,17 @@ describe("mascaramento de PII", () => {
     const resultado = maskText("use a chave sk-ant-abcdefghijklmnopqrstuvwxyz0123", vault);
     expect(resultado.kindsMascarados).toContain("segredo-api");
     expect(resultado.texto).not.toContain("abcdefghijklmnop");
+  });
+
+  it("mascara SSN e NIN em texto livre, como parte do Shield-Layer de Canais Globais", () => {
+    const vault = new PiiVault();
+    const texto = `SSN ${SSN_VALIDO} e NIN ${NIN_VALIDO} do cliente internacional.`;
+    const resultado = maskText(texto, vault);
+
+    expect(resultado.texto).not.toContain(SSN_VALIDO);
+    expect(resultado.texto).not.toContain(NIN_VALIDO);
+    expect(resultado.kindsMascarados).toContain("ssn-us");
+    expect(resultado.kindsMascarados).toContain("nin-uk");
   });
 
   it("recusa serializar o cofre, para que um log acidental falhe alto", () => {

@@ -18,7 +18,11 @@ export type PiiKind =
   | "conta-bancaria"
   | "valor-financeiro"
   | "segredo-api"
-  | "ip";
+  | "ip"
+  /** Social Security Number (EUA) — formato AAA-GG-SSSS, validado por faixa (ver `validarSsn`). */
+  | "ssn-us"
+  /** National Insurance Number (Reino Unido) — formato AA999999A, validado pelas regras públicas do HMRC (ver `validarNin`). */
+  | "nin-uk";
 
 /** Base legal/classificação LGPD de cada categoria — usada na trilha de auditoria. */
 export type PiiClassificacao = "identificador-pessoal" | "financeiro" | "contato" | "credencial" | "tecnico";

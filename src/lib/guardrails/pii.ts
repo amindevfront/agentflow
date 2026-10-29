@@ -22,6 +22,8 @@ export const CLASSIFICACAO_POR_KIND: Record<PiiKind, PiiClassificacao> = {
   "valor-financeiro": "financeiro",
   "segredo-api": "credencial",
   ip: "tecnico",
+  "ssn-us": "identificador-pessoal",
+  "nin-uk": "identificador-pessoal",
 };
 
 export const ROTULO_POR_KIND: Record<PiiKind, string> = {
@@ -37,6 +39,8 @@ export const ROTULO_POR_KIND: Record<PiiKind, string> = {
   "valor-financeiro": "Valor financeiro",
   "segredo-api": "Credencial",
   ip: "Endereço IP",
+  "ssn-us": "SSN (EUA)",
+  "nin-uk": "National Insurance Number (UK)",
 };
 
 const PREFIXO_PLACEHOLDER = "[[PII:";
@@ -185,6 +189,51 @@ export function validarLuhn(entrada: string): boolean {
   return soma % 10 === 0;
 }
 
+/**
+ * Valida um Social Security Number americano (formato AAA-GG-SSSS) pelas
+ * faixas publicamente documentadas como nunca emitidas pela SSA: área 000,
+ * 666 ou 900-999; grupo 00; serial 0000; ou os nove dígitos repetidos.
+ * Não há dígito verificador em um SSN — isto é o máximo de validação
+ * possível sem uma base de emissão real.
+ */
+export function validarSsn(entrada: string): boolean {
+  const d = apenasDigitos(entrada);
+  if (d.length !== 9) return false;
+  if (/^(\d)\1{8}$/.test(d)) return false;
+
+  const area = Number(d.slice(0, 3));
+  const grupo = Number(d.slice(3, 5));
+  const serial = Number(d.slice(5, 9));
+  if (area === 0 || area === 666 || area >= 900) return false;
+  if (grupo === 0) return false;
+  if (serial === 0) return false;
+  return true;
+}
+
+/** Prefixos de dois-letras que o HMRC nunca emite em um NIN britânico. */
+const PREFIXOS_NIN_INVALIDOS = new Set(["BG", "GB", "NK", "KN", "TN", "NT", "ZZ"]);
+/** A primeira letra de um NIN nunca é D, F, I, Q, U ou V (regra pública do HMRC). */
+const PRIMEIRA_LETRA_NIN_INVALIDA = new Set(["D", "F", "I", "Q", "U", "V"]);
+/** A segunda letra nunca é D, F, I, O, Q, U ou V. */
+const SEGUNDA_LETRA_NIN_INVALIDA = new Set(["D", "F", "I", "O", "Q", "U", "V"]);
+
+/**
+ * Valida um National Insurance Number britânico (formato AA 99 99 99 A,
+ * espaços opcionais) pelas regras públicas do HMRC: duas letras iniciais
+ * (fora da lista de prefixos nunca emitidos e das letras proibidas em cada
+ * posição), seis dígitos, e uma letra de sufixo A-D.
+ */
+export function validarNin(entrada: string): boolean {
+  const limpo = entrada.replace(/\s/g, "").toUpperCase();
+  if (!/^[A-Z]{2}\d{6}[A-D]$/.test(limpo)) return false;
+
+  const prefixo = limpo.slice(0, 2);
+  if (PREFIXOS_NIN_INVALIDOS.has(prefixo)) return false;
+  if (PRIMEIRA_LETRA_NIN_INVALIDA.has(limpo[0])) return false;
+  if (SEGUNDA_LETRA_NIN_INVALIDA.has(limpo[1])) return false;
+  return true;
+}
+
 function validarIpv4(entrada: string): boolean {
   const partes = entrada.split(".");
   if (partes.length !== 4) return false;
@@ -330,6 +379,21 @@ const DETECTORES: Detector[] = [
     regex: /\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{1,7}|\d{13,19}/g,
     bordaNumerica: true,
     aceita: (valor) => validarLuhn(valor),
+  },
+
+  // Identificadores pessoais internacionais (Canais Globais — EUA/UK).
+  {
+    kind: "ssn-us",
+    prioridade: 86,
+    regex: /\d{3}-\d{2}-\d{4}|\d{9}/g,
+    bordaNumerica: true,
+    aceita: (valor) => validarSsn(valor),
+  },
+  {
+    kind: "nin-uk",
+    prioridade: 83,
+    regex: /\b[A-Za-z]{2}\s?\d{2}\s?\d{2}\s?\d{2}\s?[A-Za-z]\b/g,
+    aceita: (valor) => validarNin(valor),
   },
 
   // Chave PIX aleatória (UUID).
@@ -525,6 +589,8 @@ const CHAVES_SENSIVEIS: Array<{ padrao: RegExp; kind: PiiKind }> = [
     kind: "cartao-credito",
   },
   { padrao: /^(pix|chave_?pix)$/i, kind: "chave-pix" },
+  { padrao: /^(ssn|social_?security(_?number)?)$/i, kind: "ssn-us" },
+  { padrao: /^(nin|national_?insurance(_?number)?)$/i, kind: "nin-uk" },
   { padrao: /^(conta|conta_?corrente|agencia|iban)$/i, kind: "conta-bancaria" },
   { padrao: /^(salario|renda|saldo|valor_?total|faturamento)$/i, kind: "valor-financeiro" },
 ];

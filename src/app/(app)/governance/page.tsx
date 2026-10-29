@@ -16,6 +16,7 @@ import { GuardrailInspectorPanel } from "@/components/governance/GuardrailInspec
 import { HandoffQueuePanel } from "@/components/governance/HandoffQueuePanel";
 import { OpexTaxShieldPanel } from "@/components/governance/OpexTaxShieldPanel";
 import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
+import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { drenarFilaAuditoria } from "@/lib/auditLog";
 
@@ -64,7 +65,12 @@ export default function GovernancePage() {
       {aba === "cofre" && <CredentialVaultPanel />}
       {aba === "auditoria" && <AuditTrailPanel />}
       {aba === "opex" && <OpexTaxShieldPanel />}
-      {aba === "parametros" && <RoiConfigPanel />}
+      {aba === "parametros" && (
+        <div className="flex flex-col gap-4">
+          <SimuladorContingenciaPanel />
+          <RoiConfigPanel />
+        </div>
+      )}
     </div>
   );
 }

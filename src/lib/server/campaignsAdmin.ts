@@ -34,6 +34,7 @@ const VARIAVEL_POR_CANAL: Record<Canal, string> = {
   facebook: "META_GRAPH_API_TOKEN",
   webchat: "", // webchat não tem provedor externo — a entrega é interna ao app
   email: "EMAIL_PROVIDER_API_KEY",
+  sms: "TWILIO_AUTH_TOKEN",
 };
 
 export type EnviarCanalReal = (

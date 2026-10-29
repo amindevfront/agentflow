@@ -14,7 +14,8 @@ import type { RunCostMetrics } from "./roi";
 // Canais e conversas
 // ---------------------------------------------------------------------------
 
-export type Canal = "whatsapp" | "webchat" | "instagram" | "facebook" | "email";
+/** `sms` cobre o adaptador Twilio (Canais Globais — EUA/UK/Europa, ver `@/lib/inbox/channelAdapters`). */
+export type Canal = "whatsapp" | "webchat" | "instagram" | "facebook" | "email" | "sms";
 
 export type ConversationStatus =
   | "aberta"
