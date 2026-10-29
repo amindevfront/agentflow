@@ -95,19 +95,40 @@ function novoRunId(): string {
  * O payload recebido aqui já está sanitizado por `inspecionarEntrada` —
  * PII substituída por marcadores — então o texto que de fato atravessa a
  * fronteira para o provedor externo nunca contém dado pessoal em claro.
+ *
+ * `contextoConversao` é o Auto-Feedback de Conversão: o texto determinístico
+ * agregado em `Workspace.insightsConversaoTexto` a partir dos desfechos
+ * comerciais registrados pelo operador na Neural Inbox (ver
+ * `@/lib/inbox/conversionFeedback`) — é assim que "o agente ajusta sua
+ * conversão nos próximos ciclos do mesmo nicho": o próprio histórico de
+ * vendas fechadas/perdidas do workspace entra no prompt da próxima execução.
+ * Parâmetro opcional e retrocompatível — ausente, o prompt não muda em nada.
  */
-export function montarPrompt(flow: Pick<Flow, "nome" | "gatilho" | "origem">, payloadSanitizado: string): string {
-  return [
+export function montarPrompt(
+  flow: Pick<Flow, "nome" | "gatilho" | "origem">,
+  payloadSanitizado: string,
+  contextoConversao?: string | null
+): string {
+  const linhas = [
     `Você está operando o fluxo de automação "${flow.nome}" do AgentFlow.`,
     `Gatilho: ${flow.gatilho}${flow.origem ? ` · Origem: ${flow.origem}` : ""}.`,
+  ];
+
+  if (contextoConversao) {
+    linhas.push("", `Contexto de conversão (Auto-Feedback, histórico real deste workspace): ${contextoConversao}`);
+  }
+
+  linhas.push(
     "",
     "Dado o payload abaixo (já sanitizado — marcadores como [[PII:TIPO:N]] substituem dados pessoais",
     "e NÃO devem ser tratados como texto a reescrever, apenas preservados onde aparecerem), produza uma",
     "resposta curta e objetiva descrevendo a ação concluída ou o próximo passo recomendado.",
     "",
     "Payload:",
-    payloadSanitizado,
-  ].join("\n");
+    payloadSanitizado
+  );
+
+  return linhas.join("\n");
 }
 
 /** Deriva os passos do FlowRun a partir da definição do fluxo e do desfecho. */

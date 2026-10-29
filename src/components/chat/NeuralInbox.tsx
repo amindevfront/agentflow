@@ -23,14 +23,19 @@ import type {
   Canal,
   Conversation,
   ConversationMessage,
+  ConversionOutcome,
+  HandoffTicket,
   OperatorProfile,
   RoiConfig,
 } from "@/types";
+import { ROTULO_DESFECHO_CONVERSAO } from "@/types";
 import {
+  aplicarCircuitBreakerPorSlaVencido,
   atribuirConversaManual,
   atribuirConversaPorRoteamento,
   criarConversa,
   enviarMensagemOperador,
+  registrarDesfechoConversao,
   registrarMensagemCliente,
   resolverConversa,
   subscribeAgentProfiles,
@@ -38,6 +43,7 @@ import {
   subscribeMessages,
   subscribeOperatorProfiles,
 } from "@/lib/inbox/firestore";
+import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { rotear } from "@/lib/inbox/swarm";
 import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
@@ -147,6 +153,7 @@ export function NeuralInbox() {
   // de fato se aplica (ver Dual-Layer/Onboarding Cognitivo).
   const { data: workspace } = useWorkspaceDoc(workspaceId);
   const [conversas, setConversas] = useState<Conversation[]>([]);
+  const [tickets, setTickets] = useState<HandoffTicket[]>([]);
   const [operadores, setOperadores] = useState<OperatorProfile[]>([]);
   const [agentes, setAgentes] = useState<AgentProfile[]>([]);
   const [mensagens, setMensagens] = useState<ConversationMessage[]>([]);
@@ -177,12 +184,27 @@ export function NeuralInbox() {
       subscribeConversations(setConversas, {
         onError: () => setErro("Não foi possível carregar as conversas agora. Tente novamente em instantes."),
       }),
+      // SLA Rescue: tickets de transbordo alimentam a varredura abaixo, que
+      // aciona o Circuit Breaker quando um P1 estoura o SLA (ver efeito
+      // seguinte) — independente de qualquer sinal textual de frustração.
+      subscribeFilaTransbordo(setTickets),
       subscribeOperatorProfiles(setOperadores),
       subscribeAgentProfiles(setAgentes),
       subscribeRoiConfig(setRoiConfig),
     ];
     return () => cancelamentos.forEach((cancelar) => cancelar());
   }, []);
+
+  // SLA Rescue & Circuit Breaker: varredura sob demanda (mesmo padrão de
+  // `expirarTicketsVencidos`) — a cada mudança em conversas/tickets, aplica o
+  // Circuit Breaker (e congela o bot) nas conversas cujo P1 estourou o SLA.
+  // Idempotente: uma conversa já marcada nunca é reescrita.
+  useEffect(() => {
+    if (conversas.length === 0 || tickets.length === 0) return;
+    aplicarCircuitBreakerPorSlaVencido(conversas, tickets, workspaceId ?? undefined).catch((erro) => {
+      console.error("[inbox] falha na varredura de Circuit Breaker por SLA:", erro);
+    });
+  }, [conversas, tickets, workspaceId]);
 
   useEffect(() => {
     if (!selecionadaId) {
@@ -323,6 +345,9 @@ export function NeuralInbox() {
         totalMensagensAnteriores: selecionada.totalMensagens,
         operadores,
         agentes,
+        // SLA Rescue & Circuit Breaker: com o bot congelado, o Swarm Routing
+        // nunca pode escolher um agente automatizado para este caso.
+        circuitBreakerAtivo: selecionada.circuitBreakerAtivo,
       });
 
       await atribuirConversaPorRoteamento(selecionada.id, decisao);
@@ -341,6 +366,25 @@ export function NeuralInbox() {
       await resolverConversa(selecionada.id, selecionada.workspaceId);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível resolver a conversa.");
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  /** Auto-Feedback de Conversão: registra o desfecho comercial e reagrega o contexto do nicho para a IA. */
+  async function handleRegistrarDesfecho(desfecho: ConversionOutcome) {
+    if (!selecionada) return;
+    setProcessando(true);
+    setErro(null);
+    try {
+      await registrarDesfechoConversao({
+        conversationId: selecionada.id,
+        desfecho,
+        workspaceId: selecionada.workspaceId,
+        setor: workspace?.setor,
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível registrar o desfecho comercial.");
     } finally {
       setProcessando(false);
     }
@@ -496,7 +540,13 @@ export function NeuralInbox() {
                       onClick={() => setSelecionadaId(conversa.id)}
                       className={cn(
                         "flex w-full items-center gap-3 rounded-[var(--radius-sm)] border px-3 py-2.5 text-left transition-colors",
-                        ativa ? "border-signal-500 bg-signal-50" : "border-transparent hover:bg-mist-50"
+                        // SLA Rescue & Circuit Breaker: alerta pulsante em borda vermelha
+                        // tem prioridade visual sobre o estado de "selecionada".
+                        conversa.circuitBreakerAtivo
+                          ? "circuit-breaker-pulse border-state-error-ink bg-state-error-bg"
+                          : ativa
+                            ? "border-signal-500 bg-signal-50"
+                            : "border-transparent hover:bg-mist-50"
                       )}
                     >
                       <span
@@ -539,7 +589,12 @@ export function NeuralInbox() {
           )}
         </section>
 
-        <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+        <section
+          className={cn(
+            "flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4",
+            selecionada?.circuitBreakerAtivo && "circuit-breaker-pulse"
+          )}
+        >
           {!selecionada ? (
             <EmptyState
               title="Selecione uma conversa"
@@ -623,6 +678,36 @@ export function NeuralInbox() {
                   <Button size="sm" variant="secondary" disabled={processando} onClick={handleResolver}>
                     Marcar como resolvida
                   </Button>
+                )}
+              </div>
+
+              {/* Auto-Feedback de Conversão: o desfecho registrado aqui
+                  reagrega `Workspace.insightsConversaoTexto` — o contexto que
+                  `montarPrompt` injeta nos próximos ciclos do MESMO nicho. */}
+              <div className="flex flex-wrap items-center gap-1.5 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-2">
+                <span className="text-xs font-medium text-ink-500">Desfecho comercial:</span>
+                {(Object.entries(ROTULO_DESFECHO_CONVERSAO) as Array<[ConversionOutcome, string]>).map(
+                  ([valor, rotulo]) => {
+                    const ativo = selecionada.desfechoConversao === valor;
+                    return (
+                      <button
+                        key={valor}
+                        type="button"
+                        disabled={processando}
+                        onClick={() => handleRegistrarDesfecho(valor)}
+                        className={cn(
+                          "rounded-full px-2.5 py-1 text-[11px] font-medium transition-colors",
+                          ativo
+                            ? valor === "fechado-venda"
+                              ? "bg-state-done text-white"
+                              : "bg-state-error text-white"
+                            : "border border-ink-100 bg-white text-ink-500 hover:bg-mist-50"
+                        )}
+                      >
+                        [ {rotulo} ]
+                      </button>
+                    );
+                  }
                 )}
               </div>
 

@@ -41,17 +41,22 @@ import type {
   Conversation,
   ConversationMessage,
   ConversationStatus,
+  ConversionOutcome,
+  HandoffTicket,
   MessageSender,
+  NicheKey,
   OperatorProfile,
   RoutingDecision,
 } from "@/types";
 import { auth, db } from "@/lib/firebase";
-import { DEFAULT_WORKSPACE_ID, requireDb } from "@/lib/firestore";
+import { DEFAULT_WORKSPACE_ID, patchWorkspace, requireDb } from "@/lib/firestore";
 import { interceptarMensagem, processarMensagemEntrante } from "@/lib/guardrails/piiVault";
 import { detectarCompliancePreventivo, maiorSeveridade } from "@/lib/guardrails";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
 import { detectarLeadAltoPadrao } from "@/lib/inbox/highEndLead";
-import { abrirTransbordo } from "@/lib/humanInTheLoop";
+import { calcularInsightsConversao, gerarContextoConversaoIA } from "@/lib/inbox/conversionFeedback";
+import { abrirTransbordo, slaViolado } from "@/lib/humanInTheLoop";
+import { NICHE_PRESETS } from "@/lib/niches";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { enfileirarEscrita } from "@/lib/offlineQueue";
 import { assinarComFallbackDeIndice } from "@/lib/firestoreResilience";
@@ -356,6 +361,12 @@ export async function registrarMensagemCliente(entrada: {
 
   const circuitBreakerDisparadoAgora = frustration.circuitBreakerAtivado && !conversaAtual.circuitBreakerAtivo;
 
+  // SLA Rescue & Circuit Breaker — "congela o bot instantaneamente": se o
+  // caso estava com um agente automatizado no momento em que a frustração
+  // cruza o limiar crítico, o bot é desligado do caso NESTE MESMO update, não
+  // em um passo seguinte — a janela entre detectar e congelar é zero.
+  const congelarBot = circuitBreakerDisparadoAgora && conversaAtual.atribuidoTipo === "agente";
+
   // Lead Qualificado de Alto Padrão (nicho Imobiliário/Construtoras) — mesmo
   // histórico recente usado na frustração, outra lente sobre o mesmo texto.
   // A exibição é que é restrita por nicho na UI; o cálculo em si roda sempre
@@ -375,6 +386,7 @@ export async function registrarMensagemCliente(entrada: {
     leadSinaisCapacidade: leadAltoPadrao.sinaisCapacidade,
     leadSinaisUrgencia: leadAltoPadrao.sinaisUrgencia,
     status: conversaAtual.status === "resolvida" ? "aberta" : conversaAtual.status,
+    ...(congelarBot ? { atribuidoTipo: "nenhum", atribuidoId: null, atribuidoNome: null } : {}),
   });
 
   // 4. Circuit Breaker: abre um P1 de SLA na primeira vez que dispara.
@@ -582,5 +594,161 @@ export async function resolverConversa(conversationId: string, workspaceId = DEF
     recurso: `${COLECAO_CONVERSAS}/${conversationId}`,
     workspaceId,
     detalhes: { origem: "neural-inbox" },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// SLA Rescue & Circuit Breaker — estouro de SLA de um P1 também congela o bot
+// ---------------------------------------------------------------------------
+//
+// `registrarMensagemCliente` já dispara o Circuit Breaker por FRUSTRAÇÃO no
+// instante da mensagem. Esta seção cobre o segundo gatilho, independente de
+// texto: um ticket P1 (`HandoffTicket`, SLA de 15 min — ver `SLA_MINUTOS` em
+// `@/lib/humanInTheLoop`) vinculado a uma conversa que estourou o prazo sem
+// decisão humana É, por si só, uma falha de atendimento grave o suficiente
+// para congelar o bot — mesmo que o cliente nunca tenha escrito uma palavra
+// de atrito.
+//
+// Mesmo padrão de `expirarTicketsVencidos`: varredura sob demanda (ao abrir a
+// Neural Inbox), não job agendado — o AgentFlow não tem worker server-side
+// nesta versão (ver nota em `@/lib/humanInTheLoop`).
+
+export interface CircuitBreakerPorSla {
+  conversationId: string;
+  ticketId: string;
+}
+
+/**
+ * Decide quais conversas precisam ter o Circuit Breaker acionado por estouro
+ * de SLA de um ticket P1 vinculado — função pura, sem Firestore, diretamente
+ * testável.
+ *
+ * Critérios: ticket de prioridade `p1`, vinculado a uma conversa
+ * (`conversationId`), ainda aberto para decisão (`aberto`/`em-analise`), com
+ * SLA já violado (`slaViolado`), e cuja conversa ainda não está marcada como
+ * circuit breaker ativo — evita reescrever o que já está correto.
+ */
+export function detectarCircuitBreakerPorSlaVencido(
+  conversas: Conversation[],
+  tickets: HandoffTicket[],
+  referencia = new Date()
+): CircuitBreakerPorSla[] {
+  const conversaPorId = new Map(conversas.map((c) => [c.id, c]));
+  const resultado: CircuitBreakerPorSla[] = [];
+  const conversasJaMarcadas = new Set<string>();
+
+  for (const ticket of tickets) {
+    if (ticket.prioridade !== "p1" || !ticket.conversationId) continue;
+    if (ticket.status !== "aberto" && ticket.status !== "em-analise") continue;
+    if (!slaViolado(ticket, referencia)) continue;
+
+    const conversa = conversaPorId.get(ticket.conversationId);
+    if (!conversa || conversa.circuitBreakerAtivo || conversasJaMarcadas.has(conversa.id)) continue;
+
+    conversasJaMarcadas.add(conversa.id);
+    resultado.push({ conversationId: conversa.id, ticketId: ticket.id });
+  }
+
+  return resultado;
+}
+
+/**
+ * Aplica o Circuit Breaker (e congela o bot) às conversas detectadas por
+ * `detectarCircuitBreakerPorSlaVencido`. Idempotente: uma conversa já marcada
+ * nunca é reescrita, então chamar isto repetidamente (a cada snapshot) é
+ * seguro.
+ */
+export async function aplicarCircuitBreakerPorSlaVencido(
+  conversas: Conversation[],
+  tickets: HandoffTicket[],
+  workspaceId = DEFAULT_WORKSPACE_ID
+): Promise<number> {
+  const database = requireDb();
+  const pendentes = detectarCircuitBreakerPorSlaVencido(conversas, tickets);
+
+  for (const { conversationId, ticketId } of pendentes) {
+    try {
+      await updateDoc(doc(database, COLECAO_CONVERSAS, conversationId), {
+        circuitBreakerAtivo: true,
+        slaTicketId: ticketId,
+        // Congela o bot imediatamente — mesmo racional de `registrarMensagemCliente`.
+        atribuidoTipo: "nenhum",
+        atribuidoId: null,
+        atribuidoNome: null,
+      });
+
+      await registrarEventoAuditoriaSilencioso({
+        tipo: "guardrail.transbordo.acionado",
+        recurso: `${COLECAO_CONVERSAS}/${conversationId}`,
+        workspaceId,
+        severidade: "critica",
+        detalhes: { motivo: "sla-p1-estourado", ticketId },
+      });
+    } catch (erro) {
+      // Uma conversa que não pôde ser atualizada não deve impedir as demais.
+      console.error(`[inbox] falha ao aplicar Circuit Breaker por SLA vencido em ${conversationId}:`, erro);
+    }
+  }
+
+  return pendentes.length;
+}
+
+// ---------------------------------------------------------------------------
+// Auto-Feedback de Conversão — a IA aprende com o negócio
+// ---------------------------------------------------------------------------
+
+export interface RegistrarDesfechoConversaoInput {
+  conversationId: string;
+  desfecho: ConversionOutcome;
+  workspaceId?: string;
+  /** Nicho do workspace — rotula o contexto gerado; omitido usa um rótulo genérico. */
+  setor?: NicheKey;
+}
+
+/**
+ * Registra o desfecho comercial de um atendimento e reagrega o contexto de
+ * conversão do workspace.
+ *
+ * O desfecho em si grava rápido (um `updateDoc`). A reagregação (ler todas as
+ * conversas do workspace, recalcular `calcularInsightsConversao` e gravar
+ * `Workspace.insightsConversaoTexto`) é mais cara e, se falhar, NÃO desfaz o
+ * registro do desfecho — o dado primário já está salvo; perder a
+ * reagregação é um incidente de observabilidade, corrigido no próximo
+ * desfecho registrado.
+ */
+export async function registrarDesfechoConversao(entrada: RegistrarDesfechoConversaoInput): Promise<void> {
+  return enfileirarEscrita("Registrar desfecho de conversão", async () => {
+    const database = requireDb();
+    const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
+    const agora = new Date().toISOString();
+
+    await updateDoc(doc(database, COLECAO_CONVERSAS, entrada.conversationId), {
+      desfechoConversao: entrada.desfecho,
+      desfechoConversaoRegistradoEm: agora,
+    });
+
+    await registrarEventoAuditoriaSilencioso({
+      tipo: "config.alterada",
+      recurso: `${COLECAO_CONVERSAS}/${entrada.conversationId}`,
+      workspaceId,
+      detalhes: { desfechoConversao: entrada.desfecho },
+    });
+
+    try {
+      const todasSnap = await getDocs(
+        query(collection(database, COLECAO_CONVERSAS), where("workspaceId", "==", workspaceId))
+      );
+      const conversas = todasSnap.docs.map((d) => ({ ...(d.data() as Conversation), id: d.id }));
+      const insights = calcularInsightsConversao(conversas);
+      const nicheLabel = entrada.setor ? NICHE_PRESETS[entrada.setor].label : "este nicho";
+      const contexto = gerarContextoConversaoIA(insights, nicheLabel);
+
+      await patchWorkspace(workspaceId, {
+        insightsConversaoTexto: contexto,
+        insightsConversaoAtualizadoEm: agora,
+      });
+    } catch (erro) {
+      console.error("[inbox] falha ao atualizar insights de conversão do workspace:", erro);
+    }
   });
 }

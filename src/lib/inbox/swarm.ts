@@ -248,7 +248,18 @@ export interface RotearInput {
   operadores: OperatorProfile[];
   agentes: AgentProfile[];
   agora?: Date;
+  /**
+   * SLA Rescue & Circuit Breaker: com o circuit breaker ativo (frustração
+   * crítica OU P1 com SLA estourado — ver `@/lib/inbox/firestore`), NENHUM
+   * agente automatizado pode ser escolhido, independente de score. "Congela
+   * o bot instantaneamente" significa, no roteador, que o bot sai da
+   * disputa por este caso até a decisão humana resolver o circuit breaker.
+   */
+  circuitBreakerAtivo?: boolean;
 }
+
+/** Motivo fixo de descarte de um agente quando o Circuit Breaker está ativo — nunca um score calculado. */
+const MOTIVO_BOT_CONGELADO = "Circuit Breaker ativo — bot congelado, caso exige atendimento humano";
 
 /**
  * Decide quem recebe o caso — humano ou agente — entre todos os candidatos
@@ -263,7 +274,15 @@ export function rotear(input: RotearInput): RoutingDecision {
   const complexidade = calcularComplexidade(input.texto, input.totalMensagensAnteriores ?? 0);
 
   const candidatosHumanos = input.operadores.map((op) => pontuarOperador(op, intencao, complexidade));
-  const candidatosAgentes = input.agentes.map((ag) => pontuarAgente(ag, intencao, complexidade));
+  const candidatosAgentes = input.circuitBreakerAtivo
+    ? input.agentes.map((ag) => ({
+        tipo: "agente" as const,
+        id: ag.id,
+        nome: ag.nome,
+        score: 0,
+        motivos: [MOTIVO_BOT_CONGELADO],
+      }))
+    : input.agentes.map((ag) => pontuarAgente(ag, intencao, complexidade));
 
   const candidatos = [...candidatosHumanos, ...candidatosAgentes]
     .filter((c) => c.score > 0)

@@ -97,6 +97,29 @@ describe("montarPrompt", () => {
     expect(prompt).toContain(FLOW_BASE.gatilho);
     expect(prompt).toContain("[[PII:CPF:1]]");
   });
+
+  // Auto-Feedback de Conversão: `contextoConversao` é o canal real pelo qual
+  // os desfechos comerciais registrados na Neural Inbox chegam ao prompt da
+  // próxima execução do mesmo workspace/nicho (ver `@/lib/inbox/conversionFeedback`).
+  it("omite o bloco de contexto de conversão quando ausente (retrocompatibilidade)", () => {
+    const prompt = montarPrompt(FLOW_BASE, "payload qualquer");
+    expect(prompt).not.toContain("Contexto de conversão");
+  });
+
+  it("injeta o contexto de conversão quando fornecido", () => {
+    const prompt = montarPrompt(
+      FLOW_BASE,
+      "payload qualquer",
+      "68% fechados, 25% perdidos por preço, 7% perdidos por falta de agenda."
+    );
+    expect(prompt).toContain("Contexto de conversão");
+    expect(prompt).toContain("68% fechados");
+  });
+
+  it("não injeta nada quando o contexto de conversão é null ou string vazia", () => {
+    expect(montarPrompt(FLOW_BASE, "payload", null)).not.toContain("Contexto de conversão");
+    expect(montarPrompt(FLOW_BASE, "payload", "")).not.toContain("Contexto de conversão");
+  });
 });
 
 describe("executarFluxo — integração completa (guardrails → métrica → ROI)", () => {

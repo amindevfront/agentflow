@@ -61,9 +61,11 @@ function clienteAnthropic(): Anthropic {
  * sobre qualquer estimativa (ver `RunCostMetrics.custoModeloUsd` em
  * `@/types/roi` e o comentário equivalente em `@/lib/roi`).
  */
-export function criarExecutorAnthropic(flow: Pick<Flow, "nome" | "gatilho" | "origem">): (
-  acumulador: AcumuladorUso
-) => ExecutorLlm {
+export function criarExecutorAnthropic(
+  flow: Pick<Flow, "nome" | "gatilho" | "origem">,
+  /** Auto-Feedback de Conversão — ver `montarPrompt` em `./orchestrator`. */
+  contextoConversao?: string | null
+): (acumulador: AcumuladorUso) => ExecutorLlm {
   const modelo = modeloOrquestrador();
   const preco = PRECOS_REFERENCIA[modelo];
 
@@ -74,7 +76,7 @@ export function criarExecutorAnthropic(flow: Pick<Flow, "nome" | "gatilho" | "or
       const resposta = await clienteAnthropic().messages.create({
         model: modelo,
         max_tokens: MAX_TOKENS_SAIDA,
-        messages: [{ role: "user", content: montarPrompt(flow, payloadSanitizado) }],
+        messages: [{ role: "user", content: montarPrompt(flow, payloadSanitizado, contextoConversao) }],
       });
 
       acumulador.tokensEntrada += resposta.usage.input_tokens;
@@ -143,11 +145,27 @@ export async function executarFluxoReal(
     throw new ErroApi(404, "Fluxo não encontrado.", "fluxo_nao_encontrado");
   }
 
+  // Auto-Feedback de Conversão: lê o contexto já agregado em
+  // `Workspace.insightsConversaoTexto` (ver `@/lib/inbox/conversionFeedback`)
+  // e injeta no prompt desta execução. Leitura best-effort — a ausência do
+  // workspace ou do campo nunca impede a execução do fluxo, apenas a deixa
+  // sem esse contexto adicional (degradação graciosa).
+  let contextoConversao: string | undefined;
+  try {
+    const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(flow.workspaceId).get();
+    const dados = workspaceSnap.exists ? (workspaceSnap.data() as { insightsConversaoTexto?: unknown }) : null;
+    if (typeof dados?.insightsConversaoTexto === "string") {
+      contextoConversao = dados.insightsConversaoTexto;
+    }
+  } catch (erro) {
+    console.error(`[orchestrator] falha ao ler insights de conversão do workspace ${flow.workspaceId}:`, erro);
+  }
+
   return executarFluxo({
     flowId,
     payload,
     usuario,
-    criarExecutor: criarExecutorAnthropic(flow),
+    criarExecutor: criarExecutorAnthropic(flow, contextoConversao),
     portas: portasAdmin,
   });
 }

@@ -71,3 +71,19 @@ body {
 .dopamina-pulse {
   animation: dopamina-pulse 1.8s ease-in-out infinite;
 }
+
+/* SLA Rescue & Circuit Breaker: alerta pulsante em borda vermelha — só cor,
+   via box-shadow, sobre a borda de 1px já existente. Nenhum glow/blur real,
+   nenhuma cor nova: `--color-state-error-ink` já é token do sistema. */
+@keyframes circuit-breaker-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(229, 72, 77, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(229, 72, 77, 0);
+  }
+}
+.circuit-breaker-pulse {
+  border-color: var(--color-state-error-ink) !important;
+  animation: circuit-breaker-pulse 1.2s ease-in-out infinite;
+}

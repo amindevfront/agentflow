@@ -202,3 +202,57 @@ describe("rotear", () => {
     expect(() => rotear({ texto: "Oi", operadores: [], agentes: [] })).not.toThrow();
   });
 });
+
+describe("rotear — SLA Rescue & Circuit Breaker", () => {
+  it("nunca escolhe um agente automatizado quando o circuit breaker está ativo, mesmo sendo o candidato naturalmente melhor", () => {
+    const decisao = rotear({
+      texto: "Minha fatura veio com cobrança errada, quero entender o valor.",
+      operadores: [operador({ uid: "op-financeiro", especialidades: ["financeiro"], taxaResolucao: 0.5 })],
+      agentes: [agente({ id: "bot-financeiro", especialidades: ["financeiro"], taxaResolucaoAutomatica: 0.99 })],
+      circuitBreakerAtivo: true,
+    });
+
+    expect(decisao.escolhido?.tipo).toBe("humano");
+    const candidatoAgente = decisao.candidatos.find((c) => c.tipo === "agente");
+    expect(candidatoAgente).toBeUndefined(); // score 0 é filtrado da lista de candidatos viáveis.
+  });
+
+  it("explica o descarte do agente com o motivo do circuit breaker, não com um score calculado", () => {
+    const comBreaker = rotear({
+      texto: "Minha fatura veio com cobrança errada.",
+      operadores: [],
+      agentes: [agente({ especialidades: ["financeiro"] })],
+      circuitBreakerAtivo: true,
+    });
+    const semBreaker = rotear({
+      texto: "Minha fatura veio com cobrança errada.",
+      operadores: [],
+      agentes: [agente({ especialidades: ["financeiro"] })],
+      circuitBreakerAtivo: false,
+    });
+
+    expect(comBreaker.escolhido).toBeNull();
+    expect(semBreaker.escolhido?.tipo).toBe("agente");
+  });
+
+  it("com o breaker ativo e nenhum humano disponível, devolve escolhido null em vez de cair para o bot", () => {
+    const decisao = rotear({
+      texto: "Isso é um absurdo, quero cancelar!",
+      operadores: [operador({ disponivel: false })],
+      agentes: [agente({ especialidades: ["retencao"], taxaResolucaoAutomatica: 1 })],
+      circuitBreakerAtivo: true,
+    });
+
+    expect(decisao.escolhido).toBeNull();
+  });
+
+  it("sem circuit breaker, o comportamento de roteamento normal é preservado (regressão)", () => {
+    const decisao = rotear({
+      texto: "Minha fatura veio com cobrança errada, quero entender o valor.",
+      operadores: [operador({ uid: "op-financeiro", especialidades: ["financeiro"], taxaResolucao: 0.9 })],
+      agentes: [agente({ id: "bot-financeiro", especialidades: ["financeiro"] })],
+    });
+
+    expect(decisao.escolhido).not.toBeNull();
+  });
+});

@@ -67,6 +67,19 @@ export interface RoutingDecision {
   decididoEm: string;
 }
 
+// ---------------------------------------------------------------------------
+// Auto-Feedback de Conversão
+// ---------------------------------------------------------------------------
+
+/** Desfecho comercial de um atendimento, registrado manualmente pelo operador ao concluí-lo. */
+export type ConversionOutcome = "fechado-venda" | "perdido-preco" | "perdido-sem-agenda";
+
+export const ROTULO_DESFECHO_CONVERSAO: Record<ConversionOutcome, string> = {
+  "fechado-venda": "Fechado / Venda Concretizada",
+  "perdido-preco": "Perdido / Preço",
+  "perdido-sem-agenda": "Perdido / Sem Agenda",
+};
+
 export interface Conversation {
   id: string;
   workspaceId: string;
@@ -84,10 +97,20 @@ export interface Conversation {
   /** Índice de frustração corrente (0..100). Recalculado a cada mensagem do cliente. */
   frustrationIndex: number;
   frustrationTendencia: FrustrationTrend;
-  /** `true` quando o índice cruzou o limiar crítico nesta conversa. */
+  /** `true` quando o índice cruzou o limiar crítico OU um ticket P1 vinculado estourou o SLA (ver `@/lib/inbox/firestore`). */
   circuitBreakerAtivo: boolean;
   /** Ticket de transbordo (HandoffTicket) aberto quando o circuit breaker disparou. */
   slaTicketId?: string | null;
+
+  /**
+   * Auto-Feedback de Conversão: desfecho comercial registrado pelo operador
+   * ao concluir o atendimento. Alimenta `calcularInsightsConversao`
+   * (`@/lib/inbox/conversionFeedback`), que por sua vez atualiza
+   * `Workspace.insightsConversaoTexto` — o parâmetro contextual consumido por
+   * `montarPrompt` nos próximos ciclos do mesmo nicho.
+   */
+  desfechoConversao?: ConversionOutcome | null;
+  desfechoConversaoRegistradoEm?: string | null;
 
   /**
    * Lead Qualificado de Alto Padrão (nicho Imobiliário/Construtoras):

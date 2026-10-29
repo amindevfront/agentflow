@@ -78,6 +78,17 @@ export interface Workspace {
   guardrailOverrides?: Partial<GuardrailPolicy>;
   /** Presença indica que o quiz já foi respondido — controla a reexibição do modal. */
   quizRespondidoEm?: string;
+
+  /**
+   * Auto-Feedback de Conversão: resumo textual determinístico, derivado dos
+   * desfechos (`Conversation.desfechoConversao`) registrados neste nicho —
+   * ver `@/lib/inbox/conversionFeedback`. É o "parâmetro contextual do
+   * workspace" consumido por `montarPrompt` (`@/lib/server/orchestrator`)
+   * nos próximos ciclos do mesmo nicho. `null` quando não há amostra
+   * suficiente para gerar contexto.
+   */
+  insightsConversaoTexto?: string | null;
+  insightsConversaoAtualizadoEm?: string | null;
 }
 
 export type InviteStatus = "pendente" | "aceito" | "expirado";
