@@ -13,8 +13,15 @@
 // workspace de outra pessoa a partir do slug — ver `getWorkspaceBySlug` em
 // `@/lib/firestore`, que a própria regra do Firestore já restringe ao
 // chamador autenticado.
+//
+// Isolamento adicional: o slug da URL é VALIDADO contra o slug real do
+// workspace resolvido (`slugCorrespondeAoWorkspace`). Sem essa checagem,
+// qualquer slug na URL exibiria os dados de quem estiver logado — um "link
+// fantasma" que parece apontar para um cliente e na prática mostra outro.
+// Slug divergente nunca mostra o painel: redireciona para uma tela de erro
+// dedicada (ver `slugConferido` abaixo).
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import type { Campaign, Conversation, FlowRun, HandoffTicket, RoiConfig, Workspace } from "@/types";
 import { useAuth } from "@/lib/auth";
@@ -24,22 +31,63 @@ import { patchWorkspace, subscribeFlowRuns } from "@/lib/firestore";
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
-import { EXPEDIENTE_PADRAO, calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
+import {
+  EXPEDIENTE_PADRAO,
+  calcularReceitaRecuperadaMadrugada,
+  identificarPicoForaExpediente,
+} from "@/lib/inbox/revenueRescue";
 import {
   ROI_CONFIG_PADRAO,
   cambioParaMoeda,
   calcularRoi,
+  calcularVariacaoPercentual,
   formatarMoeda,
   periodoMesAtual,
+  periodoUltimosDias,
   subscribeRoiConfig,
 } from "@/lib/roi";
 import { NICHE_PRESETS } from "@/lib/niches";
+import { slugCorrespondeAoWorkspace } from "@/lib/portalSlug";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { MetricCard } from "@/components/ui/MetricCard";
-import { EmptyState } from "@/components/ui/EmptyState";
 
 const DIAS_UTEIS_PADRAO = [1, 2, 3, 4, 5];
+const UMA_SEMANA_MS = 7 * 86_400_000;
+
+/**
+ * Animação de contagem — só suaviza a transição visual até o valor real já
+ * calculado por `calcularRoi`; nunca interpola rumo a um número inventado.
+ */
+function useContagemAnimada(valorFinal: number, duracaoMs = 700): number {
+  const [valorExibido, setValorExibido] = useState(valorFinal);
+  const valorAnteriorRef = useRef(valorFinal);
+
+  useEffect(() => {
+    const inicio = valorAnteriorRef.current;
+    const alvo = valorFinal;
+    if (inicio === alvo) return;
+
+    const inicioTempo = performance.now();
+    let cancelado = false;
+
+    function passo(agora: number) {
+      if (cancelado) return;
+      const progresso = Math.min(1, (agora - inicioTempo) / duracaoMs);
+      setValorExibido(inicio + (alvo - inicio) * progresso);
+      if (progresso < 1) requestAnimationFrame(passo);
+      else valorAnteriorRef.current = alvo;
+    }
+
+    const frame = requestAnimationFrame(passo);
+    return () => {
+      cancelado = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [valorFinal, duracaoMs]);
+
+  return valorExibido;
+}
 
 export default function PortalClientePage() {
   const params = useParams<{ slug: string }>();
@@ -58,6 +106,7 @@ export default function PortalClientePage() {
 
   const [salvandoConfig, setSalvandoConfig] = useState(false);
   const [configSalva, setConfigSalva] = useState(false);
+  const [flashSucesso, setFlashSucesso] = useState(false);
   const [inicioHora, setInicioHora] = useState(EXPEDIENTE_PADRAO.inicioHora);
   const [fimHora, setFimHora] = useState(EXPEDIENTE_PADRAO.fimHora);
   const [linkConversao, setLinkConversao] = useState("");
@@ -100,6 +149,42 @@ export default function PortalClientePage() {
       }),
     [execucoes, tickets, conversas, campanhas, config, referencia]
   );
+  const economiaAnimada = useContagemAnimada(snapshot.economiaLiquidaBrl);
+
+  // Comparação semana atual vs. semana anterior — real, calculada a partir
+  // dos MESMOS dados já carregados (nenhuma chamada extra, nenhuma métrica
+  // simulada). Sem base de comparação (semana anterior zerada), o badge de
+  // crescimento simplesmente não aparece — ver `calcularVariacaoPercentual`.
+  const snapshotSemanaAtual = useMemo(
+    () =>
+      calcularRoi({
+        execucoes,
+        tickets,
+        conversas,
+        campanhas,
+        config,
+        periodo: periodoUltimosDias(7, referencia),
+        referencia,
+      }),
+    [execucoes, tickets, conversas, campanhas, config, referencia]
+  );
+  const snapshotSemanaAnterior = useMemo(
+    () =>
+      calcularRoi({
+        execucoes,
+        tickets,
+        conversas,
+        campanhas,
+        config,
+        periodo: periodoUltimosDias(7, new Date(referencia.getTime() - UMA_SEMANA_MS)),
+        referencia,
+      }),
+    [execucoes, tickets, conversas, campanhas, config, referencia]
+  );
+  const variacaoSemanal = useMemo(
+    () => calcularVariacaoPercentual(snapshotSemanaAtual.economiaLiquidaBrl, snapshotSemanaAnterior.economiaLiquidaBrl),
+    [snapshotSemanaAtual, snapshotSemanaAnterior]
+  );
 
   const janelaExpediente = useMemo(
     () => ({
@@ -116,6 +201,13 @@ export default function PortalClientePage() {
   );
   const custoEvitadoMadrugadaBrl =
     (receitaMadrugada.totalConversas * config.minutosManuaisPorConversa * config.custoHoraOperadorBrl) / 60;
+
+  const picoForaExpediente = useMemo(
+    () => identificarPicoForaExpediente(receitaMadrugada.conversas),
+    [receitaMadrugada.conversas]
+  );
+
+  const slugConferido = workspace ? slugCorrespondeAoWorkspace(workspace, params.slug) : true;
 
   const moedaDoValor = (valorBrl: number) =>
     formatarMoeda(valorBrl, config.moedaExibicao, cambioParaMoeda(config, config.moedaExibicao));
@@ -144,6 +236,8 @@ export default function PortalClientePage() {
       await patchWorkspace(workspaceId, patch);
       invalidarWorkspace(workspaceId);
       setConfigSalva(true);
+      setFlashSucesso(true);
+      setTimeout(() => setFlashSucesso(false), 1200);
     } finally {
       setSalvandoConfig(false);
     }
@@ -153,6 +247,24 @@ export default function PortalClientePage() {
     return (
       <main className="flex min-h-screen items-center justify-center bg-mist-50 text-sm text-ink-400">
         Carregando portal…
+      </main>
+    );
+  }
+
+  if (!slugConferido) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-mist-50 p-6">
+        <div className="max-w-sm rounded-[var(--radius-lg)] border border-ink-100 bg-white p-6 text-center shadow-[var(--shadow-sm)]">
+          <p className="mono text-xs text-ink-400">/{params.slug}</p>
+          <h1 className="mt-2 text-base font-semibold text-ink-950">Portal não encontrado</h1>
+          <p className="mt-2 text-sm text-ink-500">
+            Este link não corresponde ao workspace da sua conta. Confirme o link com o administrador ou gere um novo
+            em Fluxos.
+          </p>
+          <Button size="sm" className="mt-4" onClick={() => router.replace("/flows")}>
+            Ir para o painel
+          </Button>
+        </div>
       </main>
     );
   }
@@ -172,7 +284,7 @@ export default function PortalClientePage() {
           </div>
           <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-state-done-bg px-2.5 py-1">
             <span aria-hidden className="dopamina-pulse h-1.5 w-1.5 rounded-full bg-state-done-ink" />
-            <span className="text-xs font-medium text-state-done">Proteção de Receita Ativa 24/7</span>
+            <span className="text-xs font-medium text-state-done">Motor Autônomo Ativo · 24/7</span>
           </div>
         </header>
 
@@ -180,8 +292,24 @@ export default function PortalClientePage() {
           aria-label="Impacto financeiro do mês"
           className="rounded-[var(--radius-lg)] border border-ink-100 bg-white p-5 shadow-[var(--shadow-sm)]"
         >
-          <p className="text-xs text-ink-500">Impacto financeiro protegido — {snapshot.periodo.rotulo}</p>
-          <p className="mono mt-1 text-3xl font-medium text-signal-700">{moedaDoValor(snapshot.economiaLiquidaBrl)}</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-xs text-ink-500">Impacto financeiro protegido — {snapshot.periodo.rotulo}</p>
+            {variacaoSemanal !== null && (
+              <span
+                className={
+                  variacaoSemanal >= 0
+                    ? "mono flex-none rounded-full bg-state-done-bg px-2 py-0.5 text-[11px] font-medium text-state-done"
+                    : "mono flex-none rounded-full bg-state-error-bg px-2 py-0.5 text-[11px] font-medium text-state-error"
+                }
+              >
+                {variacaoSemanal >= 0 ? "+" : ""}
+                {variacaoSemanal}% vs. semana anterior
+              </span>
+            )}
+          </div>
+          <p className="mono mt-1 text-4xl font-semibold leading-tight tracking-tight text-signal-700 sm:text-5xl">
+            {moedaDoValor(economiaAnimada)}
+          </p>
           <p className="mt-1 text-xs text-ink-400">
             dinheiro líquido retido no caixa, após custo de IA, revisão humana e plataforma
           </p>
@@ -201,40 +329,57 @@ export default function PortalClientePage() {
           </div>
         </section>
 
+        {picoForaExpediente && (
+          <section
+            aria-label="Alerta inteligente"
+            className="rounded-[var(--radius-lg)] border border-state-run-ink/40 bg-white p-4"
+          >
+            <p className="text-xs font-semibold uppercase tracking-wide text-state-run">Alerta inteligente</p>
+            <p className="mt-1 text-sm text-ink-700">
+              Pico de atendimento fora do expediente: {picoForaExpediente.total} atendimento
+              {picoForaExpediente.total === 1 ? "" : "s"} concentrados por volta das{" "}
+              {String(picoForaExpediente.hora).padStart(2, "0")}h — e salvos da perda.
+            </p>
+          </section>
+        )}
+
         <section
-          aria-label="Neural Inbox filtrada"
+          aria-label="Fluxo de atividade em tempo real"
           className="rounded-[var(--radius-lg)] border border-ink-100 bg-white p-5 shadow-[var(--shadow-sm)]"
         >
-          <h2 className="text-sm font-semibold text-ink-950">Atendimentos recentes</h2>
+          <h2 className="text-sm font-semibold text-ink-950">Fluxo de Atividade</h2>
           {conversasRecentes.length === 0 ? (
-            <EmptyState title="Nenhum atendimento ainda" description="As conversas aparecem aqui em tempo real." />
+            <div className="mt-3 flex items-center gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 px-3 py-4">
+              <span aria-hidden className="dopamina-pulse h-1.5 w-1.5 flex-none rounded-full bg-signal-500" />
+              <p className="text-xs text-ink-500">Monitorando canais em busca de novos leads…</p>
+            </div>
           ) : (
             <ul className="mt-3 flex flex-col gap-2">
-              {conversasRecentes.map((conversa) => (
-                <li
-                  key={conversa.id}
-                  className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-ink-100 p-3"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-sm font-medium text-ink-950">{conversa.participante.nome}</span>
-                    <span
-                      className={
-                        conversa.status === "resolvida"
-                          ? "rounded-full bg-state-done-bg px-2 py-0.5 text-[11px] font-medium text-state-done"
-                          : "rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-500"
-                      }
-                    >
-                      {conversa.status === "resolvida" ? "resolvida" : "em andamento"}
-                    </span>
-                  </div>
-                  <p className="truncate text-xs text-ink-500">{conversa.ultimaMensagemPreview || conversa.assunto}</p>
-                  {conversa.circuitBreakerAtivo && (
-                    <span className="mono inline-flex w-fit items-center rounded-full bg-state-error-bg px-1.5 py-0.5 text-[10px] font-medium text-state-error">
-                      Requer atenção humana
-                    </span>
-                  )}
-                </li>
-              ))}
+              {conversasRecentes.map((conversa) => {
+                const badge = conversa.circuitBreakerAtivo
+                  ? { texto: "Transbordo Humano", classe: "bg-state-error-bg text-state-error" }
+                  : conversa.desfechoConversao === "fechado-venda"
+                    ? { texto: "Venda Concretizada", classe: "bg-state-done-bg text-state-done" }
+                    : conversa.roteamento?.escolhido?.tipo === "agente"
+                      ? { texto: "Qualificado pela IA", classe: "bg-signal-50 text-signal-700" }
+                      : conversa.status === "resolvida"
+                        ? { texto: "Resolvida", classe: "bg-state-done-bg text-state-done" }
+                        : { texto: "Em andamento", classe: "bg-mist-50 text-ink-500" };
+                return (
+                  <li
+                    key={conversa.id}
+                    className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-ink-100 p-3"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-sm font-medium text-ink-950">{conversa.participante.nome}</span>
+                      <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.classe}`}>
+                        {badge.texto}
+                      </span>
+                    </div>
+                    <p className="truncate text-xs text-ink-500">{conversa.ultimaMensagemPreview || conversa.assunto}</p>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
@@ -338,7 +483,12 @@ export default function PortalClientePage() {
             </div>
 
             {ehAdmin && (
-              <Button size="sm" loading={salvandoConfig} onClick={salvarConfiguracao} className="self-start">
+              <Button
+                size="sm"
+                loading={salvandoConfig}
+                onClick={salvarConfiguracao}
+                className={flashSucesso ? "sucesso-flash self-start" : "self-start"}
+              >
                 Salvar configuração
               </Button>
             )}

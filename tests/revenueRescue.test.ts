@@ -4,6 +4,7 @@ import {
   EXPEDIENTE_PADRAO,
   calcularReceitaRecuperadaMadrugada,
   foraDoExpediente,
+  identificarPicoForaExpediente,
   type JanelaExpediente,
 } from "@/lib/inbox/revenueRescue";
 
@@ -173,5 +174,34 @@ describe("calcularReceitaRecuperadaMadrugada", () => {
 
     expect(comPadrao.totalConversas).toBe(1);
     expect(comJanelaCustomizada.totalConversas).toBe(0);
+  });
+});
+
+describe("identificarPicoForaExpediente", () => {
+  it("devolve null quando há menos de 3 conversas — evita apontar pico sem sinal real", () => {
+    const duasConversas = [
+      criarConversa({ id: "c1", criadaEm: SEGUNDA(22).toISOString() }),
+      criarConversa({ id: "c2", criadaEm: SEGUNDA(22).toISOString() }),
+    ];
+    expect(identificarPicoForaExpediente(duasConversas)).toBeNull();
+  });
+
+  it("identifica a hora local com mais primeiros contatos", () => {
+    const conversas = [
+      criarConversa({ id: "c1", criadaEm: SEGUNDA(22, 10).toISOString() }),
+      criarConversa({ id: "c2", criadaEm: SEGUNDA(22, 40).toISOString() }),
+      criarConversa({ id: "c3", criadaEm: SEGUNDA(3, 0).toISOString() }),
+    ];
+    expect(identificarPicoForaExpediente(conversas)).toEqual({ hora: 22, total: 2 });
+  });
+
+  it("ignora datas inválidas sem lançar", () => {
+    const conversas = [
+      criarConversa({ id: "c1", criadaEm: "não-é-uma-data" }),
+      criarConversa({ id: "c2", criadaEm: SEGUNDA(22).toISOString() }),
+      criarConversa({ id: "c3", criadaEm: SEGUNDA(22).toISOString() }),
+      criarConversa({ id: "c4", criadaEm: SEGUNDA(22).toISOString() }),
+    ];
+    expect(identificarPicoForaExpediente(conversas)).toEqual({ hora: 22, total: 3 });
   });
 });

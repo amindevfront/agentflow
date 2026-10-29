@@ -118,7 +118,16 @@ export default function FlowsPage() {
       </section>
 
       <div className="flex flex-col gap-4">
-        {appUser?.papel === "admin" && workspace && <ClientPortalLinkCard workspace={workspace} />}
+        {appUser?.papel === "admin" && workspace && (
+          flows.length > 0 ? (
+            <ClientPortalLinkCard workspace={workspace} />
+          ) : (
+            <EmptyState
+              title="Link do Cliente indisponível"
+              description="Nenhum fluxo de atendimento ativo. Crie seu primeiro fluxo ao lado para gerar o Link Executivo e o QR Code criptografado do seu cliente."
+            />
+          )
+        )}
 
         <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
           {selectedId === null ? (

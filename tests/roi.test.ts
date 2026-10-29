@@ -4,6 +4,7 @@ import {
   ROI_CONFIG_PADRAO,
   cambioParaMoeda,
   calcularRoi,
+  calcularVariacaoPercentual,
   estimarCustoModeloUsd,
   formatarHoras,
   formatarMoeda,
@@ -486,5 +487,24 @@ describe("formatadores", () => {
   it("nunca propaga NaN para a interface", () => {
     expect(formatarPercentual(Number.NaN)).toBe("0.0%");
     expect(formatarHoras(Number.NaN)).toBe("0 min");
+  });
+});
+
+describe("calcularVariacaoPercentual", () => {
+  it("calcula crescimento real entre dois períodos", () => {
+    expect(calcularVariacaoPercentual(1240, 1000)).toBe(24);
+  });
+
+  it("calcula queda real entre dois períodos", () => {
+    expect(calcularVariacaoPercentual(800, 1000)).toBe(-20);
+  });
+
+  it("devolve null sem baseline (período anterior zerado) em vez de inventar um percentual", () => {
+    expect(calcularVariacaoPercentual(500, 0)).toBeNull();
+  });
+
+  it("devolve null para entradas não finitas", () => {
+    expect(calcularVariacaoPercentual(Number.NaN, 100)).toBeNull();
+    expect(calcularVariacaoPercentual(100, Number.NaN)).toBeNull();
   });
 });

@@ -81,3 +81,42 @@ export function calcularReceitaRecuperadaMadrugada(
     totalMensagensCliente: elegiveis.reduce((acc, c) => acc + (c.totalMensagensCliente ?? 0), 0),
   };
 }
+
+export interface PicoForaExpediente {
+  /** Hora local (0-23) com mais primeiros contatos fora do expediente. */
+  hora: number;
+  total: number;
+}
+
+/** Abaixo disso, apontar um "horário de pico" seria ruído estatístico, não um sinal real. */
+const MINIMO_PARA_PICO = 3;
+
+/**
+ * Entre as conversas já identificadas como fora do expediente (ver
+ * `ReceitaMadrugadaResultado.conversas`), identifica a hora do dia que
+ * concentrou mais primeiros contatos — a base real do "Alerta Inteligente"
+ * do Portal do Cliente. Nenhum horário é inventado: `null` quando o volume
+ * é baixo demais para um pico significativo.
+ */
+export function identificarPicoForaExpediente(conversasForaDoExpediente: Conversation[]): PicoForaExpediente | null {
+  if (conversasForaDoExpediente.length < MINIMO_PARA_PICO) return null;
+
+  const contagemPorHora = new Map<number, number>();
+  for (const conversa of conversasForaDoExpediente) {
+    const instante = new Date(conversa.criadaEm);
+    if (!Number.isFinite(instante.getTime())) continue;
+    const hora = instante.getHours();
+    contagemPorHora.set(hora, (contagemPorHora.get(hora) ?? 0) + 1);
+  }
+
+  let picoHora = -1;
+  let picoTotal = 0;
+  for (const [hora, total] of contagemPorHora) {
+    if (total > picoTotal) {
+      picoHora = hora;
+      picoTotal = total;
+    }
+  }
+
+  return picoHora === -1 ? null : { hora: picoHora, total: picoTotal };
+}

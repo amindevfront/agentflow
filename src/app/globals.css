@@ -87,3 +87,18 @@ body {
   border-color: var(--color-state-error-ink) !important;
   animation: circuit-breaker-pulse 1.2s ease-in-out infinite;
 }
+
+/* Centro de Configuração Rápida (Portal do Cliente): um único flash verde ao
+   salvar — mesmo recurso de `box-shadow` em anel, sem infinito e sem cor
+   nova (`state-done-ink` já é token do sistema). */
+@keyframes sucesso-flash {
+  0% {
+    box-shadow: 0 0 0 0 rgba(26, 161, 107, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 6px rgba(26, 161, 107, 0);
+  }
+}
+.sucesso-flash {
+  animation: sucesso-flash 0.9s ease-out 1;
+}

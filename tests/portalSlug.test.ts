@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { slugificar, slugValido } from "@/lib/portalSlug";
+import { slugCorrespondeAoWorkspace, slugificar, slugValido } from "@/lib/portalSlug";
 
 describe("slugificar", () => {
   it("converte espaços em hífens e remove acentos/caixa", () => {
@@ -41,5 +41,25 @@ describe("slugValido", () => {
     expect(slugValido("wings studio")).toBe(false);
     expect(slugValido("-wings")).toBe(false);
     expect(slugValido("wings-")).toBe(false);
+  });
+});
+
+describe("slugCorrespondeAoWorkspace", () => {
+  it("aceita quando o slug da URL é exatamente o slug gravado no workspace", () => {
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: "wings-studio" }, "wings-studio")).toBe(true);
+  });
+
+  it("rejeita quando o slug da URL não corresponde ao slug gravado — o 'link fantasma'", () => {
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: "wings-studio" }, "clinica-prime")).toBe(false);
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: "wings-studio" }, "ws_1")).toBe(false);
+  });
+
+  it("aceita o id bruto como fallback quando o workspace ainda não tem slug", () => {
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: null }, "ws_1")).toBe(true);
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: undefined }, "ws_1")).toBe(true);
+  });
+
+  it("rejeita qualquer outro slug quando ainda não há slug definido", () => {
+    expect(slugCorrespondeAoWorkspace({ id: "ws_1", slug: null }, "outro-slug")).toBe(false);
   });
 });

@@ -569,6 +569,18 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
   };
 }
 
+/**
+ * Variação percentual entre dois valores do mesmo agregado (ex.: economia
+ * líquida da semana atual vs. da semana anterior) — usada pelo badge de
+ * crescimento do Portal do Cliente. Sem baseline real (`anterior <= 0`),
+ * devolve `null`: mostrar "+X%" sem denominador real seria inventar o
+ * número, o que viola a mesma regra de honestidade de `calcularRoi`.
+ */
+export function calcularVariacaoPercentual(atual: number, anterior: number): number | null {
+  if (!Number.isFinite(atual) || !Number.isFinite(anterior) || anterior <= 0) return null;
+  return arredondar(((atual - anterior) / anterior) * 100, 1);
+}
+
 // ---------------------------------------------------------------------------
 // Formatação
 // ---------------------------------------------------------------------------
