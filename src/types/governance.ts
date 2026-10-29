@@ -166,7 +166,9 @@ export type AuditEventType =
   | "credencial.acessada"
   | "config.alterada"
   | "auth.sessao.iniciada"
-  | "auth.sessao.encerrada";
+  | "auth.sessao.encerrada"
+  /** Download do Relatório Executivo (PDF) — o selo resultante é embutido no próprio PDF como atestado de segurança. */
+  | "relatorio.executivo.gerado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

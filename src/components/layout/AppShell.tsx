@@ -11,15 +11,16 @@ import { Topbar } from "./Topbar";
 import { Banner } from "@/components/ui/Banner";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
+import { ZeroTrustBadge } from "@/components/ui/ZeroTrustBadge";
 import { QuizModalProvider } from "@/components/onboarding/DynamicNicheQuizModal";
 
 const TITLE_BY_PATH: Array<[string, string]> = [
   ["/inbox", "Neural Inbox"],
   ["/flows", "Fluxos"],
-  ["/runs", "Execuções"],
-  ["/connectors", "Conectores"],
+  ["/runs", "Auditoria de IA & Logs"],
+  ["/connectors", "Canais & Integrações"],
   ["/team", "Equipe"],
-  ["/governance", "Governança"],
+  ["/governance", "Cofre & Blindagem Jurídica"],
   ["/settings", "Configurações"],
 ];
 
@@ -88,13 +89,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             title={title}
             onMenuClick={() => setSidebarOpen(true)}
             actions={
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => (pausedGlobally ? setPausedGlobally(false) : setConfirmOpen(true))}
-              >
-                {pausedGlobally ? "Retomar execuções" : "Parar tudo"}
-              </Button>
+              <>
+                <ZeroTrustBadge />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => (pausedGlobally ? setPausedGlobally(false) : setConfirmOpen(true))}
+                >
+                  {pausedGlobally ? "Retomar execuções" : "Parar tudo"}
+                </Button>
+              </>
             }
           />
           {pausedGlobally && (

@@ -10,10 +10,10 @@ import type { UserRole } from "@/types";
 const NAV_ITEMS = [
   { href: "/inbox", label: "Neural Inbox" },
   { href: "/flows", label: "Fluxos" },
-  { href: "/runs", label: "Execuções" },
-  { href: "/connectors", label: "Conectores" },
+  { href: "/runs", label: "Auditoria de IA & Logs" },
+  { href: "/connectors", label: "Canais & Integrações" },
   { href: "/team", label: "Equipe" },
-  { href: "/governance", label: "Governança" },
+  { href: "/governance", label: "Cofre & Blindagem Jurídica" },
   { href: "/settings", label: "Configurações" },
 ];
 

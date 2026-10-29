@@ -312,4 +312,5 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "config.alterada": "Configuração alterada",
   "auth.sessao.iniciada": "Sessão iniciada",
   "auth.sessao.encerrada": "Sessão encerrada",
+  "relatorio.executivo.gerado": "Relatório executivo gerado",
 };

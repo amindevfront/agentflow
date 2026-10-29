@@ -51,9 +51,12 @@ export default function ConnectorsPage() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <p className="mono text-xs text-ink-400">
-          {connectors.length} conector{connectors.length === 1 ? "" : "es"}
-        </p>
+        <div>
+          <p className="text-sm font-semibold text-ink-950">Canais &amp; Integrações (WhatsApp/APIs)</p>
+          <p className="mono text-xs text-ink-400">
+            {connectors.length} conector{connectors.length === 1 ? "" : "es"}
+          </p>
+        </div>
         <Button size="sm" onClick={() => setShowForm((v) => !v)}>
           Novo conector
         </Button>

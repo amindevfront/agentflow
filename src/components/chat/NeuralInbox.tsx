@@ -52,6 +52,7 @@ import { CargoTriagePanel } from "@/components/niche/CargoTriagePanel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
+import { PulseBadge } from "@/components/ui/PulseBadge";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { cn, formatRelativeTime, initials } from "@/lib/utils";
 
@@ -403,6 +404,9 @@ export function NeuralInbox() {
           }`}
           tom={receitaMadrugada.totalConversas > 0 ? "marca" : "neutro"}
           dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem atendimento automatizado, teria esperado o próximo dia útil ou sido perdida. O valor evitado usa a mesma fórmula do painel de ROI (minutos manuais × custo-hora configurados), nunca um valor de negócio estimado."
+          acao={
+            receitaMadrugada.totalConversas > 0 ? <PulseBadge label={custoEvitadoMadrugadaFormatado} /> : undefined
+          }
         />
       </div>
 
