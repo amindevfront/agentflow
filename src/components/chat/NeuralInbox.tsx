@@ -46,6 +46,8 @@ import {
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { rotear } from "@/lib/inbox/swarm";
 import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
+import { processarAudioCliente, processarImagemCliente } from "@/lib/inbox/multimodal";
+import type { MediaTypeImagem } from "@/lib/server/visionAdmin";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
@@ -135,6 +137,24 @@ function MedidorFrustracao({ indice }: { indice: number }) {
       />
     </div>
   );
+}
+
+/** Lê um `File` escolhido no harness de simulação e devolve seu conteúdo em base64 puro (sem o prefixo `data:...;base64,`). */
+function arquivoParaBase64(arquivo: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => {
+      const resultado = leitor.result;
+      if (typeof resultado !== "string") {
+        reject(new Error("Não foi possível ler o arquivo selecionado."));
+        return;
+      }
+      const virgula = resultado.indexOf(",");
+      resolve(virgula >= 0 ? resultado.slice(virgula + 1) : resultado);
+    };
+    leitor.onerror = () => reject(leitor.error ?? new Error("Falha ao ler o arquivo selecionado."));
+    leitor.readAsDataURL(arquivo);
+  });
 }
 
 type FiltroInbox = "ativas" | "circuit-breaker" | "sem-atribuicao" | "resolvidas" | "todas";
@@ -269,6 +289,18 @@ export function NeuralInbox() {
     });
   }, [selecionada]);
 
+  // Módulo Multimodal de Elite: contagem de áudios/imagens já processados
+  // nesta conversa — base do identificador visual no cabeçalho (ver item 3).
+  const contagensMidia = useMemo(() => {
+    let audios = 0;
+    let imagens = 0;
+    for (const mensagem of mensagens) {
+      if (mensagem.tipoConteudo === "audio-transcrito") audios += 1;
+      else if (mensagem.tipoConteudo === "imagem-analisada") imagens += 1;
+    }
+    return { audios, imagens };
+  }, [mensagens]);
+
   async function handleEnviarResposta() {
     if (!selecionada || resposta.trim().length === 0) return;
     const uid = auth?.currentUser?.uid;
@@ -310,6 +342,48 @@ export function NeuralInbox() {
       setSimulacao("");
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível simular a mensagem.");
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  /** Módulo Multimodal de Elite: analisa uma imagem real via Claude e registra a descrição como mensagem do cliente. */
+  async function handleSimularImagem(arquivo: File) {
+    if (!selecionada) return;
+    setProcessando(true);
+    setErro(null);
+    try {
+      const base64 = await arquivoParaBase64(arquivo);
+      await processarImagemCliente({
+        conversationId: selecionada.id,
+        canal: selecionada.canal,
+        workspaceId: selecionada.workspaceId,
+        base64,
+        mediaType: arquivo.type as MediaTypeImagem,
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível analisar a imagem.");
+    } finally {
+      setProcessando(false);
+    }
+  }
+
+  /** Módulo Multimodal de Elite: transcreve um áudio real via Whisper e registra o texto como mensagem do cliente. */
+  async function handleSimularAudio(arquivo: File) {
+    if (!selecionada) return;
+    setProcessando(true);
+    setErro(null);
+    try {
+      const base64 = await arquivoParaBase64(arquivo);
+      await processarAudioCliente({
+        conversationId: selecionada.id,
+        canal: selecionada.canal,
+        workspaceId: selecionada.workspaceId,
+        base64,
+        mimeType: arquivo.type || "audio/ogg",
+      });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível transcrever o áudio.");
     } finally {
       setProcessando(false);
     }
@@ -620,6 +694,22 @@ export function NeuralInbox() {
                       Lead Qualificado de Alto Padrão
                     </span>
                   )}
+                  {(contagensMidia.audios > 0 || contagensMidia.imagens > 0) && (
+                    <div className="mt-1 flex flex-wrap gap-1.5">
+                      {contagensMidia.audios > 0 && (
+                        <span className="mono inline-flex items-center gap-1 rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-700">
+                          {contagensMidia.audios} áudio{contagensMidia.audios === 1 ? "" : "s"} transcrito
+                          {contagensMidia.audios === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {contagensMidia.imagens > 0 && (
+                        <span className="mono inline-flex items-center gap-1 rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-700">
+                          {contagensMidia.imagens} imagem{contagensMidia.imagens === 1 ? "" : "ns"} analisada
+                          {contagensMidia.imagens === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="flex w-44 flex-none flex-col items-end gap-1">
                   <span className={cn("mono whitespace-nowrap text-sm font-medium", corFrustracao(selecionada.frustrationIndex))}>
@@ -758,10 +848,23 @@ export function NeuralInbox() {
                       <div key={mensagem.id} className={cn("flex flex-col gap-0.5", doCliente ? "items-start" : "items-end")}>
                         <div
                           className={cn(
-                            "max-w-[80%] rounded-[var(--radius-sm)] px-3 py-2 text-sm",
+                            "flex max-w-[80%] flex-col gap-1 rounded-[var(--radius-sm)] px-3 py-2 text-sm",
                             doCliente ? "bg-white text-ink-950" : "bg-signal-600 text-white"
                           )}
                         >
+                          {/* Módulo Multimodal de Elite: a transcrição/descrição JÁ é o
+                              texto da bolha — o badge só avisa a origem, para o operador
+                              não precisar ouvir o áudio original caso precise intervir. */}
+                          {mensagem.tipoConteudo && mensagem.tipoConteudo !== "texto" && (
+                            <span
+                              className={cn(
+                                "mono inline-flex w-fit items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                                doCliente ? "bg-signal-100 text-signal-700" : "bg-white/20 text-white"
+                              )}
+                            >
+                              {mensagem.tipoConteudo === "audio-transcrito" ? "Áudio transcrito" : "Imagem analisada"}
+                            </span>
+                          )}
                           {mensagem.texto}
                         </div>
                         <span className="mono text-[11px] text-ink-400">
@@ -828,6 +931,42 @@ export function NeuralInbox() {
                     >
                       Simular
                     </Button>
+                  </div>
+
+                  {/* Módulo Multimodal de Elite: mesmo harness de simulação,
+                      agora exercitando os motores reais de Visão e
+                      Transcrição — não um provedor de canal fingido, o
+                      texto resultante passa pelo Shield-Layer/Radar/Circuit
+                      Breaker exatamente como qualquer mensagem digitada. */}
+                  <div className="flex flex-wrap items-center gap-3 border-t border-dashed border-ink-200 pt-1.5">
+                    <label className="flex items-center gap-1.5 text-[11px] font-medium text-ink-500">
+                      Simular áudio
+                      <input
+                        type="file"
+                        accept="audio/*"
+                        disabled={processando}
+                        onChange={(e) => {
+                          const arquivo = e.target.files?.[0];
+                          e.target.value = "";
+                          if (arquivo) handleSimularAudio(arquivo);
+                        }}
+                        className="max-w-[160px] text-[11px]"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1.5 text-[11px] font-medium text-ink-500">
+                      Simular imagem
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        disabled={processando}
+                        onChange={(e) => {
+                          const arquivo = e.target.files?.[0];
+                          e.target.value = "";
+                          if (arquivo) handleSimularImagem(arquivo);
+                        }}
+                        className="max-w-[160px] text-[11px]"
+                      />
+                    </label>
                   </div>
                 </div>
               ) : (

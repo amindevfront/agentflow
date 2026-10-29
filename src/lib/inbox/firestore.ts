@@ -47,6 +47,7 @@ import type {
   NicheKey,
   OperatorProfile,
   RoutingDecision,
+  TipoConteudoMensagem,
 } from "@/types";
 import { auth, db } from "@/lib/firebase";
 import { DEFAULT_WORKSPACE_ID, patchWorkspace, requireDb } from "@/lib/firestore";
@@ -272,6 +273,8 @@ export async function registrarMensagemCliente(entrada: {
   texto: string;
   canal: Canal;
   workspaceId?: string;
+  /** Módulo Multimodal de Elite: marca que `texto` é resultado de transcrição de áudio ou análise de imagem, não digitação direta. Ausente = texto comum. */
+  tipoConteudo?: TipoConteudoMensagem;
 }): Promise<RegistrarMensagemClienteResultado> {
   const database = requireDb();
   const workspaceId = entrada.workspaceId ?? DEFAULT_WORKSPACE_ID;
@@ -319,6 +322,7 @@ export async function registrarMensagemCliente(entrada: {
     piiDetectada: selo.piiDetectada,
     enviadaEm: agora.toISOString(),
     temVersaoOriginalSelada: selo.temVersaoOriginalSelada,
+    ...(entrada.tipoConteudo ? { tipoConteudo: entrada.tipoConteudo } : {}),
   };
 
   await setDoc(doc(database, COLECAO_CONVERSAS, entrada.conversationId, SUBCOLECAO_MENSAGENS, messageId), mensagem);

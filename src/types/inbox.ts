@@ -149,6 +149,17 @@ export interface Conversation {
 
 export type MessageSender = "cliente" | "operador" | "agente" | "sistema";
 
+/**
+ * Origem do conteúdo de uma mensagem — Módulo Multimodal de Elite.
+ * `"texto"` (implícito quando o campo está ausente, para compatibilidade com
+ * mensagens já persistidas) cobre o caminho de sempre; os outros dois marcam
+ * mensagens cujo `texto` é o RESULTADO de um motor real (transcrição de
+ * áudio via `@/lib/server/audioTranscriptionAdmin`, ou análise de imagem via
+ * `@/lib/server/visionAdmin`) — nunca o dado bruto (áudio/imagem não são
+ * persistidos nesta estrutura).
+ */
+export type TipoConteudoMensagem = "texto" | "audio-transcrito" | "imagem-analisada";
+
 export interface ConversationMessage {
   id: string;
   conversationId: string;
@@ -159,6 +170,9 @@ export interface ConversationMessage {
   /**
    * Texto SEMPRE mascarado — nenhuma mensagem com PII em claro chega a esta
    * estrutura depois de passar pelo Shield-Layer (`@/lib/guardrails/piiVault`).
+   * Quando `tipoConteudo` é `"audio-transcrito"` ou `"imagem-analisada"`,
+   * este é o texto já extraído do áudio/imagem pelo motor correspondente —
+   * também mascarado antes de chegar aqui, como qualquer outro texto.
    */
   texto: string;
   piiDetectada: string[];
@@ -167,6 +181,8 @@ export interface ConversationMessage {
   enviadaEm: string;
   /** `true` quando existe um envelope selado com o texto original, para fins de auditoria/compliance. */
   temVersaoOriginalSelada: boolean;
+  /** Ausente = `"texto"`. Ver `TipoConteudoMensagem`. */
+  tipoConteudo?: TipoConteudoMensagem;
 }
 
 // ---------------------------------------------------------------------------

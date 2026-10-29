@@ -179,3 +179,23 @@ export function diagnosticoOrquestrador(): { pronto: boolean; faltando: string[]
   }
   return { pronto: faltando.length === 0, faltando };
 }
+
+/** Chave de API usada pelo Motor de Transcrição de Áudio (Whisper/OpenAI) — provedor separado do motor de orquestração/visão (Claude). */
+export function chaveTranscricao(): string {
+  return lerVariavel("OPENAI_API_KEY");
+}
+
+/**
+ * Diagnóstico do Motor de Transcrição de Áudio — mesma filosofia de
+ * `diagnosticoOrquestrador()`. Transcrição de áudio não é uma capacidade do
+ * Claude nesta integração, por isso depende de uma credencial própria,
+ * ausente por padrão.
+ */
+export function diagnosticoTranscricao(): { pronto: boolean; faltando: string[] } {
+  assertServidor();
+  const faltando: string[] = [];
+  if (!process.env.OPENAI_API_KEY?.trim()) {
+    faltando.push("OPENAI_API_KEY");
+  }
+  return { pronto: faltando.length === 0, faltando };
+}
