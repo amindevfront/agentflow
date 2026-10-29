@@ -29,9 +29,10 @@
 // responde 503 com uma mensagem acionável (ver `/api/flows/execute`).
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { Flow, FlowRun, HandoffTicket } from "@/types";
+import type { Flow, FlowRun, HandoffTicket, NicheKey } from "@/types";
 import type { ExecutorLlm } from "@/lib/guardrails";
 import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "@/lib/pricing";
+import { gerarContextoNicho } from "@/lib/nichePrompts";
 import { chaveAnthropic, modeloOrquestrador } from "./env";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
@@ -64,7 +65,9 @@ function clienteAnthropic(): Anthropic {
 export function criarExecutorAnthropic(
   flow: Pick<Flow, "nome" | "gatilho" | "origem">,
   /** Auto-Feedback de Conversão — ver `montarPrompt` em `./orchestrator`. */
-  contextoConversao?: string | null
+  contextoConversao?: string | null,
+  /** Engine Auto-Moldável por Nicho — ver `montarPrompt` em `./orchestrator`. */
+  contextoNicho?: string | null
 ): (acumulador: AcumuladorUso) => ExecutorLlm {
   const modelo = modeloOrquestrador();
   const preco = PRECOS_REFERENCIA[modelo];
@@ -76,7 +79,9 @@ export function criarExecutorAnthropic(
       const resposta = await clienteAnthropic().messages.create({
         model: modelo,
         max_tokens: MAX_TOKENS_SAIDA,
-        messages: [{ role: "user", content: montarPrompt(flow, payloadSanitizado, contextoConversao) }],
+        messages: [
+          { role: "user", content: montarPrompt(flow, payloadSanitizado, contextoConversao, contextoNicho) },
+        ],
       });
 
       acumulador.tokensEntrada += resposta.usage.input_tokens;
@@ -150,22 +155,31 @@ export async function executarFluxoReal(
   // e injeta no prompt desta execução. Leitura best-effort — a ausência do
   // workspace ou do campo nunca impede a execução do fluxo, apenas a deixa
   // sem esse contexto adicional (degradação graciosa).
+  // Mesma leitura também alimenta o Engine Auto-Moldável por Nicho
+  // (`@/lib/nichePrompts`) — um único acesso a `workspaces/{id}`, dois
+  // contextos extraídos dele.
   let contextoConversao: string | undefined;
+  let contextoNicho: string | null | undefined;
   try {
     const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(flow.workspaceId).get();
-    const dados = workspaceSnap.exists ? (workspaceSnap.data() as { insightsConversaoTexto?: unknown }) : null;
+    const dados = workspaceSnap.exists
+      ? (workspaceSnap.data() as { insightsConversaoTexto?: unknown; setor?: unknown })
+      : null;
     if (typeof dados?.insightsConversaoTexto === "string") {
       contextoConversao = dados.insightsConversaoTexto;
     }
+    contextoNicho = gerarContextoNicho(
+      typeof dados?.setor === "string" ? (dados.setor as NicheKey) : undefined
+    );
   } catch (erro) {
-    console.error(`[orchestrator] falha ao ler insights de conversão do workspace ${flow.workspaceId}:`, erro);
+    console.error(`[orchestrator] falha ao ler contexto do workspace ${flow.workspaceId}:`, erro);
   }
 
   return executarFluxo({
     flowId,
     payload,
     usuario,
-    criarExecutor: criarExecutorAnthropic(flow, contextoConversao),
+    criarExecutor: criarExecutorAnthropic(flow, contextoConversao, contextoNicho),
     portas: portasAdmin,
   });
 }

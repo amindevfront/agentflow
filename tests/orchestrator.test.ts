@@ -120,6 +120,25 @@ describe("montarPrompt", () => {
     expect(montarPrompt(FLOW_BASE, "payload", null)).not.toContain("Contexto de conversão");
     expect(montarPrompt(FLOW_BASE, "payload", "")).not.toContain("Contexto de conversão");
   });
+
+  // Engine Auto-Moldável por Nicho: `contextoNicho` é o canal real pelo qual
+  // o System Prompt se adapta ao setor do workspace (ver `@/lib/nichePrompts`).
+  it("injeta o contexto de nicho quando fornecido, antes do contexto de conversão", () => {
+    const prompt = montarPrompt(
+      FLOW_BASE,
+      "payload qualquer",
+      "68% fechados.",
+      "Nicho do negócio: foco em agendamento rápido."
+    );
+    expect(prompt).toContain("Nicho do negócio");
+    expect(prompt.indexOf("Nicho do negócio")).toBeLessThan(prompt.indexOf("Contexto de conversão"));
+  });
+
+  it("omite o bloco de nicho quando ausente, null ou vazio (retrocompatibilidade)", () => {
+    expect(montarPrompt(FLOW_BASE, "payload")).not.toContain("Nicho do negócio");
+    expect(montarPrompt(FLOW_BASE, "payload", null, null)).not.toContain("Nicho do negócio");
+    expect(montarPrompt(FLOW_BASE, "payload", null, "")).not.toContain("Nicho do negócio");
+  });
 });
 
 describe("executarFluxo — integração completa (guardrails → métrica → ROI)", () => {

@@ -14,10 +14,11 @@ import { FlowSettingsForm } from "@/components/flows/FlowSettingsForm";
 import { PayloadSimulator } from "@/components/flows/PayloadSimulator";
 import { RealExecutionPanel } from "@/components/flows/RealExecutionPanel";
 import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
+import { ClientPortalLinkCard } from "@/components/flows/ClientPortalLinkCard";
 import type { Flow, FlowRun } from "@/types";
 
 export default function FlowsPage() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, appUser } = useWorkspace();
   const [flows, setFlows] = useState<Flow[]>([]);
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [search, setSearch] = useState("");
@@ -117,6 +118,8 @@ export default function FlowsPage() {
       </section>
 
       <div className="flex flex-col gap-4">
+        {appUser?.papel === "admin" && workspace && <ClientPortalLinkCard workspace={workspace} />}
+
         <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
           {selectedId === null ? (
             <EmptyState title="Selecione um fluxo" description="Ou crie um novo fluxo para configurar." />

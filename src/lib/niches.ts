@@ -64,6 +64,26 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
       "Triagem de troca/devolução",
     ],
   },
+  "salao-beleza": {
+    key: "salao-beleza",
+    label: "Salão de Beleza & Barbearia",
+    descricao: "Agendamento rápido de serviços, dúvidas de valores e redução de cadeiras/horários vagos.",
+    playbooksSugeridos: [
+      "Agendamento rápido via link do ERP (ex.: SalonSoft)",
+      "Tabela de preços e serviços em destaque",
+      "Lembrete de horário e redução de no-show",
+    ],
+  },
+  "clinica-medica-exames": {
+    key: "clinica-medica-exames",
+    label: "Clínica Médica & Laboratório de Exames",
+    descricao: "Confirmação de consultas/exames, orientações de preparo (jejum, documentos) e prevenção de no-show.",
+    playbooksSugeridos: [
+      "Confirmação de presença em consulta/exame",
+      "Envio de instruções de preparo (jejum, documentos)",
+      "Lembrete 24h/2h antes do horário marcado",
+    ],
+  },
   outros: {
     key: "outros",
     label: "Outros",
@@ -73,8 +93,10 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
 };
 
 export const NICHE_ORDER: NicheKey[] = [
-  "construtora-imobiliaria",
+  "salao-beleza",
   "clinica-alto-padrao",
+  "clinica-medica-exames",
+  "construtora-imobiliaria",
   "logistica-portuaria",
   "servicos-luxo",
   "ecommerce",

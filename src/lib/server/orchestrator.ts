@@ -103,16 +103,27 @@ function novoRunId(): string {
  * conversão nos próximos ciclos do mesmo nicho": o próprio histórico de
  * vendas fechadas/perdidas do workspace entra no prompt da próxima execução.
  * Parâmetro opcional e retrocompatível — ausente, o prompt não muda em nada.
+ *
+ * `contextoNicho` é o Engine Auto-Moldável por Nicho
+ * (`@/lib/nichePrompts`): o System Prompt se adapta de verdade ao setor do
+ * workspace (salão de beleza, clínica de alto padrão, imobiliária, clínica
+ * médica) — mesmo mecanismo de injeção de `contextoConversao`, outro
+ * parâmetro opcional e retrocompatível.
  */
 export function montarPrompt(
   flow: Pick<Flow, "nome" | "gatilho" | "origem">,
   payloadSanitizado: string,
-  contextoConversao?: string | null
+  contextoConversao?: string | null,
+  contextoNicho?: string | null
 ): string {
   const linhas = [
     `Você está operando o fluxo de automação "${flow.nome}" do AgentFlow.`,
     `Gatilho: ${flow.gatilho}${flow.origem ? ` · Origem: ${flow.origem}` : ""}.`,
   ];
+
+  if (contextoNicho) {
+    linhas.push("", contextoNicho);
+  }
 
   if (contextoConversao) {
     linhas.push("", `Contexto de conversão (Auto-Feedback, histórico real deste workspace): ${contextoConversao}`);

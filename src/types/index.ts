@@ -35,6 +35,8 @@ export type NicheKey =
   | "clinica-alto-padrao"
   | "servicos-luxo"
   | "ecommerce"
+  | "salao-beleza"
+  | "clinica-medica-exames"
   | "outros";
 
 /**
@@ -78,6 +80,31 @@ export interface Workspace {
   guardrailOverrides?: Partial<GuardrailPolicy>;
   /** Presença indica que o quiz já foi respondido — controla a reexibição do modal. */
   quizRespondidoEm?: string;
+
+  // --- Portal do Cliente (`/portal/[slug]`) ---
+  /**
+   * Identificador público, url-safe, usado em `/portal/{slug}` — gerado a
+   * partir do nome na primeira vez que o Link Único do Cliente é aberto em
+   * Fluxos (ver `@/lib/portalSlug`). Ausente = a rota aceita o `workspaceId`
+   * bruto como fallback, então o portal nunca fica inacessível por falta de
+   * slug.
+   */
+  slug?: string | null;
+  /**
+   * Horário de funcionamento do estabelecimento, editável pelo próprio
+   * cliente no Portal. Ausente = `EXPEDIENTE_PADRAO` (8h–18h, seg. a sex.) de
+   * `@/lib/inbox/revenueRescue` — este workspace ainda não personalizou.
+   */
+  horarioFuncionamento?: { inicioHora: number; fimHora: number; diasUteis: number[] } | null;
+  /**
+   * Link principal de conversão exibido no Portal do Cliente — agendamento
+   * online (ex.: SalonSoft), WhatsApp do corretor de plantão, confirmação de
+   * presença em clínica, etc. O significado exato depende do nicho; o
+   * AgentFlow nunca valida o destino, só exibe e copia.
+   */
+  linkPrincipalConversao?: string | null;
+  /** Tabela de preços/serviços em destaque, editável pelo cliente no Portal. */
+  servicosDestaque?: Array<{ nome: string; precoBrl: number }>;
 
   /**
    * Auto-Feedback de Conversão: resumo textual determinístico, derivado dos

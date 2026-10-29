@@ -542,7 +542,7 @@ export function NeuralInbox() {
           <NicheAttachmentsPanel onInsert={inserirNaResposta} />
         </section>
       )}
-      {workspace?.setor === "clinica-alto-padrao" && (
+      {(workspace?.setor === "clinica-alto-padrao" || workspace?.setor === "clinica-medica-exames") && (
         <AppointmentRemindersPanel
           conversaSelecionada={selecionada ? { id: selecionada.id, nome: selecionada.participante.nome } : null}
         />

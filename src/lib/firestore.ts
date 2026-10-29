@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -109,6 +110,47 @@ export async function patchWorkspace(workspaceId: string, patch: Partial<Workspa
     const database = requireDb();
     await setDoc(doc(database, "workspaces", workspaceId), patch, { merge: true });
   });
+}
+
+/**
+ * Resolve o workspace pelo `slug` público do Portal do Cliente
+ * (`/portal/[slug]`). `null` quando nenhum workspace usa esse slug — quem
+ * chama decide o fallback (ver `garantirSlugWorkspace` e a própria rota do
+ * portal, que tenta o `workspaceId` bruto quando a busca por slug falha).
+ */
+export async function getWorkspaceBySlug(slug: string): Promise<Workspace | null> {
+  return medirDuracao("firestore.getWorkspaceBySlug", async () => {
+    const database = requireDb();
+    const snap = await getDocs(
+      query(collection(database, "workspaces"), where("slug", "==", slug), limit(1))
+    );
+    if (snap.empty) return null;
+    const documento = snap.docs[0];
+    return { id: documento.id, ...documento.data() } as Workspace;
+  });
+}
+
+/**
+ * Garante que o workspace tenha um `slug` público, gerando um a partir do
+ * nome na primeira vez que for necessário (ex.: ao abrir o card "Link Único
+ * do Cliente" em Fluxos) — nunca sobrescreve um slug já definido. Resolve
+ * colisão com um sufixo numérico incremental.
+ */
+export async function garantirSlugWorkspace(workspace: Workspace): Promise<string> {
+  if (workspace.slug) return workspace.slug;
+
+  const { slugificar } = await import("./portalSlug");
+  const base = slugificar(workspace.nome);
+
+  let candidato = base;
+  for (let sufixo = 2; sufixo <= 50; sufixo += 1) {
+    const existente = await getWorkspaceBySlug(candidato);
+    if (!existente || existente.id === workspace.id) break;
+    candidato = `${base}-${sufixo}`;
+  }
+
+  await patchWorkspace(workspace.id, { slug: candidato });
+  return candidato;
 }
 
 export async function upsertAppUser(user: AppUser): Promise<void> {
