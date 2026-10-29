@@ -65,6 +65,13 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
 
   const carga = useMemo(() => buscarCargaPorCodigo(cargas, codigo), [cargas, codigo]);
   const desvio = useMemo(() => (carga ? calcularDesvioSla(carga) : null), [carga]);
+  // `criarCarga` grava com um id derivado do código — registrar o mesmo
+  // código de novo SOBRESCREVE o histórico anterior em silêncio. Avisa antes
+  // de deixar isso acontecer, já que não há UI de "atualizar status" ainda.
+  const novoCodigoJaExiste = useMemo(
+    () => (novoCodigo.trim() ? Boolean(buscarCargaPorCodigo(cargas, novoCodigo)) : false),
+    [cargas, novoCodigo]
+  );
 
   function respostaSugerida(): string {
     if (!carga || !desvio) return "";
@@ -124,17 +131,23 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
             Ferramenta operacional para registrar cargas manualmente — a integração com um TMS/transportadora real é
             trabalho futuro (conector dedicado).
           </p>
-          <Field label="Código de rastreio" value={novoCodigo} onChange={(e) => setNovoCodigo(e.target.value)} />
+          <Field
+            label="Código de rastreio"
+            value={novoCodigo}
+            onChange={(e) => setNovoCodigo(e.target.value)}
+            errorText={novoCodigoJaExiste ? "Já existe uma carga com este código — salvar substituirá o histórico atual." : undefined}
+          />
           <Field label="Origem" value={origem} onChange={(e) => setOrigem(e.target.value)} />
           <Field label="Destino" value={destino} onChange={(e) => setDestino(e.target.value)} />
           <Field label="Previsão de entrega" type="datetime-local" value={previsaoEntrega} onChange={(e) => setPrevisaoEntrega(e.target.value)} />
           <Button
             size="sm"
             loading={processando}
+            variant={novoCodigoJaExiste ? "danger-solid" : "primary"}
             disabled={!novoCodigo.trim() || !origem.trim() || !destino.trim() || !previsaoEntrega}
             onClick={handleCriarCarga}
           >
-            Salvar carga
+            {novoCodigoJaExiste ? "Substituir carga existente" : "Salvar carga"}
           </Button>
         </div>
       )}

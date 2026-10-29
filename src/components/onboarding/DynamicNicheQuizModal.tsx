@@ -47,11 +47,13 @@ export function useAbrirQuizOnboarding(): () => void {
 
 /** Cartão de opção de rádio — mesmo padrão visual do Passo 2 de `/onboarding`, reaproveitado aqui. */
 function CartaoOpcao({
+  name,
   selecionado,
   titulo,
   descricao,
   onSelect,
 }: {
+  name: string;
   selecionado: boolean;
   titulo: string;
   descricao: string;
@@ -64,7 +66,10 @@ function CartaoOpcao({
         selecionado ? "border-signal-600 bg-signal-50" : "border-ink-100 hover:bg-mist-50"
       )}
     >
-      <input type="radio" checked={selecionado} onChange={onSelect} className="sr-only" />
+      {/* `name` agrupa nativamente os rádios de cada passo — sem ele, teclado
+          (setas) e leitor de tela não reconhecem "1 de N opções", mesma
+          regressão que o padrão original de `/onboarding` evita com `name="setor"`. */}
+      <input type="radio" name={name} checked={selecionado} onChange={onSelect} className="sr-only" />
       <span className="text-sm font-semibold text-ink-950">{titulo}</span>
       <span className="text-xs text-ink-500">{descricao}</span>
     </label>
@@ -163,6 +168,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                   {NICHE_ORDER.filter((k) => k !== "outros").map((key) => (
                     <CartaoOpcao
                       key={key}
+                      name="quiz-nicho"
                       selecionado={setor === key}
                       titulo={NICHE_PRESETS[key].label}
                       descricao={NICHE_PRESETS[key].descricao}
@@ -170,6 +176,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                     />
                   ))}
                   <CartaoOpcao
+                    name="quiz-nicho"
                     selecionado={setor === "outros"}
                     titulo={NICHE_PRESETS.outros.label}
                     descricao={NICHE_PRESETS.outros.descricao}
@@ -193,6 +200,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                   {PAIN_POINT_ORDER.map((key) => (
                     <CartaoOpcao
                       key={key}
+                      name="quiz-ralo"
                       selecionado={ralogDeCaixa === key}
                       titulo={PAIN_POINT_PRESETS[key].label}
                       descricao={PAIN_POINT_PRESETS[key].descricao}
@@ -217,6 +225,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                   {REGIAO_ORDER.map((key) => (
                     <CartaoOpcao
                       key={key}
+                      name="quiz-regiao"
                       selecionado={regiaoOperacao === key}
                       titulo={REGIAO_PRESETS[key].label}
                       descricao={REGIAO_PRESETS[key].descricao}
