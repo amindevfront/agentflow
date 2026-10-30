@@ -57,6 +57,8 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "auth.sessao.iniciada",
   "auth.sessao.encerrada",
   "relatorio.executivo.gerado",
+  "procedimento.consentimento.registrado",
+  "procedimento.posatendimento.registrado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

@@ -323,6 +323,14 @@ service cloud.firestore {
       allow create: if belongsToWorkspace(request.resource.data.workspaceId);
     }
 
+    match /contratosImobiliarios/{contratoId} {
+      // Radar de Risco de Distrato (Construtora/Incorporadora) — mesmo
+      // padrão simples de `appointments`/`shipments`: dado operacional do
+      // workspace, não segredo nem PII em claro.
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
     match /optOuts/{optOutId} {
       // Opt-out é checado por hash, nunca pelo valor em claro — ver
       // `hashDestino()`. Qualquer membro do workspace pode registrar um
