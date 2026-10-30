@@ -345,6 +345,47 @@ export interface NicheAttachment {
 }
 
 // ---------------------------------------------------------------------------
+// Radar de Risco de Distrato (Construtoras/Incorporadoras) — ver
+// `@/lib/distrato`. Rastreia a exposição financeira real de um contrato de
+// compra de unidade, sob a Lei do Distrato (13.786/2018): quando o atraso de
+// entrega supera a tolerância contratual, a culpa deixa de ser do comprador
+// e o reembolso devido salta de uma retenção parcial para 100% do valor
+// pago — um relógio legal que corre em silêncio até alguém olhar para ele.
+// ---------------------------------------------------------------------------
+
+export type StatusContratoImobiliario = "ativo" | "distrato-solicitado" | "distrato-formalizado";
+
+export interface ContratoImobiliario {
+  id: string;
+  workspaceId: string;
+  /** Conversa da Neural Inbox pela qual o pedido de distrato, se houver, chegou. */
+  conversationId?: string | null;
+  compradorNome: string;
+  unidade: string;
+  valorContratoBrl: number;
+  /** Valor já pago pelo comprador até o momento — base de cálculo da retenção/reembolso. */
+  valorPagoBrl: number;
+  /** Prazo de entrega combinado em contrato. */
+  dataPrevistaEntrega: string;
+  /** Preenchido quando a unidade já foi efetivamente entregue — congela o cálculo de atraso nesse instante. */
+  dataEntregaRealizadaEm?: string | null;
+  /**
+   * Dias de tolerância contratual de atraso antes de a responsabilidade
+   * virar culpa da construtora. Prática de mercado comum é até 180 dias,
+   * mas cada contrato define o próprio prazo — por isso é um campo do
+   * contrato, não uma constante global (mesmo princípio do `freeTimeDias`
+   * em `Shipment`: nunca assumir um padrão universal em silêncio).
+   */
+  toleranciaAtrasoDias: number;
+  /** Se a incorporação está vinculada a patrimônio de afetação — eleva o teto de retenção de 25% para 50% (Lei 13.786/2018). */
+  patrimonioDeAfetacao: boolean;
+  status: StatusContratoImobiliario;
+  distratoSolicitadoEm?: string | null;
+  criadoEm: string;
+  criadoPor: string;
+}
+
+// ---------------------------------------------------------------------------
 // Agendamentos — anti-no-show e preparo pré-procedimento (Clínicas)
 // ---------------------------------------------------------------------------
 

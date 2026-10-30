@@ -57,6 +57,7 @@ import { BusinessROIWidget } from "@/components/BusinessROIWidget";
 import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
 import { AppointmentRemindersPanel } from "@/components/niche/AppointmentRemindersPanel";
 import { CargoTriagePanel } from "@/components/niche/CargoTriagePanel";
+import { DistratoRiskPanel } from "@/components/niche/DistratoRiskPanel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -538,9 +539,12 @@ export function NeuralInbox() {
       {/* Refinamento funcional por nicho (Onboarding Cognitivo): cada módulo
           só aparece no setor a que se aplica — nenhum workspace vê os três. */}
       {workspace?.setor === "construtora-imobiliaria" && (
-        <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
-          <NicheAttachmentsPanel onInsert={inserirNaResposta} />
-        </section>
+        <>
+          <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+            <NicheAttachmentsPanel onInsert={inserirNaResposta} />
+          </section>
+          <DistratoRiskPanel />
+        </>
       )}
       {(workspace?.setor === "clinica-alto-padrao" || workspace?.setor === "clinica-medica-exames") && (
         <AppointmentRemindersPanel
