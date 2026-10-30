@@ -371,6 +371,16 @@ export interface Appointment {
    * `calcularCheckInsPosAtendimentoPendentes` em `@/lib/appointments`.
    */
   posAtendimentoEnviadoEm?: string | null;
+  /**
+   * Instante em que o consentimento informado foi registrado E selado na
+   * trilha de auditoria (Blindagem Jurídica de Procedimento). Diferente dos
+   * demais campos `*EnviadoEm` deste tipo: isto não é um lembrete enviado, é
+   * uma prova jurídica datada — ver `registrarConsentimentoProcedimento` em
+   * `@/lib/appointments`.
+   */
+  termoConsentimentoRegistradoEm?: string | null;
+  /** Id da entrada de auditoria correspondente ao registro do consentimento — referência cruzada para o painel de governança. */
+  termoConsentimentoAuditEntryId?: string | null;
   criadoEm: string;
   criadoPor: string;
 }
@@ -397,6 +407,16 @@ export interface Shipment {
   status: ShipmentStatus;
   /** Prazo de entrega combinado (SLA) — base do cálculo de desvio. */
   previsaoEntrega: string;
+  /**
+   * Free time contratado com o armador/terminal, em dias, a partir da
+   * chegada na aduana. Sem este valor, `calcularRiscoDemurrage`
+   * (`@/lib/demurrage`) não estima nada — cada contrato tem um free time
+   * diferente, e inventar um padrão universal seria o tipo de número que
+   * engana o operador, não ajuda.
+   */
+  freeTimeDias?: number;
+  /** Custo diário de sobre-estadia (demurrage) contratado, em BRL, cobrado por dia excedente ao free time. */
+  custoDiarioDemurrageBrl?: number;
   atualizadoEm: string;
   criadoEm: string;
   historico: ShipmentEvent[];

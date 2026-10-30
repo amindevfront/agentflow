@@ -23,6 +23,19 @@
 // insatisfação, o Circuit Breaker já dispara ali, antes de qualquer canal
 // público. Este módulo só decide QUANDO perguntar; a detecção de
 // insatisfação na resposta já existe e não precisa ser duplicada aqui.
+//
+// Blindagem Jurídica de Procedimento: casos reais de condenação de clínicas
+// por erro estético citam, como falha de atendimento, a AUSÊNCIA de termo de
+// consentimento e o acompanhamento pós-operatório insuficiente — exatamente
+// as duas coisas que `registrarConsentimentoProcedimento` e a checagem
+// pós-atendimento (acima) produzem prova datada. A prova é selada na MESMA
+// cadeia de auditoria à prova de adulteração (`@/lib/auditLog` →
+// `@/lib/crypto/auditChain`) usada para o Relatório Executivo — não é "um
+// campo de data no banco que qualquer um edita depois", é uma entrada
+// encadeada por hash e assinada por HMAC do lado do servidor. Nenhum dado de
+// paciente entra nos `detalhes` do evento (regra de `registrarEventoAuditoria`:
+// nunca PII ali) — a prova é "este agendamento teve consentimento registrado
+// neste instante", não o conteúdo do consentimento em si.
 
 import {
   collection,
@@ -37,6 +50,7 @@ import {
   type Unsubscribe,
 } from "firebase/firestore";
 import type { Appointment, AppointmentStatus, Canal } from "@/types";
+import { registrarEventoAuditoria, registrarEventoAuditoriaSilencioso, type EventoAuditoriaInput } from "./auditLog";
 import { db } from "./firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "./firestore";
 import { enviarMensagemOperador } from "./inbox/firestore";
@@ -298,4 +312,55 @@ export async function enviarCheckInPosAtendimento(
   }
 
   await updateDoc(doc(database, COLECAO, agendamento.id), { posAtendimentoEnviadoEm: new Date().toISOString() });
+
+  // Silencioso por desenho: a mensagem já saiu — perder o selo de auditoria
+  // por um problema de rede não deveria desfazer o envio nem travar a UI.
+  await registrarEventoAuditoriaSilencioso(corpoAuditoriaPosAtendimento(agendamento));
+}
+
+// ---------------------------------------------------------------------------
+// Blindagem Jurídica de Procedimento
+// ---------------------------------------------------------------------------
+
+/** Pura: monta o corpo do evento de auditoria do pós-atendimento. Nenhum dado de paciente — ver nota de honestidade no topo do arquivo. */
+export function corpoAuditoriaPosAtendimento(agendamento: Appointment): EventoAuditoriaInput {
+  return {
+    tipo: "procedimento.posatendimento.registrado",
+    recurso: `appointments/${agendamento.id}`,
+    workspaceId: agendamento.workspaceId,
+    detalhes: {
+      procedimento: agendamento.procedimento,
+      dataHoraProcedimento: agendamento.dataHora,
+    },
+  };
+}
+
+/** Pura: monta o corpo do evento de auditoria do consentimento informado. */
+export function corpoAuditoriaConsentimento(agendamento: Appointment): EventoAuditoriaInput {
+  return {
+    tipo: "procedimento.consentimento.registrado",
+    recurso: `appointments/${agendamento.id}`,
+    workspaceId: agendamento.workspaceId,
+    detalhes: {
+      procedimento: agendamento.procedimento,
+      dataHoraProcedimento: agendamento.dataHora,
+    },
+  };
+}
+
+/**
+ * Registra o consentimento informado do paciente e sela a prova na trilha de
+ * auditoria. Diferente dos lembretes acima, esta operação NÃO é opcional de
+ * reenviar silenciosamente em caso de falha — se o selo falhar, quem chamou
+ * precisa saber, porque "eu cliquei em registrar" sem o selo correspondente
+ * seria uma falsa sensação de proteção jurídica.
+ */
+export async function registrarConsentimentoProcedimento(agendamento: Appointment): Promise<void> {
+  const database = requireDb();
+  const entradaAuditoria = await registrarEventoAuditoria(corpoAuditoriaConsentimento(agendamento));
+
+  await updateDoc(doc(database, COLECAO, agendamento.id), {
+    termoConsentimentoRegistradoEm: entradaAuditoria.seladoEm,
+    termoConsentimentoAuditEntryId: entradaAuditoria.id,
+  });
 }

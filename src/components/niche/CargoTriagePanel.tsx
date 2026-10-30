@@ -9,15 +9,39 @@ import { useEffect, useMemo, useState } from "react";
 import type { Shipment, ShipmentStatus } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import {
+  atualizarStatusCarga,
   buscarCargaPorCodigo,
   calcularDesvioSla,
   criarCarga,
   extrairCodigoRastreio,
   subscribeShipments,
 } from "@/lib/shipments";
+import { calcularRiscoDemurrage, type NivelAlertaDemurrage } from "@/lib/demurrage";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { cn } from "@/lib/utils";
+
+const PROXIMO_STATUS: Record<ShipmentStatus, ShipmentStatus | null> = {
+  coletado: "em-transito",
+  "em-transito": "aduana",
+  aduana: "entregue",
+  atrasado: "entregue",
+  entregue: null,
+};
+
+const CORES_ALERTA_DEMURRAGE: Record<NivelAlertaDemurrage, string> = {
+  "dentro-do-free-time": "bg-state-done-bg text-state-done",
+  "proximo-do-limite": "bg-state-run-bg text-state-run",
+  "acumulando-custo": "bg-state-error-bg text-state-error",
+  evitado: "bg-state-done-bg text-state-done",
+};
+
+const ROTULO_ALERTA_DEMURRAGE: Record<NivelAlertaDemurrage, string> = {
+  "dentro-do-free-time": "dentro do free time",
+  "proximo-do-limite": "próximo do limite de free time",
+  "acumulando-custo": "acumulando custo de demurrage",
+  evitado: "demurrage evitada",
+};
 
 const ROTULO_STATUS: Record<ShipmentStatus, string> = {
   coletado: "coletado",
@@ -49,8 +73,11 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
   const [destino, setDestino] = useState("");
   const [previsaoEntrega, setPrevisaoEntrega] = useState("");
   const [novoCodigo, setNovoCodigo] = useState("");
+  const [freeTimeDias, setFreeTimeDias] = useState("");
+  const [custoDiarioDemurrage, setCustoDiarioDemurrage] = useState("");
   const [erro, setErro] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
+  const [avancandoStatus, setAvancandoStatus] = useState(false);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -65,6 +92,7 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
 
   const carga = useMemo(() => buscarCargaPorCodigo(cargas, codigo), [cargas, codigo]);
   const desvio = useMemo(() => (carga ? calcularDesvioSla(carga) : null), [carga]);
+  const riscoDemurrage = useMemo(() => (carga ? calcularRiscoDemurrage(carga) : null), [carga]);
   // `criarCarga` grava com um id derivado do código — registrar o mesmo
   // código de novo SOBRESCREVE o histórico anterior em silêncio. Avisa antes
   // de deixar isso acontecer, já que não há UI de "atualizar status" ainda.
@@ -87,22 +115,43 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
     setProcessando(true);
     setErro(null);
     try {
+      const freeTime = freeTimeDias.trim() ? Number(freeTimeDias) : undefined;
+      const custoDiario = custoDiarioDemurrage.trim() ? Number(custoDiarioDemurrage) : undefined;
       await criarCarga({
         codigoRastreio: novoCodigo.trim(),
         origem: origem.trim(),
         destino: destino.trim(),
         previsaoEntrega: new Date(previsaoEntrega).toISOString(),
         workspaceId: workspaceId ?? undefined,
+        freeTimeDias: Number.isFinite(freeTime) ? freeTime : undefined,
+        custoDiarioDemurrageBrl: Number.isFinite(custoDiario) ? custoDiario : undefined,
       });
       setNovoCodigo("");
       setOrigem("");
       setDestino("");
       setPrevisaoEntrega("");
+      setFreeTimeDias("");
+      setCustoDiarioDemurrage("");
       setFormAberto(false);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível registrar a carga.");
     } finally {
       setProcessando(false);
+    }
+  }
+
+  async function handleAvancarStatus() {
+    if (!carga) return;
+    const proximo = PROXIMO_STATUS[carga.status];
+    if (!proximo) return;
+    setAvancandoStatus(true);
+    setErro(null);
+    try {
+      await atualizarStatusCarga(carga, proximo);
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível avançar o status da carga.");
+    } finally {
+      setAvancandoStatus(false);
     }
   }
 
@@ -140,6 +189,25 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
           <Field label="Origem" value={origem} onChange={(e) => setOrigem(e.target.value)} />
           <Field label="Destino" value={destino} onChange={(e) => setDestino(e.target.value)} />
           <Field label="Previsão de entrega" type="datetime-local" value={previsaoEntrega} onChange={(e) => setPrevisaoEntrega(e.target.value)} />
+          <p className="text-xs text-ink-400">
+            Termos de demurrage (opcional) — sem isso, o Demurrage Clock fica inativo para esta carga.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field
+              label="Free time (dias)"
+              type="number"
+              value={freeTimeDias}
+              onChange={(e) => setFreeTimeDias(e.target.value)}
+              placeholder="Ex.: 7"
+            />
+            <Field
+              label="Custo diário demurrage (R$)"
+              type="number"
+              value={custoDiarioDemurrage}
+              onChange={(e) => setCustoDiarioDemurrage(e.target.value)}
+              placeholder="Conforme seu contrato"
+            />
+          </div>
           <Button
             size="sm"
             loading={processando}
@@ -179,11 +247,40 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
                 ))}
               </ul>
             )}
-            {onInsertResposta && (
-              <Button size="sm" variant="secondary" onClick={() => onInsertResposta(respostaSugerida())}>
-                Inserir resposta sugerida
-              </Button>
+
+            {riscoDemurrage && (
+              <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-ink-100 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-ink-950">Demurrage Clock</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-medium",
+                      CORES_ALERTA_DEMURRAGE[riscoDemurrage.nivelAlerta]
+                    )}
+                  >
+                    {ROTULO_ALERTA_DEMURRAGE[riscoDemurrage.nivelAlerta]}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-500">
+                  {riscoDemurrage.diasExcedentes > 0
+                    ? `${riscoDemurrage.diasExcedentes} dia(s) excedente(s) ao free time · custo ${riscoDemurrage.nivelAlerta === "acumulando-custo" && carga.status !== "entregue" ? "projetado" : "acumulado"}: R$ ${riscoDemurrage.custoProjetadoBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
+                    : `${riscoDemurrage.diasLivresRestantes} dia(s) de free time restante(s) — nenhum custo de demurrage até agora`}
+                </p>
+              </div>
             )}
+
+            <div className="flex flex-wrap gap-2">
+              {onInsertResposta && (
+                <Button size="sm" variant="secondary" onClick={() => onInsertResposta(respostaSugerida())}>
+                  Inserir resposta sugerida
+                </Button>
+              )}
+              {PROXIMO_STATUS[carga.status] && (
+                <Button size="sm" variant="secondary" loading={avancandoStatus} onClick={handleAvancarStatus}>
+                  Avançar para &ldquo;{ROTULO_STATUS[PROXIMO_STATUS[carga.status] as ShipmentStatus]}&rdquo;
+                </Button>
+              )}
+            </div>
           </div>
         )
       )}

@@ -168,7 +168,17 @@ export type AuditEventType =
   | "auth.sessao.iniciada"
   | "auth.sessao.encerrada"
   /** Download do Relatório Executivo (PDF) — o selo resultante é embutido no próprio PDF como atestado de segurança. */
-  | "relatorio.executivo.gerado";
+  | "relatorio.executivo.gerado"
+  /**
+   * Blindagem Jurídica de Procedimento (nicho Clínicas): registro do termo de
+   * consentimento informado, selado na mesma cadeia à prova de adulteração
+   * do resto da auditoria — prova datada e verificável de que o paciente foi
+   * informado antes do procedimento, exatamente o que cortes brasileiras
+   * citam como ausente nos casos de condenação por erro estético.
+   */
+  | "procedimento.consentimento.registrado"
+  /** Checagem pós-atendimento (48h) efetivamente enviada — prova de acompanhamento pós-operatório, mesmo racional acima. */
+  | "procedimento.posatendimento.registrado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

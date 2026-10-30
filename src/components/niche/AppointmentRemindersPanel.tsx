@@ -19,6 +19,7 @@ import {
   criarAgendamento,
   enviarCheckInPosAtendimento,
   enviarConfirmacaoAgendamento,
+  registrarConsentimentoProcedimento,
   subscribeAgendamentos,
   textoConfirmacao,
   textoPosAtendimento,
@@ -107,6 +108,22 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
       await enviarConfirmacaoAgendamento(agendamento, janela, { remetenteId: uid });
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível enviar a confirmação.");
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
+  async function handleRegistrarConsentimento(agendamento: Appointment) {
+    setProcessandoId(agendamento.id);
+    setErro(null);
+    try {
+      await registrarConsentimentoProcedimento(agendamento);
+    } catch (e) {
+      setErro(
+        e instanceof Error
+          ? `Consentimento NÃO foi selado: ${e.message}`
+          : "Não foi possível selar o registro de consentimento."
+      );
     } finally {
       setProcessandoId(null);
     }
@@ -213,15 +230,32 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
                 {agendamento.procedimento} · {formatRelativeTime(new Date(agendamento.dataHora))}
               </p>
               <p className="text-xs text-ink-400">{textoConfirmacao(agendamento, janela)}</p>
-              <Button
-                size="sm"
-                loading={processandoId === agendamento.id}
-                disabled={!agendamento.conversationId}
-                title={!agendamento.conversationId ? "Vincule este agendamento a uma conversa para enviar pelo canal" : undefined}
-                onClick={() => handleEnviar(agendamento, janela)}
-              >
-                Enviar agora
-              </Button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  loading={processandoId === agendamento.id}
+                  disabled={!agendamento.conversationId}
+                  title={!agendamento.conversationId ? "Vincule este agendamento a uma conversa para enviar pelo canal" : undefined}
+                  onClick={() => handleEnviar(agendamento, janela)}
+                >
+                  Enviar agora
+                </Button>
+                {agendamento.termoConsentimentoRegistradoEm ? (
+                  <span className="mono rounded-full bg-state-done-bg px-2 py-0.5 text-[11px] font-medium text-state-done">
+                    consentimento selado
+                  </span>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={processandoId === agendamento.id}
+                    onClick={() => handleRegistrarConsentimento(agendamento)}
+                    title="Blindagem Jurídica de Procedimento — selado na trilha de auditoria à prova de adulteração"
+                  >
+                    Registrar consentimento
+                  </Button>
+                )}
+              </div>
             </li>
           ))}
         </ul>

@@ -3,6 +3,8 @@ import type { Appointment, AppointmentStatus } from "@/types";
 import {
   calcularCheckInsPosAtendimentoPendentes,
   calcularJanelasPendentes,
+  corpoAuditoriaConsentimento,
+  corpoAuditoriaPosAtendimento,
   textoConfirmacao,
   textoPosAtendimento,
 } from "@/lib/appointments";
@@ -174,5 +176,30 @@ describe("textoPosAtendimento", () => {
     expect(texto).toContain("Ana Lima");
     expect(texto).toContain("Procedimento estético");
     expect(texto.toLowerCase()).toContain("desconforto");
+  });
+});
+
+describe("corpoAuditoriaConsentimento / corpoAuditoriaPosAtendimento (Blindagem Jurídica)", () => {
+  it("corpoAuditoriaConsentimento nunca inclui o nome do paciente nos detalhes", () => {
+    const corpo = corpoAuditoriaConsentimento(
+      criarAgendamento({ pacienteNome: "Ana Lima", procedimento: "Preenchimento labial" })
+    );
+    expect(corpo.tipo).toBe("procedimento.consentimento.registrado");
+    expect(JSON.stringify(corpo.detalhes)).not.toContain("Ana Lima");
+    expect(corpo.detalhes?.procedimento).toBe("Preenchimento labial");
+  });
+
+  it("corpoAuditoriaConsentimento aponta o recurso para o agendamento específico", () => {
+    const corpo = corpoAuditoriaConsentimento(criarAgendamento({ id: "appt_42" }));
+    expect(corpo.recurso).toBe("appointments/appt_42");
+  });
+
+  it("corpoAuditoriaPosAtendimento nunca inclui o nome do paciente nos detalhes", () => {
+    const corpo = corpoAuditoriaPosAtendimento(
+      criarAgendamento({ pacienteNome: "João Pereira", procedimento: "Exame de imagem" })
+    );
+    expect(corpo.tipo).toBe("procedimento.posatendimento.registrado");
+    expect(JSON.stringify(corpo.detalhes)).not.toContain("João Pereira");
+    expect(corpo.detalhes?.procedimento).toBe("Exame de imagem");
   });
 });

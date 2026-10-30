@@ -10,11 +10,12 @@ import {
   onSnapshot,
   query,
   setDoc,
+  updateDoc,
   where,
   type QueryDocumentSnapshot,
   type Unsubscribe,
 } from "firebase/firestore";
-import type { Shipment, ShipmentStatus } from "@/types";
+import type { Shipment, ShipmentEvent, ShipmentStatus } from "@/types";
 import { db } from "./firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "./firestore";
 import { enfileirarEscrita } from "./offlineQueue";
@@ -95,6 +96,9 @@ export interface CriarCargaInput {
   previsaoEntrega: string;
   status?: ShipmentStatus;
   workspaceId?: string;
+  /** Termos de free time/demurrage do contrato — ver `@/lib/demurrage`. Omitidos, o Demurrage Clock fica inativo para esta carga. */
+  freeTimeDias?: number;
+  custoDiarioDemurrageBrl?: number;
 }
 
 /**
@@ -116,12 +120,38 @@ export async function criarCarga(entrada: CriarCargaInput): Promise<Shipment> {
       destino: entrada.destino,
       status: entrada.status ?? "coletado",
       previsaoEntrega: entrada.previsaoEntrega,
+      freeTimeDias: entrada.freeTimeDias,
+      custoDiarioDemurrageBrl: entrada.custoDiarioDemurrageBrl,
       atualizadoEm: agora,
       criadoEm: agora,
       historico: [{ status: entrada.status ?? "coletado", ocorridoEm: agora }],
     };
     await setDoc(doc(database, COLECAO, carga.id), carga);
     return carga;
+  });
+}
+
+/**
+ * Avança o status da carga, anexando um novo evento ao histórico — sem isso,
+ * uma carga criada ficava congelada em "coletado" para sempre, e o Demurrage
+ * Clock (`@/lib/demurrage`) nunca teria um instante de chegada na aduana
+ * para contar a partir dele. Histórico é append-only: nunca reescreve ou
+ * remove eventos anteriores, só adiciona o novo.
+ */
+export async function atualizarStatusCarga(
+  carga: Shipment,
+  novoStatus: ShipmentStatus,
+  local?: string
+): Promise<void> {
+  return enfileirarEscrita("Atualizar status da carga", async () => {
+    const database = requireDb();
+    const agora = new Date().toISOString();
+    const evento: ShipmentEvent = { status: novoStatus, ocorridoEm: agora, local };
+    await updateDoc(doc(database, COLECAO, carga.id), {
+      status: novoStatus,
+      atualizadoEm: agora,
+      historico: [...carga.historico, evento],
+    });
   });
 }
 
