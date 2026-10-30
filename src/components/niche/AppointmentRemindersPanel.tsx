@@ -14,11 +14,14 @@ import type { Appointment } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
 import {
+  calcularCheckInsPosAtendimentoPendentes,
   calcularJanelasPendentes,
   criarAgendamento,
+  enviarCheckInPosAtendimento,
   enviarConfirmacaoAgendamento,
   subscribeAgendamentos,
   textoConfirmacao,
+  textoPosAtendimento,
 } from "@/lib/appointments";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/Button";
@@ -64,6 +67,10 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
   }, [conversaSelecionada?.id, conversaSelecionada?.nome]);
 
   const janelas = useMemo(() => calcularJanelasPendentes(agendamentos, referencia), [agendamentos, referencia]);
+  const checkInsPosAtendimento = useMemo(
+    () => calcularCheckInsPosAtendimentoPendentes(agendamentos, referencia),
+    [agendamentos, referencia]
+  );
 
   async function handleCriar() {
     const uid = auth?.currentUser?.uid;
@@ -105,6 +112,23 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
     }
   }
 
+  async function handleEnviarPosAtendimento(agendamento: Appointment) {
+    const uid = auth?.currentUser?.uid;
+    if (!uid) {
+      setErro("Sessão expirada. Entre novamente para enviar a checagem.");
+      return;
+    }
+    setProcessandoId(agendamento.id);
+    setErro(null);
+    try {
+      await enviarCheckInPosAtendimento(agendamento, { remetenteId: uid });
+    } catch (e) {
+      setErro(e instanceof Error ? e.message : "Não foi possível enviar a checagem pós-atendimento.");
+    } finally {
+      setProcessandoId(null);
+    }
+  }
+
   const totalPendente = janelas.precisamConfirmacao24h.length + janelas.precisamConfirmacao2h.length;
 
   return (
@@ -119,7 +143,7 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className="grid gap-3 sm:grid-cols-3">
         <MetricCard
           rotulo="Pendentes de confirmação (24h)"
           valor={String(janelas.precisamConfirmacao24h.length)}
@@ -131,6 +155,12 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
           valor={String(janelas.precisamConfirmacao2h.length)}
           detalhe="confirmação final, hoje"
           tom={janelas.precisamConfirmacao2h.length > 0 ? "erro" : "positivo"}
+        />
+        <MetricCard
+          rotulo="Checagem pós-atendimento (48h)"
+          valor={String(checkInsPosAtendimento.length)}
+          detalhe="blindagem de reputação"
+          tom={checkInsPosAtendimento.length > 0 ? "atencao" : "positivo"}
         />
       </div>
 
@@ -195,6 +225,42 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
             </li>
           ))}
         </ul>
+      )}
+
+      {checkInsPosAtendimento.length > 0 && (
+        <div className="flex flex-col gap-1.5 border-t border-ink-100 pt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+            Blindagem de reputação — checagem pós-atendimento
+          </h4>
+          <ul className="flex flex-col gap-1.5">
+            {checkInsPosAtendimento.map((agendamento) => (
+              <li
+                key={`${agendamento.id}-pos-atendimento`}
+                className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-ink-100 px-3 py-2"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-ink-950">{agendamento.pacienteNome}</span>
+                  <span className="mono rounded-full bg-state-run-bg px-2 py-0.5 text-[11px] font-medium text-state-run">
+                    48h depois
+                  </span>
+                </div>
+                <p className="text-xs text-ink-500">
+                  {agendamento.procedimento} · realizado {formatRelativeTime(new Date(agendamento.dataHora))}
+                </p>
+                <p className="text-xs text-ink-400">{textoPosAtendimento(agendamento)}</p>
+                <Button
+                  size="sm"
+                  loading={processandoId === agendamento.id}
+                  disabled={!agendamento.conversationId}
+                  title={!agendamento.conversationId ? "Vincule este agendamento a uma conversa para enviar pelo canal" : undefined}
+                  onClick={() => handleEnviarPosAtendimento(agendamento)}
+                >
+                  Enviar checagem
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </section>
   );

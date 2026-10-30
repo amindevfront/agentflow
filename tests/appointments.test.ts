@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { Appointment, AppointmentStatus } from "@/types";
-import { calcularJanelasPendentes, textoConfirmacao } from "@/lib/appointments";
+import {
+  calcularCheckInsPosAtendimentoPendentes,
+  calcularJanelasPendentes,
+  textoConfirmacao,
+  textoPosAtendimento,
+} from "@/lib/appointments";
 
 const AGORA = new Date(2026, 0, 10, 12, 0, 0);
 
@@ -20,6 +25,7 @@ function criarAgendamento(overrides: Partial<Appointment> = {}): Appointment {
     diretrizesPreparo: "Jejum de 8h.",
     confirmacao24hEnviadaEm: null,
     confirmacao2hEnviadaEm: null,
+    posAtendimentoEnviadoEm: null,
     criadoEm: AGORA.toISOString(),
     criadoPor: "uid_1",
     ...overrides,
@@ -102,5 +108,71 @@ describe("textoConfirmacao", () => {
     const agendamento = criarAgendamento({ pacienteNome: "João Pereira", procedimento: "Exame de imagem" });
     expect(textoConfirmacao(agendamento, "24h")).toContain("João Pereira");
     expect(textoConfirmacao(agendamento, "24h")).toContain("Exame de imagem");
+  });
+});
+
+describe("calcularCheckInsPosAtendimentoPendentes", () => {
+  it("não precisa de checagem antes de 48h do procedimento realizado", () => {
+    const resultado = calcularCheckInsPosAtendimentoPendentes(
+      [criarAgendamento({ status: "realizado", dataHora: horasAFrente(-47) })],
+      AGORA
+    );
+    expect(resultado).toHaveLength(0);
+  });
+
+  it("precisa de checagem entre 48h e 72h depois do procedimento realizado", () => {
+    const resultado = calcularCheckInsPosAtendimentoPendentes(
+      [criarAgendamento({ status: "realizado", dataHora: horasAFrente(-50) })],
+      AGORA
+    );
+    expect(resultado).toHaveLength(1);
+  });
+
+  it("não precisa de checagem depois de 72h — a janela ideal já passou", () => {
+    const resultado = calcularCheckInsPosAtendimentoPendentes(
+      [criarAgendamento({ status: "realizado", dataHora: horasAFrente(-73) })],
+      AGORA
+    );
+    expect(resultado).toHaveLength(0);
+  });
+
+  it("não repete a checagem já enviada, mesmo dentro da janela", () => {
+    const resultado = calcularCheckInsPosAtendimentoPendentes(
+      [
+        criarAgendamento({
+          status: "realizado",
+          dataHora: horasAFrente(-50),
+          posAtendimentoEnviadoEm: AGORA.toISOString(),
+        }),
+      ],
+      AGORA
+    );
+    expect(resultado).toHaveLength(0);
+  });
+
+  it.each(["agendado", "confirmado", "no-show", "cancelado"] as AppointmentStatus[])(
+    "nunca precisa de checagem com status '%s', mesmo dentro da janela de tempo",
+    (status) => {
+      const resultado = calcularCheckInsPosAtendimentoPendentes(
+        [criarAgendamento({ status, dataHora: horasAFrente(-50) })],
+        AGORA
+      );
+      expect(resultado).toHaveLength(0);
+    }
+  );
+
+  it("lista vazia não precisa de nenhuma checagem", () => {
+    expect(calcularCheckInsPosAtendimentoPendentes([], AGORA)).toEqual([]);
+  });
+});
+
+describe("textoPosAtendimento", () => {
+  it("menciona o nome do paciente e o procedimento, e convida a relatar qualquer problema", () => {
+    const texto = textoPosAtendimento(
+      criarAgendamento({ pacienteNome: "Ana Lima", procedimento: "Procedimento estético" })
+    );
+    expect(texto).toContain("Ana Lima");
+    expect(texto).toContain("Procedimento estético");
+    expect(texto.toLowerCase()).toContain("desconforto");
   });
 });

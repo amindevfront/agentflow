@@ -364,6 +364,13 @@ export interface Appointment {
   diretrizesPreparo?: string;
   confirmacao24hEnviadaEm?: string | null;
   confirmacao2hEnviadaEm?: string | null;
+  /**
+   * Checagem proativa enviada ~48h depois do procedimento (status
+   * "realizado"), perguntando como o paciente está. Captura insatisfação
+   * num canal privado ANTES de ela amadurecer numa reclamação pública — ver
+   * `calcularCheckInsPosAtendimentoPendentes` em `@/lib/appointments`.
+   */
+  posAtendimentoEnviadoEm?: string | null;
   criadoEm: string;
   criadoPor: string;
 }
