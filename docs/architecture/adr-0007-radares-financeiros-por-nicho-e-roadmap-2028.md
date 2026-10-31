@@ -57,11 +57,23 @@ Novo tipo: `PedidoEcommerce`/`StatusPedidoEcommerce` em `src/types/inbox.ts` —
 **Negativas / custos aceitos:**
 - Os limiares de alerta (5%/8% cambial; 10%/20% no-show; 4%/7,5% chargeback) são âncoras de pesquisa de mercado geral, não calibradas ao contrato específico de cada cliente — cada workspace deve revisá-los com o próprio histórico ao crescer a base de dados real.
 
-## Pendências / Roadmap — resiliência 2027-2028 [Proposto, não implementado nesta mudança]
+## Pendências / Roadmap — resiliência 2027-2028
 
-Dois itens de pesquisa adicionais (tendências de SaaS/regulação, não reclamações de nicho) foram identificados como relevantes para os próximos 12-24 meses, mas **não foram codificados agora** — marcados explicitamente como proposta, não capacidade existente, para não violar o Artigo IV:
+**Atualização de 2026-10-31 — item 1 implementado:**
 
-1. **Health Score preventivo de workspace** — pesquisa sobre churn em SaaS B2B (2026) documenta adoção de IA preditiva saindo de 38% para 65% das grandes empresas entre 2023 e 2026, com redução de 15-30% em atrição. Seria um painel, para o próprio operador do AgentFlow (não para o cliente final), agregando sinais já existentes por workspace (taxa de sucesso de execuções, tickets de transbordo abertos há muito tempo, frequência de uso) num score único de risco de churn — sem precisar de nova instrumentação, só nova agregação sobre dados já coletados.
-2. **Relatório de Prontidão para Regulação de IA (EU AI Act / futura legislação brasileira)** — o AI Act da UE já exige, desde agosto de 2026, trilha de auditoria de eventos relevantes com retenção mínima de 6 meses para sistemas de alto risco (Artigo 12), com obrigações proporcionalmente mais leves para pequenas empresas. O AgentFlow já tem a Auditoria de IA & Logs (`/runs`) e o Cofre & Blindagem Jurídica — faltaria um relatório exportável específico de "prontidão regulatória", reaproveitando dados já auditados, útil tanto para cliente brasileiro com operação na UE/EUA quanto para a narrativa "nosso produto já nasce pronto para a próxima onda de compliance de IA".
+### 1. Health Score Preventivo de workspace — IMPLEMENTADO
 
-Ambos exigem decisão explícita do usuário antes de virar story — não foram implementados por decisão unilateral.
+`src/lib/healthScore.ts` + `src/components/governance/HealthScorePanel.tsx` (nova aba "Health Score" em `/governance`). Mesma filosofia de `@/lib/guardrails/compliancePreventivo`: sinais com peso, determinísticos, auditáveis — **nenhum modelo de ML**, para que o score seja sempre reconstruível manualmente pelo operador numa conversa difícil com o cliente.
+
+Três sinais, cada um já existente nos dados do produto (nenhuma instrumentação nova):
+1. Taxa de sucesso de execuções nos últimos 30 dias (penalidade se < 90%, maior se < 70%).
+2. Tickets de transbordo abertos/em análise há mais de 48h sem decisão (penalidade a partir de 1, maior a partir de 3).
+3. Dias desde a última atividade — execução OU conversa, o que for mais recente (penalidade a partir de 7 dias, maior a partir de 14; penalidade máxima se o workspace nunca teve nenhuma atividade).
+
+Score de 0 a 100, com `nivel` (`saudavel`/`atencao`/`risco`) e a lista de sinais que pesaram, exibida no próprio painel ("Por que este score") — nunca um número opaco. Fundamentação: pesquisa sobre churn preditivo em SaaS B2B (2026) documenta adoção saindo de 38% para 65% das grandes empresas entre 2023-2026, com redução de 15-30% em atrição quando o risco é identificado antes do cancelamento — e a reclamação mais citada contra fornecedores de automação é "depois que contratei, sumiram": ninguém do lado do fornecedor percebeu o problema a tempo. É esse buraco que este painel fecha, para o operador do AgentFlow, não para o cliente final.
+
+9 novos testes (`tests/healthScore.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 49 arquivos, 592 testes passando.
+
+### 2. Relatório de Prontidão para Regulação de IA (EU AI Act / futura legislação brasileira) — [Proposto, ainda não implementado]
+
+O AI Act da UE já exige, desde agosto de 2026, trilha de auditoria de eventos relevantes com retenção mínima de 6 meses para sistemas de alto risco (Artigo 12), com obrigações proporcionalmente mais leves para pequenas empresas. O AgentFlow já tem a Auditoria de IA & Logs (`/runs`) e o Cofre & Blindagem Jurídica — faltaria um relatório exportável específico de "prontidão regulatória", reaproveitando dados já auditados, útil tanto para cliente brasileiro com operação na UE/EUA quanto para a narrativa "nosso produto já nasce pronto para a próxima onda de compliance de IA". Exige decisão explícita do usuário antes de virar story — não implementado por decisão unilateral.

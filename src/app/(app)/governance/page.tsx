@@ -14,13 +14,14 @@ import { CredentialVaultPanel } from "@/components/governance/CredentialVaultPan
 import { ExecutiveReportPanel } from "@/components/governance/ExecutiveReportPanel";
 import { GuardrailInspectorPanel } from "@/components/governance/GuardrailInspectorPanel";
 import { HandoffQueuePanel } from "@/components/governance/HandoffQueuePanel";
+import { HealthScorePanel } from "@/components/governance/HealthScorePanel";
 import { OpexTaxShieldPanel } from "@/components/governance/OpexTaxShieldPanel";
 import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { drenarFilaAuditoria } from "@/lib/auditLog";
 
-type Aba = "transbordo" | "guardrails" | "compliance" | "cofre" | "auditoria" | "opex" | "parametros";
+type Aba = "transbordo" | "guardrails" | "compliance" | "cofre" | "auditoria" | "opex" | "parametros" | "saude";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "transbordo", label: "Transbordo" },
@@ -30,6 +31,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "auditoria", label: "Auditoria" },
   { valor: "opex", label: "OpEx & Tax Shield" },
   { valor: "parametros", label: "Matriz de Lucro & Encargos" },
+  { valor: "saude", label: "Health Score" },
 ];
 
 export default function GovernancePage() {
@@ -71,6 +73,7 @@ export default function GovernancePage() {
           <RoiConfigPanel />
         </div>
       )}
+      {aba === "saude" && <HealthScorePanel />}
     </div>
   );
 }
