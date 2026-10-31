@@ -99,6 +99,9 @@ export interface CriarCargaInput {
   /** Termos de free time/demurrage do contrato — ver `@/lib/demurrage`. Omitidos, o Demurrage Clock fica inativo para esta carga. */
   freeTimeDias?: number;
   custoDiarioDemurrageBrl?: number;
+  /** Termos de frete/câmbio do contrato — ver `@/lib/cambio`. Omitidos, o Radar de Exposição Cambial fica inativo para esta carga. */
+  valorFreteUsd?: number;
+  cambioContratadoBrl?: number;
 }
 
 /**
@@ -122,6 +125,8 @@ export async function criarCarga(entrada: CriarCargaInput): Promise<Shipment> {
       previsaoEntrega: entrada.previsaoEntrega,
       freeTimeDias: entrada.freeTimeDias,
       custoDiarioDemurrageBrl: entrada.custoDiarioDemurrageBrl,
+      valorFreteUsd: entrada.valorFreteUsd,
+      cambioContratadoBrl: entrada.cambioContratadoBrl,
       atualizadoEm: agora,
       criadoEm: agora,
       historico: [{ status: entrada.status ?? "coletado", ocorridoEm: agora }],

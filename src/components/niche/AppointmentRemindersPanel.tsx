@@ -24,6 +24,8 @@ import {
   textoConfirmacao,
   textoPosAtendimento,
 } from "@/lib/appointments";
+import { calcularCustoAgendaVazia } from "@/lib/noShowCost";
+import { formatarMoeda, formatarPercentual, periodoMesAtual } from "@/lib/roi";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -44,6 +46,7 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
   const [procedimento, setProcedimento] = useState("");
   const [dataHora, setDataHora] = useState("");
   const [diretrizesPreparo, setDiretrizesPreparo] = useState("");
+  const [valorProcedimento, setValorProcedimento] = useState("");
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -73,16 +76,34 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
     [agendamentos, referencia]
   );
 
+  // Custo de Agenda Vazia: escopado ao mês corrente, mesmo recorte temporal
+  // de `periodoMesAtual` (@/lib/roi) usado em todo painel financeiro do
+  // produto — evita que o card misture no-shows de meses diferentes num
+  // único número.
+  const periodoMes = useMemo(() => periodoMesAtual(referencia), [referencia]);
+  const agendamentosDoMes = useMemo(
+    () =>
+      agendamentos.filter((a) => {
+        const instante = new Date(a.dataHora).getTime();
+        return instante >= new Date(periodoMes.inicio).getTime() && instante <= new Date(periodoMes.fim).getTime();
+      }),
+    [agendamentos, periodoMes]
+  );
+  const custoAgendaVazia = useMemo(() => calcularCustoAgendaVazia(agendamentosDoMes), [agendamentosDoMes]);
+  const TOM_NO_SHOW = { saudavel: "positivo", atencao: "atencao", critico: "erro" } as const;
+
   async function handleCriar() {
     const uid = auth?.currentUser?.uid;
     if (!uid || !pacienteNome.trim() || !procedimento.trim() || !dataHora) return;
     setErro(null);
     try {
+      const valor = valorProcedimento.trim() ? Number(valorProcedimento) : undefined;
       await criarAgendamento({
         pacienteNome: pacienteNome.trim(),
         procedimento: procedimento.trim(),
         dataHora: new Date(dataHora).toISOString(),
         diretrizesPreparo: diretrizesPreparo.trim() || undefined,
+        valorProcedimentoBrl: valor !== undefined && Number.isFinite(valor) && valor > 0 ? valor : undefined,
         conversationId: conversaSelecionada?.id ?? null,
         workspaceId: workspaceId ?? undefined,
         criadoPor: uid,
@@ -90,6 +111,7 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
       setProcedimento("");
       setDataHora("");
       setDiretrizesPreparo("");
+      setValorProcedimento("");
       setFormAberto(false);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível criar o agendamento.");
@@ -160,7 +182,7 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
         </Button>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <MetricCard
           rotulo="Pendentes de confirmação (24h)"
           valor={String(janelas.precisamConfirmacao24h.length)}
@@ -179,6 +201,13 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
           detalhe="blindagem de reputação"
           tom={checkInsPosAtendimento.length > 0 ? "atencao" : "positivo"}
         />
+        <MetricCard
+          rotulo="Custo de agenda vazia (mês)"
+          valor={formatarMoeda(custoAgendaVazia.custoNoShowBrl, "BRL")}
+          detalhe={`${formatarPercentual(custoAgendaVazia.taxaNoShow)} de no-show no mês`}
+          tom={TOM_NO_SHOW[custoAgendaVazia.nivelAlerta]}
+          dica="Soma o valor do procedimento de cada no-show do mês corrente — configure o valor ao criar o agendamento para este card refletir a perda real."
+        />
       </div>
 
       {formAberto && (
@@ -186,6 +215,13 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
           <Field label="Paciente" value={pacienteNome} onChange={(e) => setPacienteNome(e.target.value)} />
           <Field label="Procedimento" value={procedimento} onChange={(e) => setProcedimento(e.target.value)} placeholder="Ex.: Consulta de retorno" />
           <Field label="Data e hora" type="datetime-local" value={dataHora} onChange={(e) => setDataHora(e.target.value)} />
+          <Field
+            label="Valor do procedimento (R$) — opcional"
+            type="number"
+            value={valorProcedimento}
+            onChange={(e) => setValorProcedimento(e.target.value)}
+            placeholder="Ex.: 350"
+          />
           <div className="flex flex-col gap-1.5">
             <label htmlFor="appt-preparo" className="text-sm font-medium text-ink-700">
               Diretrizes de preparo (opcional)

@@ -203,6 +203,8 @@ export interface CriarAgendamentoInput {
   conversationId?: string | null;
   workspaceId?: string;
   criadoPor: string;
+  /** Base de cálculo do Custo de Agenda Vazia (`@/lib/noShowCost`) — ver nota no tipo `Appointment`. */
+  valorProcedimentoBrl?: number;
 }
 
 export async function criarAgendamento(entrada: CriarAgendamentoInput): Promise<Appointment> {
@@ -217,6 +219,7 @@ export async function criarAgendamento(entrada: CriarAgendamentoInput): Promise<
       dataHora: entrada.dataHora,
       status: "agendado",
       diretrizesPreparo: entrada.diretrizesPreparo,
+      valorProcedimentoBrl: entrada.valorProcedimentoBrl,
       confirmacao24hEnviadaEm: null,
       confirmacao2hEnviadaEm: null,
       posAtendimentoEnviadoEm: null,

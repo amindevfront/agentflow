@@ -422,6 +422,14 @@ export interface Appointment {
   termoConsentimentoRegistradoEm?: string | null;
   /** Id da entrada de auditoria correspondente ao registro do consentimento — referência cruzada para o painel de governança. */
   termoConsentimentoAuditEntryId?: string | null;
+  /**
+   * Valor do procedimento, em BRL — base de cálculo do Custo de Agenda Vazia
+   * (`@/lib/noShowCost`). Sem este valor, um no-show deste agendamento entra
+   * no contador de volume mas não no total financeiro (ver `cobertura` em
+   * `CustoAgendaVaziaResultado`) — mesma honestidade de `valorPagoBrl` em
+   * `ContratoImobiliario` e `custoDiarioDemurrageBrl` em `Shipment`.
+   */
+  valorProcedimentoBrl?: number;
   criadoEm: string;
   criadoPor: string;
 }
@@ -458,7 +466,48 @@ export interface Shipment {
   freeTimeDias?: number;
   /** Custo diário de sobre-estadia (demurrage) contratado, em BRL, cobrado por dia excedente ao free time. */
   custoDiarioDemurrageBrl?: number;
+  /**
+   * Valor do frete internacional contratado, em USD — grande parte do frete
+   * marítimo (básico, GRI, sobretaxas de pico/combustível) nasce em dólar, e
+   * na importação FOB/FCA é o importador brasileiro quem paga essa parcela.
+   * Base de cálculo do Radar de Exposição Cambial (`@/lib/cambio`). Sem este
+   * valor, o radar fica inativo para esta carga — mesmo padrão de honestidade
+   * de `freeTimeDias`.
+   */
+  valorFreteUsd?: number;
+  /**
+   * Câmbio (R$ por US$) travado no momento da contratação do frete — seja
+   * por hedge (NDF/trava de câmbio) ou pela cotação do dia da contratação.
+   * Comparado ao câmbio atual do workspace (`RoiConfig.cambioUsdBrl`) para
+   * medir a exposição cambial em aberto.
+   */
+  cambioContratadoBrl?: number;
   atualizadoEm: string;
   criadoEm: string;
   historico: ShipmentEvent[];
+}
+
+// ---------------------------------------------------------------------------
+// Pedidos — risco de chargeback e devolução (E-commerce)
+// ---------------------------------------------------------------------------
+//
+// Por que isto existe: nenhum módulo de nicho cobria E-commerce até agora —
+// só o perfil de atendimento (`@/lib/nichePrompts`). Pesquisa de mercado
+// sobre reclamações de lojistas (outubro de 2026) documenta que até ~7,5%
+// das transações online carregam algum tipo de fraude/contestação, e que a
+// taxa de processamento do pagamento frequentemente NÃO é devolvida ao
+// lojista mesmo quando o pedido é reembolsado — dois ralos de caixa que o
+// lojista raramente vê somados num único número (ver `@/lib/chargebackRisk`).
+
+export type StatusPedidoEcommerce = "pago" | "entregue" | "devolvido" | "chargeback" | "cancelado";
+
+export interface PedidoEcommerce {
+  id: string;
+  workspaceId: string;
+  numeroPedido: string;
+  valorBrl: number;
+  status: StatusPedidoEcommerce;
+  /** Motivo declarado da contestação, quando status é "chargeback" — livre, informado pelo operador. */
+  motivoChargeback?: string | null;
+  criadoEm: string;
 }

@@ -6,7 +6,7 @@
 // a UI diz explicitamente "carga não encontrada".
 
 import { useEffect, useMemo, useState } from "react";
-import type { Shipment, ShipmentStatus } from "@/types";
+import type { RoiConfig, Shipment, ShipmentStatus } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import {
   atualizarStatusCarga,
@@ -17,6 +17,8 @@ import {
   subscribeShipments,
 } from "@/lib/shipments";
 import { calcularRiscoDemurrage, type NivelAlertaDemurrage } from "@/lib/demurrage";
+import { calcularExposicaoCambial, type NivelAlertaCambial } from "@/lib/cambio";
+import { ROI_CONFIG_PADRAO, subscribeRoiConfig } from "@/lib/roi";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { cn } from "@/lib/utils";
@@ -41,6 +43,20 @@ const ROTULO_ALERTA_DEMURRAGE: Record<NivelAlertaDemurrage, string> = {
   "proximo-do-limite": "próximo do limite de free time",
   "acumulando-custo": "acumulando custo de demurrage",
   evitado: "demurrage evitada",
+};
+
+const CORES_ALERTA_CAMBIAL: Record<NivelAlertaCambial, string> = {
+  "cambio-favoravel": "bg-state-done-bg text-state-done",
+  "dentro-da-margem": "bg-state-done-bg text-state-done",
+  "exposicao-relevante": "bg-state-run-bg text-state-run",
+  "exposicao-critica": "bg-state-error-bg text-state-error",
+};
+
+const ROTULO_ALERTA_CAMBIAL: Record<NivelAlertaCambial, string> = {
+  "cambio-favoravel": "câmbio favorável desde a contratação",
+  "dentro-da-margem": "dentro da margem",
+  "exposicao-relevante": "exposição cambial relevante",
+  "exposicao-critica": "exposição cambial crítica",
 };
 
 const ROTULO_STATUS: Record<ShipmentStatus, string> = {
@@ -75,6 +91,9 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
   const [novoCodigo, setNovoCodigo] = useState("");
   const [freeTimeDias, setFreeTimeDias] = useState("");
   const [custoDiarioDemurrage, setCustoDiarioDemurrage] = useState("");
+  const [valorFreteUsd, setValorFreteUsd] = useState("");
+  const [cambioContratado, setCambioContratado] = useState("");
+  const [roiConfig, setRoiConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
   const [erro, setErro] = useState<string | null>(null);
   const [processando, setProcessando] = useState(false);
   const [avancandoStatus, setAvancandoStatus] = useState(false);
@@ -82,6 +101,11 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
   useEffect(() => {
     if (!workspaceId) return;
     return subscribeShipments(setCargas, workspaceId);
+  }, [workspaceId]);
+
+  useEffect(() => {
+    if (!workspaceId) return;
+    return subscribeRoiConfig(setRoiConfig, workspaceId);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -93,6 +117,10 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
   const carga = useMemo(() => buscarCargaPorCodigo(cargas, codigo), [cargas, codigo]);
   const desvio = useMemo(() => (carga ? calcularDesvioSla(carga) : null), [carga]);
   const riscoDemurrage = useMemo(() => (carga ? calcularRiscoDemurrage(carga) : null), [carga]);
+  const exposicaoCambial = useMemo(
+    () => (carga ? calcularExposicaoCambial(carga, roiConfig.cambioUsdBrl) : null),
+    [carga, roiConfig.cambioUsdBrl]
+  );
   // `criarCarga` grava com um id derivado do código — registrar o mesmo
   // código de novo SOBRESCREVE o histórico anterior em silêncio. Avisa antes
   // de deixar isso acontecer, já que não há UI de "atualizar status" ainda.
@@ -117,6 +145,8 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
     try {
       const freeTime = freeTimeDias.trim() ? Number(freeTimeDias) : undefined;
       const custoDiario = custoDiarioDemurrage.trim() ? Number(custoDiarioDemurrage) : undefined;
+      const freteUsd = valorFreteUsd.trim() ? Number(valorFreteUsd) : undefined;
+      const cambio = cambioContratado.trim() ? Number(cambioContratado) : undefined;
       await criarCarga({
         codigoRastreio: novoCodigo.trim(),
         origem: origem.trim(),
@@ -125,6 +155,8 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
         workspaceId: workspaceId ?? undefined,
         freeTimeDias: Number.isFinite(freeTime) ? freeTime : undefined,
         custoDiarioDemurrageBrl: Number.isFinite(custoDiario) ? custoDiario : undefined,
+        valorFreteUsd: Number.isFinite(freteUsd) ? freteUsd : undefined,
+        cambioContratadoBrl: Number.isFinite(cambio) ? cambio : undefined,
       });
       setNovoCodigo("");
       setOrigem("");
@@ -132,6 +164,8 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
       setPrevisaoEntrega("");
       setFreeTimeDias("");
       setCustoDiarioDemurrage("");
+      setValorFreteUsd("");
+      setCambioContratado("");
       setFormAberto(false);
     } catch (e) {
       setErro(e instanceof Error ? e.message : "Não foi possível registrar a carga.");
@@ -208,6 +242,25 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
               placeholder="Conforme seu contrato"
             />
           </div>
+          <p className="text-xs text-ink-400">
+            Termos de frete internacional (opcional) — sem isso, o Radar de Exposição Cambial fica inativo para esta carga.
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            <Field
+              label="Valor do frete (US$)"
+              type="number"
+              value={valorFreteUsd}
+              onChange={(e) => setValorFreteUsd(e.target.value)}
+              placeholder="Conforme seu contrato"
+            />
+            <Field
+              label="Câmbio travado na contratação (R$/US$)"
+              type="number"
+              value={cambioContratado}
+              onChange={(e) => setCambioContratado(e.target.value)}
+              placeholder="Ex.: 5.40"
+            />
+          </div>
           <Button
             size="sm"
             loading={processando}
@@ -265,6 +318,29 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
                   {riscoDemurrage.diasExcedentes > 0
                     ? `${riscoDemurrage.diasExcedentes} dia(s) excedente(s) ao free time · custo ${riscoDemurrage.nivelAlerta === "acumulando-custo" && carga.status !== "entregue" ? "projetado" : "acumulado"}: R$ ${riscoDemurrage.custoProjetadoBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`
                     : `${riscoDemurrage.diasLivresRestantes} dia(s) de free time restante(s) — nenhum custo de demurrage até agora`}
+                </p>
+              </div>
+            )}
+
+            {exposicaoCambial && (
+              <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-ink-100 p-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-ink-950">Radar de Exposição Cambial</span>
+                  <span
+                    className={cn(
+                      "rounded-full px-2.5 py-1 text-[11px] font-medium",
+                      CORES_ALERTA_CAMBIAL[exposicaoCambial.nivelAlerta]
+                    )}
+                  >
+                    {ROTULO_ALERTA_CAMBIAL[exposicaoCambial.nivelAlerta]}
+                  </span>
+                </div>
+                <p className="text-xs text-ink-500">
+                  Frete travado a R$ {exposicaoCambial.custoContratadoBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ·
+                  {" "}pelo câmbio de hoje custaria R$ {exposicaoCambial.custoAtualBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                  {exposicaoCambial.variacaoBrl > 0
+                    ? ` — exposição de R$ ${exposicaoCambial.variacaoBrl.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} (${(exposicaoCambial.variacaoPercentual * 100).toFixed(1)}%) em aberto.`
+                    : " — nenhuma exposição em aberto neste câmbio."}
                 </p>
               </div>
             )}
