@@ -60,6 +60,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "procedimento.consentimento.registrado",
   "procedimento.posatendimento.registrado",
   "relatorio.prontidao.gerado",
+  "relatorio.lgpd.gerado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

@@ -93,3 +93,13 @@ Score de 0 a 100, com `nivel` (`saudavel`/`atencao`/`risco`) e a lista de sinais
 Um banner fixo no topo do painel e a primeira seção visível do PDF avisam, antes de qualquer selo verde: "isto não é um certificado de conformidade". O PDF reaproveita o mesmo mecanismo de atestado do Relatório Executivo — cada download sela uma entrada própria (`relatorio.prontidao.gerado`, novo valor em `AuditEventType`, adicionado também à allowlist do servidor em `/api/audit/seal/route.ts` e coberto pelo teste de sincronia já existente `tests/auditSealTypesSync.test.ts`).
 
 10 novos testes (`tests/aiActReadiness.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 50 arquivos, 603 testes passando.
+
+### 3. Relatório de Prontidão para Regulação Brasileira (LGPD) — IMPLEMENTADO (2026-10-31, noite)
+
+`src/lib/lgpdReadiness.ts` (checklist puro) + `src/components/governance/LgpdReadinessPanel.tsx` (nova aba "LGPD" em `/governance`) + `src/lib/reports/lgpdReadinessPdf.ts` (PDF, mesmo padrão de `aiActReadinessPdf.ts`). Par nacional do item 2 — mesma disciplina de escopo: NUNCA declara conformidade, só controles técnicos verificáveis.
+
+Pesquisa de outubro de 2026 confirmou dois pontos que ancoram os limiares/itens: (a) a Resolução CD/ANPD nº 2/2022 dispensa Agentes de Tratamento de Pequeno Porte (ME/EPP/startup) de indicar encarregado formal **desde que mantenham canal de comunicação com o titular** — o que a Neural Inbox já é, de fato; (b) a Resolução CD/ANPD nº 15/2024 fixa prazo de **3 dias úteis** para comunicar incidente de segurança à ANPD/titular (Art. 48), processo que só se aciona com um incidente real — por isso nunca pode ser marcado "atende" preventivamente.
+
+Nove itens: cinco avaliáveis por software (registro de operações — Art. 37; integridade do registro — Art. 46; minimização de dados — Art. 6º, V, sempre `atende`, arquitetural; segurança do cofre Zero-Trust — Art. 46, sempre `atende`; canal de comunicação com o titular — Resolução 2/2022, sempre `atende`, a Neural Inbox já cumpre) e quatro `fora_do_escopo` (base legal do tratamento, indicação de encarregado, RIPD, comunicação de incidente à ANPD).
+
+Novo valor em `AuditEventType` (`relatorio.lgpd.gerado`), adicionado à allowlist do servidor e coberto pelo mesmo teste de sincronia. 9 novos testes (`tests/lgpdReadiness.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 51 arquivos, 618 testes passando.

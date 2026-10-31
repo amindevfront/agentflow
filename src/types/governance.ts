@@ -180,7 +180,9 @@ export type AuditEventType =
   /** Checagem pós-atendimento (48h) efetivamente enviada — prova de acompanhamento pós-operatório, mesmo racional acima. */
   | "procedimento.posatendimento.registrado"
   /** Download do Relatório de Prontidão para Regulação de IA (EU AI Act, PDF) — mesmo racional do atestado do Relatório Executivo. */
-  | "relatorio.prontidao.gerado";
+  | "relatorio.prontidao.gerado"
+  /** Download do Relatório de Prontidão para Regulação Brasileira (LGPD, PDF) — mesmo racional do atestado do Relatório Executivo. */
+  | "relatorio.lgpd.gerado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

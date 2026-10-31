@@ -16,6 +16,7 @@ import { ExecutiveReportPanel } from "@/components/governance/ExecutiveReportPan
 import { GuardrailInspectorPanel } from "@/components/governance/GuardrailInspectorPanel";
 import { HandoffQueuePanel } from "@/components/governance/HandoffQueuePanel";
 import { HealthScorePanel } from "@/components/governance/HealthScorePanel";
+import { LgpdReadinessPanel } from "@/components/governance/LgpdReadinessPanel";
 import { OpexTaxShieldPanel } from "@/components/governance/OpexTaxShieldPanel";
 import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
@@ -31,7 +32,8 @@ type Aba =
   | "opex"
   | "parametros"
   | "saude"
-  | "ai-act";
+  | "ai-act"
+  | "lgpd";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "transbordo", label: "Transbordo" },
@@ -43,6 +45,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "parametros", label: "Matriz de Lucro & Encargos" },
   { valor: "saude", label: "Health Score" },
   { valor: "ai-act", label: "EU AI Act" },
+  { valor: "lgpd", label: "LGPD" },
 ];
 
 export default function GovernancePage() {
@@ -86,6 +89,7 @@ export default function GovernancePage() {
       )}
       {aba === "saude" && <HealthScorePanel />}
       {aba === "ai-act" && <AiActReadinessPanel />}
+      {aba === "lgpd" && <LgpdReadinessPanel />}
     </div>
   );
 }

@@ -314,6 +314,7 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "auth.sessao.encerrada": "Sessão encerrada",
   "relatorio.executivo.gerado": "Relatório executivo gerado",
   "relatorio.prontidao.gerado": "Relatório de prontidão para regulação de IA gerado",
+  "relatorio.lgpd.gerado": "Relatório de prontidão para regulação brasileira (LGPD) gerado",
   "procedimento.consentimento.registrado": "Consentimento de procedimento registrado",
   "procedimento.posatendimento.registrado": "Checagem pós-atendimento registrada",
 };
