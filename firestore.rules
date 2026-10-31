@@ -331,6 +331,13 @@ service cloud.firestore {
       allow create: if belongsToWorkspace(request.resource.data.workspaceId);
     }
 
+    match /pedidosEcommerce/{pedidoId} {
+      // Radar de Risco de Chargeback & Devolução (E-commerce) — mesmo
+      // padrão simples de `appointments`/`shipments`/`contratosImobiliarios`.
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
     match /optOuts/{optOutId} {
       // Opt-out é checado por hash, nunca pelo valor em claro — ver
       // `hashDestino()`. Qualquer membro do workspace pode registrar um

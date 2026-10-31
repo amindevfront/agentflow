@@ -57,6 +57,7 @@ import { BusinessROIWidget } from "@/components/BusinessROIWidget";
 import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
 import { AppointmentRemindersPanel } from "@/components/niche/AppointmentRemindersPanel";
 import { CargoTriagePanel } from "@/components/niche/CargoTriagePanel";
+import { ChargebackRiskPanel } from "@/components/niche/ChargebackRiskPanel";
 import { DistratoRiskPanel } from "@/components/niche/DistratoRiskPanel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -557,6 +558,7 @@ export function NeuralInbox() {
           onInsertResposta={inserirNaResposta}
         />
       )}
+      {workspace?.setor === "ecommerce" && <ChargebackRiskPanel />}
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
 

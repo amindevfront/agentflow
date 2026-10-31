@@ -78,6 +78,7 @@ describe("firestore.rules — auditoria estrutural de multi-tenancy", () => {
     "/appointments/{appointmentId}",
     "/shipments/{shipmentId}",
     "/contratosImobiliarios/{contratoId}",
+    "/pedidosEcommerce/{pedidoId}",
   ];
 
   it.each(COLECOES_ESCOPADAS_POR_WORKSPACE)("%s referencia belongsToWorkspace/isAdminOf e não usa 'if true' puro", (caminho) => {

@@ -37,12 +37,14 @@ Estendido: `Shipment.valorFreteUsd` / `Shipment.cambioContratadoBrl` (tipo + `Cr
 
 Fecha a lacuna do item 2. Fonte: pesquisa sobre reclamações de lojistas em comunidades de e-commerce (outubro de 2026) — até **~7,5%** das transações online carregam algum tipo de fraude/contestação/não-entrega; gateways de pagamento (padrão documentado: Shopify Payments) frequentemente **retêm a taxa de processamento (~2,9% + fixo) mesmo em reembolso**, além de uma taxa fixa adicional por disputa de chargeback. O módulo soma os três ralos de caixa num único número.
 
-Novo tipo: `PedidoEcommerce`/`StatusPedidoEcommerce` em `src/types/inbox.ts` — primeiro tipo de domínio do nicho E-commerce no produto. **Sem painel de UI nesta entrega** — ver "Pendências" abaixo.
+Novo tipo: `PedidoEcommerce`/`StatusPedidoEcommerce` em `src/types/inbox.ts` — primeiro tipo de domínio do nicho E-commerce no produto.
+
+**Atualização de 2026-10-31:** o painel visual (`src/components/niche/ChargebackRiskPanel.tsx`) foi implementado em sequência, fechando o corte de escopo original. Inclui o CRUD real de pedidos (`src/lib/ecommercePedidos.ts`, coleção `pedidosEcommerce`), a regra correspondente em `firestore.rules` (mesmo padrão simples de `appointments`/`shipments`/`contratosImobiliarios`, adicionada também à auditoria estrutural em `tests/firestoreRulesAudit.test.ts`) e a ligação ao Dual-Layer Workspace View em `NeuralInbox.tsx` (`workspace?.setor === "ecommerce"`). O card de métricas reaproveita o mesmo recorte de `periodoMesAtual` (@/lib/roi) já usado no card de Custo de Agenda Vazia.
 
 ### Validação
 
 - `npx tsc --noEmit`: sem erros.
-- `npx vitest run`: 48 arquivos de teste, 582 testes, todos passando (20 novos: `tests/noShowCost.test.ts`, `tests/cambio.test.ts`, `tests/chargebackRisk.test.ts`).
+- `npx vitest run`: 48 arquivos de teste, 583 testes, todos passando (20 novos de cálculo: `tests/noShowCost.test.ts`, `tests/cambio.test.ts`, `tests/chargebackRisk.test.ts`; mais 1 caso adicionado à auditoria de `firestore.rules` para a nova coleção `pedidosEcommerce`).
 - Nenhum token, cor ou componente novo introduzido — reaproveita `MetricCard`, `Field`, `Button`, pills de estado já existentes (`.claude/rules/design-system-compliance.md` respeitada).
 
 ## Consequências
@@ -53,7 +55,6 @@ Novo tipo: `PedidoEcommerce`/`StatusPedidoEcommerce` em `src/types/inbox.ts` —
 - E-commerce ganhou seu primeiro tipo de domínio — abre caminho para o painel de UI numa story dedicada.
 
 **Negativas / custos aceitos:**
-- `chargebackRisk.ts` não tem painel de UI nem fluxo de criação de `PedidoEcommerce` ainda — só o motor de cálculo e os testes. Mesmo corte de escopo documentado em `ADR-0002` (motor antes de UI, quando o tempo não cobre os dois).
 - Os limiares de alerta (5%/8% cambial; 10%/20% no-show; 4%/7,5% chargeback) são âncoras de pesquisa de mercado geral, não calibradas ao contrato específico de cada cliente — cada workspace deve revisá-los com o próprio histórico ao crescer a base de dados real.
 
 ## Pendências / Roadmap — resiliência 2027-2028 [Proposto, não implementado nesta mudança]
