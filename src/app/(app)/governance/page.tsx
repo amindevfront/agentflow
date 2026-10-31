@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { BusinessROIWidget } from "@/components/BusinessROIWidget";
+import { AiActReadinessPanel } from "@/components/governance/AiActReadinessPanel";
 import { AuditTrailPanel } from "@/components/governance/AuditTrailPanel";
 import { CompliancePreventivoPanel } from "@/components/governance/CompliancePreventivoPanel";
 import { CredentialVaultPanel } from "@/components/governance/CredentialVaultPanel";
@@ -21,7 +22,16 @@ import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorCon
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { drenarFilaAuditoria } from "@/lib/auditLog";
 
-type Aba = "transbordo" | "guardrails" | "compliance" | "cofre" | "auditoria" | "opex" | "parametros" | "saude";
+type Aba =
+  | "transbordo"
+  | "guardrails"
+  | "compliance"
+  | "cofre"
+  | "auditoria"
+  | "opex"
+  | "parametros"
+  | "saude"
+  | "ai-act";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "transbordo", label: "Transbordo" },
@@ -32,6 +42,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "opex", label: "OpEx & Tax Shield" },
   { valor: "parametros", label: "Matriz de Lucro & Encargos" },
   { valor: "saude", label: "Health Score" },
+  { valor: "ai-act", label: "EU AI Act" },
 ];
 
 export default function GovernancePage() {
@@ -74,6 +85,7 @@ export default function GovernancePage() {
         </div>
       )}
       {aba === "saude" && <HealthScorePanel />}
+      {aba === "ai-act" && <AiActReadinessPanel />}
     </div>
   );
 }

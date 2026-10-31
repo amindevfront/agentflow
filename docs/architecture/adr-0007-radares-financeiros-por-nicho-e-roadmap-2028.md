@@ -74,6 +74,20 @@ Score de 0 a 100, com `nivel` (`saudavel`/`atencao`/`risco`) e a lista de sinais
 
 9 novos testes (`tests/healthScore.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 49 arquivos, 592 testes passando.
 
-### 2. Relatório de Prontidão para Regulação de IA (EU AI Act / futura legislação brasileira) — [Proposto, ainda não implementado]
+### 2. Relatório de Prontidão para Regulação de IA (EU AI Act) — IMPLEMENTADO
 
-O AI Act da UE já exige, desde agosto de 2026, trilha de auditoria de eventos relevantes com retenção mínima de 6 meses para sistemas de alto risco (Artigo 12), com obrigações proporcionalmente mais leves para pequenas empresas. O AgentFlow já tem a Auditoria de IA & Logs (`/runs`) e o Cofre & Blindagem Jurídica — faltaria um relatório exportável específico de "prontidão regulatória", reaproveitando dados já auditados, útil tanto para cliente brasileiro com operação na UE/EUA quanto para a narrativa "nosso produto já nasce pronto para a próxima onda de compliance de IA". Exige decisão explícita do usuário antes de virar story — não implementado por decisão unilateral.
+`src/lib/aiActReadiness.ts` (checklist puro) + `src/components/governance/AiActReadinessPanel.tsx` (nova aba "EU AI Act" em `/governance`) + `src/lib/reports/aiActReadinessPdf.ts` (exportação em PDF, mesmo padrão de `executiveReportPdf.ts`).
+
+**Disciplina de escopo (Artigo IV — No Invention), decisão deliberada de desenho:** o relatório NUNCA declara "o AgentFlow está em conformidade com o AI Act" — isso depende de decisões que só o cliente e o advogado dele podem tomar. Oito itens, dos quais cinco são verificáveis por software (dados reais, nunca estimados) e três são explicitamente marcados `fora_do_escopo` (classificação de risco do caso de uso sob o Anexo III, papel do cliente — provedor vs. implementador —, DPIA/AIPD):
+
+| Item verificável | Base legal | Fonte do dado |
+|---|---|---|
+| Registro automático de eventos | Art. 12(1) | contagem real de `auditLogs` |
+| Integridade da trilha (hash-chain + HMAC) | Art. 12(1) | `verificarTrilhaAuditoria` (mesma rota server-side do `AuditTrailPanel`) |
+| Retenção mínima de 180 dias | Art. 12 | idade real da entrada mais antiga carregada (teto de leitura de 2000 entradas — estimativa deliberadamente conservadora: nunca sobre-estima dias de retenção) |
+| Minimização de PII antes do processamento por IA | — (controle arquitetural) | sempre `atende` — Shield-Layer é sempre ativo, não depende de configuração |
+| Supervisão humana ativa (human-in-the-loop) | — (controle complementar) | `estatisticasFila` sobre tickets de transbordo reais |
+
+Um banner fixo no topo do painel e a primeira seção visível do PDF avisam, antes de qualquer selo verde: "isto não é um certificado de conformidade". O PDF reaproveita o mesmo mecanismo de atestado do Relatório Executivo — cada download sela uma entrada própria (`relatorio.prontidao.gerado`, novo valor em `AuditEventType`, adicionado também à allowlist do servidor em `/api/audit/seal/route.ts` e coberto pelo teste de sincronia já existente `tests/auditSealTypesSync.test.ts`).
+
+10 novos testes (`tests/aiActReadiness.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 50 arquivos, 603 testes passando.
