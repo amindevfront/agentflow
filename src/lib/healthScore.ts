@@ -18,7 +18,8 @@
 // nos dados do produto (execuções, tickets de transbordo, conversas) — isto
 // é pura agregação sobre o que já é coletado, não um novo sensor.
 //
-// Os três sinais, e por que cada um é um preditor real de churn documentado:
+// Os três sinais sempre avaliados, e por que cada um é um preditor real de
+// churn documentado:
 //   1. Taxa de sucesso de execuções caindo → o produto está falhando na
 //      frente do cliente, não só "sem engajamento".
 //   2. Tickets de transbordo abertos há muito tempo sem resposta → exatamente
@@ -27,10 +28,22 @@
 //      de todos nos estudos de churn preditivo: uso caindo PRECEDE o
 //      cancelamento, quase sempre por semanas.
 //
+// Um quarto sinal, OPCIONAL e específico de nicho: taxa de chargeback e
+// devolução (`@/lib/chargebackRisk`), só avaliado quando o chamador passa
+// `pedidos` — hoje, só o painel de Governança de um workspace de E-commerce
+// faz isso (ver `HealthScorePanel`). Racional: um lojista sangrando em
+// chargeback está perdendo dinheiro com o PRÓPRIO negócio, independente de o
+// AgentFlow estar rodando bem — é um sinal de risco que a tríade genérica
+// acima não captura, mas que prediz churn do cliente tão bem quanto os
+// outros três (empresa em aperto financeiro corta ferramenta antes de
+// cortar o próprio produto). Reaproveita os MESMOS limiares de alerta já
+// usados no Radar de Chargeback — nunca inventa um segundo critério.
+//
 // Puro e determinístico: mesmos dados, mesma referência de tempo, mesmo
 // resultado sempre — testável sem Firestore.
 
-import type { Conversation, FlowRun, HandoffTicket } from "@/types";
+import type { Conversation, FlowRun, HandoffTicket, PedidoEcommerce } from "@/types";
+import { calcularExposicaoChargebackDevolucao } from "./chargebackRisk";
 
 export type NivelHealthScore = "saudavel" | "atencao" | "risco";
 
@@ -49,6 +62,8 @@ export interface HealthScoreResultado {
   ticketsAbertosVencidos: number;
   /** `null` quando o workspace nunca teve execução nem conversa registrada — pior sinal possível, tratado à parte da contagem de dias. */
   diasSemAtividade: number | null;
+  /** `null` quando `pedidos` não foi informado ou está vazio — sinal específico de E-commerce, nunca avaliado para outros nichos. */
+  taxaChargebackEDevolucao: number | null;
   /** Cada fator que pesou no score, em ordem de aplicação — a base de "por que este número", exibida no painel. */
   sinais: SinalHealthScore[];
 }
@@ -76,6 +91,10 @@ const PENALIDADE_INATIVIDADE_ATENCAO = 15;
 const LIMIAR_NIVEL_SAUDAVEL = 70;
 const LIMIAR_NIVEL_ATENCAO = 40;
 
+/** Mesmos limiares de `@/lib/chargebackRisk` (4%/7,5%) — nunca um segundo critério inventado aqui. */
+const PENALIDADE_CHARGEBACK_CRITICO = 25;
+const PENALIDADE_CHARGEBACK_ATENCAO = 10;
+
 function dataMaisRecente(isos: Array<string | undefined>): Date | null {
   let maisRecente: Date | null = null;
   for (const iso of isos) {
@@ -91,6 +110,8 @@ export interface CalcularHealthScoreInput {
   execucoes: FlowRun[];
   tickets: HandoffTicket[];
   conversas: Conversation[];
+  /** Opcional e específico de E-commerce — ver nota de topo. Ausente ou vazio: o sinal de chargeback simplesmente não é avaliado (nunca penaliza por falta de dado). */
+  pedidos?: PedidoEcommerce[];
   referencia?: Date;
 }
 
@@ -168,6 +189,25 @@ export function calcularHealthScore(input: CalcularHealthScoreInput): HealthScor
     });
   }
 
+  const chargeback =
+    input.pedidos && input.pedidos.length > 0 ? calcularExposicaoChargebackDevolucao(input.pedidos) : null;
+
+  if (chargeback !== null) {
+    if (chargeback.nivelAlerta === "critico") {
+      score -= PENALIDADE_CHARGEBACK_CRITICO;
+      sinais.push({
+        descricao: `${Math.round(chargeback.taxaChargebackEDevolucao * 100)}% dos pedidos do mês em chargeback/devolução — acima da média documentada de incidentes do e-commerce (~7,5%)`,
+        penalidade: PENALIDADE_CHARGEBACK_CRITICO,
+      });
+    } else if (chargeback.nivelAlerta === "atencao") {
+      score -= PENALIDADE_CHARGEBACK_ATENCAO;
+      sinais.push({
+        descricao: `${Math.round(chargeback.taxaChargebackEDevolucao * 100)}% dos pedidos do mês em chargeback/devolução — já em nível de atenção`,
+        penalidade: PENALIDADE_CHARGEBACK_ATENCAO,
+      });
+    }
+  }
+
   score = Math.max(0, Math.min(100, score));
   const nivel: NivelHealthScore =
     score >= LIMIAR_NIVEL_SAUDAVEL ? "saudavel" : score >= LIMIAR_NIVEL_ATENCAO ? "atencao" : "risco";
@@ -179,6 +219,7 @@ export function calcularHealthScore(input: CalcularHealthScoreInput): HealthScor
     totalExecucoesConsideradas: terminais.length,
     ticketsAbertosVencidos,
     diasSemAtividade,
+    taxaChargebackEDevolucao: chargeback !== null ? chargeback.taxaChargebackEDevolucao : null,
     sinais,
   };
 }

@@ -74,6 +74,8 @@ Score de 0 a 100, com `nivel` (`saudavel`/`atencao`/`risco`) e a lista de sinais
 
 9 novos testes (`tests/healthScore.test.ts`). `npx tsc --noEmit` limpo; `npx vitest run`: 49 arquivos, 592 testes passando.
 
+**Atualização de 2026-10-31 (tarde) — 4º sinal, opcional e específico de E-commerce:** `calcularHealthScore` passou a aceitar `pedidos?: PedidoEcommerce[]`. Quando informado e não-vazio, reaproveita `calcularExposicaoChargebackDevolucao` (`@/lib/chargebackRisk`) — mesmos limiares já usados no Radar de Chargeback (4%/7,5%), nunca um segundo critério inventado — e penaliza o score em -10 (atenção) ou -25 (crítico). Racional: um lojista sangrando em chargeback está perdendo dinheiro com o próprio negócio, independente de o AgentFlow estar rodando bem — sinal de risco de churn que a tríade genérica não captura. `HealthScorePanel` só assina a coleção `pedidosEcommerce` quando `workspace.setor === "ecommerce"` (consulta não gasta à toa nos outros nichos), e o 4º card ("Chargeback + devolução (mês)") só aparece quando há dado — nenhum outro nicho vê um campo vazio ou irrelevante. 5 novos testes. `npx vitest run`: 50 arquivos, 608 testes passando.
+
 ### 2. Relatório de Prontidão para Regulação de IA (EU AI Act) — IMPLEMENTADO
 
 `src/lib/aiActReadiness.ts` (checklist puro) + `src/components/governance/AiActReadinessPanel.tsx` (nova aba "EU AI Act" em `/governance`) + `src/lib/reports/aiActReadinessPdf.ts` (exportação em PDF, mesmo padrão de `executiveReportPdf.ts`).

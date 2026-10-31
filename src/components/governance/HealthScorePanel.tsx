@@ -10,11 +10,13 @@
 // existiam (ver `@/lib/healthScore` e ADR-0007).
 
 import { useEffect, useMemo, useState } from "react";
-import type { Conversation, FlowRun, HandoffTicket } from "@/types";
+import type { Conversation, FlowRun, HandoffTicket, PedidoEcommerce } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { subscribeFlowRuns } from "@/lib/firestore";
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
+import { subscribePedidos } from "@/lib/ecommercePedidos";
 import { calcularHealthScore, type NivelHealthScore } from "@/lib/healthScore";
 import { formatarPercentual } from "@/lib/roi";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -40,9 +42,12 @@ const CORES_NIVEL: Record<NivelHealthScore, string> = {
 
 export function HealthScorePanel() {
   const { workspaceId } = useWorkspace();
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
+  const ehEcommerce = workspace?.setor === "ecommerce";
   const [execucoes, setExecucoes] = useState<FlowRun[]>([]);
   const [tickets, setTickets] = useState<HandoffTicket[]>([]);
   const [conversas, setConversas] = useState<Conversation[]>([]);
+  const [pedidos, setPedidos] = useState<PedidoEcommerce[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [referencia] = useState(() => new Date());
 
@@ -64,9 +69,20 @@ export function HealthScorePanel() {
     return () => cancelamentos.forEach((cancelar) => cancelar());
   }, [workspaceId]);
 
+  // Sinal de chargeback é específico de E-commerce — só assina a coleção de
+  // pedidos quando o setor do workspace é esse, para não gastar uma consulta
+  // à toa em todo workspace de qualquer outro nicho (ver `@/lib/healthScore`).
+  useEffect(() => {
+    if (!workspaceId || !ehEcommerce) {
+      setPedidos([]);
+      return;
+    }
+    return subscribePedidos(setPedidos, workspaceId);
+  }, [workspaceId, ehEcommerce]);
+
   const resultado = useMemo(
-    () => calcularHealthScore({ execucoes, tickets, conversas, referencia }),
-    [execucoes, tickets, conversas, referencia]
+    () => calcularHealthScore({ execucoes, tickets, conversas, pedidos: ehEcommerce ? pedidos : undefined, referencia }),
+    [execucoes, tickets, conversas, pedidos, ehEcommerce, referencia]
   );
 
   return (
@@ -91,7 +107,7 @@ export function HealthScorePanel() {
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className={cn("grid gap-3", resultado.taxaChargebackEDevolucao !== null ? "sm:grid-cols-2 lg:grid-cols-4" : "sm:grid-cols-3")}>
         <MetricCard
           rotulo="Taxa de sucesso de execuções"
           valor={resultado.taxaSucessoExecucoes !== null ? formatarPercentual(resultado.taxaSucessoExecucoes) : "—"}
@@ -130,6 +146,20 @@ export function HealthScorePanel() {
                   : "positivo"
           }
         />
+        {resultado.taxaChargebackEDevolucao !== null && (
+          <MetricCard
+            rotulo="Chargeback + devolução (mês)"
+            valor={formatarPercentual(resultado.taxaChargebackEDevolucao)}
+            detalhe="sinal específico de E-commerce — ver Radar de Chargeback no Neural Inbox"
+            tom={
+              resultado.taxaChargebackEDevolucao >= 0.075
+                ? "erro"
+                : resultado.taxaChargebackEDevolucao >= 0.04
+                  ? "atencao"
+                  : "positivo"
+            }
+          />
+        )}
       </div>
 
       {resultado.sinais.length > 0 && (

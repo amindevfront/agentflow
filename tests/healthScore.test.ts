@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Conversation, FlowRun, HandoffTicket } from "@/types";
+import type { Conversation, FlowRun, HandoffTicket, PedidoEcommerce } from "@/types";
 import { calcularHealthScore } from "@/lib/healthScore";
 
 const AGORA = new Date(2026, 0, 31, 12, 0, 0);
@@ -63,6 +63,18 @@ function criarConversa(overrides: Partial<Conversation> = {}): Conversation {
     criadaEm: diasAtras(1),
     totalMensagens: 4,
     totalMensagensCliente: 2,
+    ...overrides,
+  };
+}
+
+function criarPedido(overrides: Partial<PedidoEcommerce> = {}): PedidoEcommerce {
+  return {
+    id: `pedido_${Math.random()}`,
+    workspaceId: "default",
+    numeroPedido: "1001",
+    valorBrl: 200,
+    status: "entregue",
+    criadoEm: diasAtras(1),
     ...overrides,
   };
 }
@@ -172,5 +184,73 @@ describe("calcularHealthScore", () => {
     expect(resultado.score).toBe(5);
     expect(resultado.score).toBeGreaterThanOrEqual(0);
     expect(resultado.sinais).toHaveLength(3);
+  });
+
+  it("taxaChargebackEDevolucao fica null quando `pedidos` não é informado — sinal de e-commerce nunca penaliza outro nicho", () => {
+    const resultado = calcularHealthScore({
+      execucoes: [...Array.from({ length: 9 }, () => criarExecucao()), criarExecucao({ status: "falhou" })],
+      tickets: [],
+      conversas: [],
+      referencia: AGORA,
+    });
+    expect(resultado.taxaChargebackEDevolucao).toBeNull();
+    expect(resultado.score).toBe(100);
+  });
+
+  it("`pedidos` vazio é tratado como ausente — nenhum sinal de chargeback, nenhuma penalidade", () => {
+    const resultado = calcularHealthScore({
+      execucoes: [...Array.from({ length: 9 }, () => criarExecucao()), criarExecucao({ status: "falhou" })],
+      tickets: [],
+      conversas: [],
+      pedidos: [],
+      referencia: AGORA,
+    });
+    expect(resultado.taxaChargebackEDevolucao).toBeNull();
+    expect(resultado.score).toBe(100);
+  });
+
+  it("penaliza em -25 quando a taxa de chargeback+devolução está em nível crítico (>=7,5%)", () => {
+    const pedidos = [
+      ...Array.from({ length: 92 }, () => criarPedido({ status: "entregue" })),
+      ...Array.from({ length: 8 }, () => criarPedido({ status: "chargeback" })),
+    ];
+    const resultado = calcularHealthScore({
+      execucoes: [...Array.from({ length: 9 }, () => criarExecucao()), criarExecucao({ status: "falhou" })],
+      tickets: [],
+      conversas: [],
+      pedidos,
+      referencia: AGORA,
+    });
+    expect(resultado.taxaChargebackEDevolucao).toBeCloseTo(0.08, 2);
+    expect(resultado.score).toBe(75); // 100 - 25
+    expect(resultado.sinais.some((s) => s.descricao.includes("chargeback"))).toBe(true);
+  });
+
+  it("penaliza em -10 quando a taxa de chargeback+devolução está em nível de atenção (4%-7,5%)", () => {
+    const pedidos = [
+      ...Array.from({ length: 95 }, () => criarPedido({ status: "entregue" })),
+      ...Array.from({ length: 5 }, () => criarPedido({ status: "devolvido" })),
+    ];
+    const resultado = calcularHealthScore({
+      execucoes: [...Array.from({ length: 9 }, () => criarExecucao()), criarExecucao({ status: "falhou" })],
+      tickets: [],
+      conversas: [],
+      pedidos,
+      referencia: AGORA,
+    });
+    expect(resultado.taxaChargebackEDevolucao).toBeCloseTo(0.05, 2);
+    expect(resultado.score).toBe(90); // 100 - 10
+  });
+
+  it("não penaliza quando a taxa de chargeback+devolução está saudável (<4%)", () => {
+    const pedidos = [...Array.from({ length: 99 }, () => criarPedido({ status: "entregue" })), criarPedido({ status: "chargeback" })];
+    const resultado = calcularHealthScore({
+      execucoes: [...Array.from({ length: 9 }, () => criarExecucao()), criarExecucao({ status: "falhou" })],
+      tickets: [],
+      conversas: [],
+      pedidos,
+      referencia: AGORA,
+    });
+    expect(resultado.score).toBe(100);
   });
 });
