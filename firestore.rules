@@ -5,8 +5,9 @@ rules_version = '2';
 // exige um usuário autenticado que pertença ao workspace do documento.
 //
 // As coleções de governança (credentials, credentialSecrets, auditLogs,
-// auditChainHead, hitlTickets, _rateLimits) aplicam privilégio mínimo de forma
-// determinística no banco, e não por confiança no código de aplicação:
+// auditChainHead, hitlTickets, _rateLimits, channelReputationQueue) aplicam
+// privilégio mínimo de forma determinística no banco, e não por confiança no
+// código de aplicação:
 //
 //   - `credentialSecrets` nega LEITURA a todo cliente. O envelope cifrado só é
 //     acessível ao motor de orquestração via Admin SDK, que não passa por estas
@@ -205,6 +206,18 @@ service cloud.firestore {
     // ---------- Infraestrutura interna: limitador de taxa distribuído ----------
 
     match /_rateLimits/{bucketId} {
+      allow read, write: if false;
+    }
+
+    // ---------- SAC Shield: fila de reenvio da Blindagem de Reputação de Canal ----------
+    //
+    // `channelReputationQueue` é infraestrutura interna do SAC Shield
+    // (`src/lib/server/channelReputationShieldAdmin.ts`), mesmo desenho de
+    // `_rateLimits`: nunca lida nem escrita por um cliente, só pelo Admin SDK
+    // em `/api/campaigns/tick`. Guarda o hash do destino e a referência de
+    // reenvio, nunca o destino em claro.
+
+    match /channelReputationQueue/{itemId} {
       allow read, write: if false;
     }
 

@@ -8,6 +8,7 @@ export * from "./guardrails";
 export * from "./governance";
 export * from "./roi";
 export * from "./inbox";
+export * from "./sacShield";
 
 import type { RunCostMetrics } from "./roi";
 import type { GuardrailPolicy } from "./guardrails";

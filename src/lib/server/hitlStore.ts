@@ -58,6 +58,17 @@ export function derivarMotivo(violacoes: GuardrailViolation[], veredito: Guardra
   return veredito === "bloqueado" ? "guardrail-bloqueio" : "guardrail-revisao";
 }
 
+/** Espelha `slaRestanteMs` de `@/lib/humanInTheLoop`. Milissegundos restantes de SLA — negativo quando já violado. */
+export function slaRestanteMsAdmin(ticket: HandoffTicket, referencia = new Date()): number {
+  return new Date(ticket.slaExpiraEm).getTime() - referencia.getTime();
+}
+
+/** Espelha `slaViolado` de `@/lib/humanInTheLoop`. `true` quando o SLA venceu com o ticket ainda em aberto. */
+export function slaVioladoAdmin(ticket: HandoffTicket, referencia = new Date()): boolean {
+  if (ticket.status === "resolvido" || ticket.status === "cancelado") return false;
+  return slaRestanteMsAdmin(ticket, referencia) < 0;
+}
+
 function novoIdTicket(): string {
   const aleatorio =
     typeof globalThis.crypto?.randomUUID === "function"

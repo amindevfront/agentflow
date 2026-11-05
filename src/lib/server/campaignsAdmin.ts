@@ -17,9 +17,10 @@
 // fica "falhou" com o motivo exato), igual ao padrão já usado para
 // `ANTHROPIC_API_KEY` ausente no motor de orquestração.
 
-import type { Campaign, CampaignRecipient, Canal, OptOutEntry } from "@/types";
+import type { Campaign, CampaignRecipient, Canal, ItemFilaReputacaoCanal, OptOutEntry, ResultadoDrenagemFilaReputacao } from "@/types";
 import { abrirSegredo, montarAad } from "@/lib/crypto/envelope";
 import { processarEnviosDevidos, type EnviarMensagem } from "@/lib/campaigns/stochasticEngine";
+import { avaliarEEnviarComBlindagem, drenarFilaReputacaoCanal } from "./channelReputationShieldAdmin";
 import { firestoreAdmin } from "./firebaseAdmin";
 
 const COLECAO_CAMPANHAS = "campaigns";
@@ -63,6 +64,68 @@ export const enviarCanalPadrao: EnviarCanalReal = async (canal) => {
   throw new Error(`Integração real do canal "${canal}" ainda não implementada.`);
 };
 
+/**
+ * Codifica a referência de volta ao destinatário original — ver
+ * `ItemFilaReputacaoCanal.origemReferencia`. JSON em vez de concatenação com
+ * separador: `campaignId`/`recipientId` são ids gerados pelo próprio
+ * AgentFlow e não têm garantia de nunca conter o separador escolhido, então
+ * concatenar e tentar `split` de volta seria uma fonte de bug sutil sob um
+ * id adversarial ou apenas incomum.
+ */
+function codificarOrigemReferencia(campaignId: string, recipientId: string): string {
+  return JSON.stringify({ campaignId, recipientId });
+}
+
+function decodificarOrigemReferencia(origemReferencia: string): { campaignId: string; recipientId: string } | null {
+  try {
+    const dados = JSON.parse(origemReferencia) as { campaignId?: unknown; recipientId?: unknown };
+    if (typeof dados.campaignId !== "string" || typeof dados.recipientId !== "string") return null;
+    return { campaignId: dados.campaignId, recipientId: dados.recipientId };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Envolve o executor de envio de uma campanha com a Blindagem de Reputação
+ * de Canal do SAC Shield (`./channelReputationShieldAdmin`): todo disparo
+ * passa pelo disjuntor do canal e pelo limite distribuído de volume antes de
+ * tocar o provedor real. Um disparo de risco (pico de volume, conteúdo com
+ * termo de risco de spam, ou canal instável) nunca é simplesmente tentado —
+ * é contido e enfileirado para reenvio automático (`origemReferencia`
+ * carrega como encontrar o destinatário de novo, já que `destinoHash` é
+ * irreversível por desenho); o destinatário da campanha fica "falhou" com o
+ * motivo explícito nesta execução (nunca finge sucesso), mas a mensagem em
+ * si sobrevive na fila `channelReputationQueue` para a próxima drenagem
+ * (`processarFilaReputacaoCampanhas`).
+ */
+function comBlindagemDeReputacao(
+  executor: EnviarMensagem,
+  workspaceId: string,
+  campaignId: string,
+  canal: Canal
+): EnviarMensagem {
+  return async (recipient, mensagem) => {
+    const resultado = await avaliarEEnviarComBlindagem({
+      workspaceId,
+      canal,
+      destinoHash: recipient.destinoHash,
+      mensagem,
+      origemReferencia: codificarOrigemReferencia(campaignId, recipient.id),
+      enviar: () => executor(recipient, mensagem),
+    });
+
+    if (resultado.enfileirado) {
+      throw new Error(
+        "Disparo contido pela Blindagem de Reputação de Canal (SAC Shield) — enfileirado para reenvio automático: " +
+          `${resultado.avaliacao.motivos.join("; ") || "sem motivo detalhado"}.`
+      );
+    }
+
+    return resultado.enviado;
+  };
+}
+
 /** Decifra o destino real de um destinatário a partir do seu envelope selado. */
 async function abrirDestinoReal(campaignId: string, recipientId: string, workspaceId: string): Promise<string> {
   const db = firestoreAdmin();
@@ -96,12 +159,47 @@ function criarExecutorReal(
   };
 }
 
+/**
+ * Resolve o destino real de um item da fila de reputação originado de uma
+ * campanha e tenta o reenvio de fato — a implementação de
+ * `ResolverEReenviarItemFila` específica de campanhas, injetada em
+ * `drenarFilaReputacaoCanal` por `processarFilaReputacaoCampanhas`.
+ */
+export async function reenviarItemFilaReputacaoDeCampanha(
+  item: ItemFilaReputacaoCanal,
+  workspaceId: string,
+  enviarCanal: EnviarCanalReal = enviarCanalPadrao
+): Promise<boolean> {
+  if (!item.origemReferencia) return false;
+  const referencia = decodificarOrigemReferencia(item.origemReferencia);
+  if (!referencia) return false;
+
+  const destinoReal = await abrirDestinoReal(referencia.campaignId, referencia.recipientId, workspaceId);
+  return enviarCanal(item.canal, destinoReal, item.mensagem);
+}
+
+/**
+ * Drena a fila de reputação do workspace para os itens originados de
+ * campanhas — chamada ao final de `processarTickCampanhas`, mesmo ciclo de
+ * vida de `/api/campaigns/tick`: o mesmo tick que dispara os envios devidos
+ * também dá às mensagens contidas na execução anterior uma nova chance.
+ */
+export async function processarFilaReputacaoCampanhas(
+  workspaceId: string,
+  enviarCanal: EnviarCanalReal = enviarCanalPadrao
+): Promise<ResultadoDrenagemFilaReputacao> {
+  return drenarFilaReputacaoCanal(workspaceId, (item) =>
+    reenviarItemFilaReputacaoDeCampanha(item, workspaceId, enviarCanal)
+  );
+}
+
 export interface ProcessarTickResultado {
   campanhasProcessadas: number;
   enviosRealizados: number;
   enviosBloqueados: number;
   enviosFalhos: number;
   campanhasConcluidas: number;
+  reputacaoCanal: ResultadoDrenagemFilaReputacao;
 }
 
 /**
@@ -144,11 +242,18 @@ export async function processarTickCampanhas(
     const destinatarios = destinatariosSnap.docs.map((d) => ({ ...(d.data() as CampaignRecipient), id: d.id }));
     if (destinatarios.length === 0) continue;
 
+    const executorBlindado = comBlindagemDeReputacao(
+      criarExecutorReal(campanha.id, workspaceId, campanha.canal, enviarCanal),
+      workspaceId,
+      campanha.id,
+      campanha.canal
+    );
+
     const resultado = await processarEnviosDevidos({
       campanha: { mensagemTemplate: campanha.mensagemTemplate, workspaceId },
       destinatarios,
       optOuts,
-      enviar: criarExecutorReal(campanha.id, workspaceId, campanha.canal, enviarCanal),
+      enviar: executorBlindado,
       agora,
     });
 
@@ -181,11 +286,17 @@ export async function processarTickCampanhas(
     if (concluida) campanhasConcluidas += 1;
   }
 
+  // Mesmo tick também dá uma nova chance às mensagens contidas por risco de
+  // reputação em execuções anteriores — o disjuntor ou o pico de volume que
+  // as bloqueou podem já ter se normalizado.
+  const reputacaoCanal = await processarFilaReputacaoCampanhas(workspaceId, enviarCanal);
+
   return {
     campanhasProcessadas: campanhasSnap.size,
     enviosRealizados,
     enviosBloqueados,
     enviosFalhos,
     campanhasConcluidas,
+    reputacaoCanal,
   };
 }

@@ -182,7 +182,20 @@ export type AuditEventType =
   /** Download do Relatório de Prontidão para Regulação de IA (EU AI Act, PDF) — mesmo racional do atestado do Relatório Executivo. */
   | "relatorio.prontidao.gerado"
   /** Download do Relatório de Prontidão para Regulação Brasileira (LGPD, PDF) — mesmo racional do atestado do Relatório Executivo. */
-  | "relatorio.lgpd.gerado";
+  | "relatorio.lgpd.gerado"
+  /**
+   * SAC Shield: fallback seguro acionado porque um transbordo humano
+   * vinculado a uma conversa real estourou a janela legal de atendimento
+   * (ex.: Decreto do SAC) sem decisão de um operador — ver
+   * `@/lib/server/sacShieldHandoffMonitor`.
+   */
+  | "sacshield.handoff.fallback-acionado"
+  /** SAC Shield: disparo a um canal de mensageria contido (enfileirado) por risco de banimento — ver `@/lib/server/channelReputationShieldAdmin`. */
+  | "sacshield.canal.disparo-contido"
+  /** SAC Shield: disjuntor de um canal externo de mensageria abriu — conexão instável isolada. */
+  | "sacshield.canal.disjuntor-aberto"
+  /** SAC Shield: Pacote de Evidência de Conformidade exportado para auditoria corporativa. */
+  | "sacshield.evidencia.pacote-gerado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

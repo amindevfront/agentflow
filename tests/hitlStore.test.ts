@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
+import type { HandoffTicket } from "@/types";
 import {
   SLA_MINUTOS,
   construirTicketAdmin,
   derivarMotivo,
   derivarPrioridade,
+  slaRestanteMsAdmin,
+  slaVioladoAdmin,
 } from "@/lib/server/hitlStore";
 
 // Mesmas expectativas de `tests/governance.test.ts` para o módulo cliente
@@ -99,5 +102,40 @@ describe("construirTicketAdmin", () => {
 
     expect(ticket.conversationId).toBe("conv-widget-1");
     expect(ticket.motivo).toBe("frustracao-critica");
+  });
+});
+
+describe("slaRestanteMsAdmin / slaVioladoAdmin (servidor) — paridade com o cliente", () => {
+  function ticketComSla(slaExpiraEm: string, status: HandoffTicket["status"] = "aberto"): HandoffTicket {
+    const base = construirTicketAdmin({
+      solicitacao: solicitacao(),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      agora: AGORA,
+    });
+    return { ...base, slaExpiraEm, status };
+  }
+
+  it("calcula milissegundos restantes positivos antes do vencimento e negativos depois", () => {
+    const ticket = ticketComSla(new Date(AGORA.getTime() + 60_000).toISOString());
+
+    expect(slaRestanteMsAdmin(ticket, AGORA)).toBe(60_000);
+    expect(slaRestanteMsAdmin(ticket, new Date(AGORA.getTime() + 120_000))).toBe(-60_000);
+  });
+
+  it("considera violado apenas quando o prazo venceu e o ticket ainda está em aberto/em-análise", () => {
+    const vencido = ticketComSla(new Date(AGORA.getTime() - 1_000).toISOString());
+
+    expect(slaVioladoAdmin(vencido, AGORA)).toBe(true);
+    expect(slaVioladoAdmin({ ...vencido, status: "resolvido" }, AGORA)).toBe(false);
+    expect(slaVioladoAdmin({ ...vencido, status: "cancelado" }, AGORA)).toBe(false);
+    expect(slaVioladoAdmin({ ...vencido, status: "em-analise" }, AGORA)).toBe(true);
+  });
+
+  it("nunca considera violado antes do prazo", () => {
+    const dentroDoPrazo = ticketComSla(new Date(AGORA.getTime() + 1_000).toISOString());
+    expect(slaVioladoAdmin(dentroDoPrazo, AGORA)).toBe(false);
   });
 });

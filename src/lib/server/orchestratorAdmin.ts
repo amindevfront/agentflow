@@ -33,7 +33,9 @@ import type { Flow, FlowRun, HandoffTicket, NicheKey } from "@/types";
 import type { ExecutorLlm } from "@/lib/guardrails";
 import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "@/lib/pricing";
 import { gerarContextoNicho } from "@/lib/nichePrompts";
+import { retryWithTimeout } from "@/lib/promiseUtils";
 import { chaveAnthropic, modeloOrquestrador } from "./env";
+import { DisjuntorChamadaExterna } from "./externalApiBreaker";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
 import { ErroApi } from "./http";
@@ -48,12 +50,44 @@ import {
 /** Teto de tokens de saída por chamada — uma conclusão curta e estruturada. */
 const MAX_TOKENS_SAIDA = 1024;
 
+/** Timeout por tentativa individual à Anthropic. */
+const TIMEOUT_CHAMADA_MS = 20_000;
+
+/**
+ * Disjuntor + retry da chamada real à Anthropic (ver `./externalApiBreaker`).
+ * Abre após 3 falhas consecutivas (cada uma já esgotou 2 tentativas com
+ * backoff) e passa a recusar chamadas por 30s sem tocar a rede — proteção
+ * para o provedor e para a latência de quem chama durante uma indisponibilidade.
+ * Falha do disjuntor (`ErroDisjuntorAberto`) e falha de rede chegam ao
+ * chamador (`guardarChamadaLlm`) da mesma forma: ambas já eram tratadas como
+ * falha de amostra antes desta mudança — nenhum comportamento observável novo
+ * além de "falha rápido" em vez de "espera o timeout toda vez".
+ */
+const disjuntorAnthropic = new DisjuntorChamadaExterna("anthropic", {
+  limiarFalhas: 3,
+  resfriamentoMs: 30_000,
+});
+
 let clienteCache: Anthropic | null = null;
 
 function clienteAnthropic(): Anthropic {
   if (clienteCache) return clienteCache;
   clienteCache = new Anthropic({ apiKey: chaveAnthropic() });
   return clienteCache;
+}
+
+/** Chamada real à Anthropic sob disjuntor + retry com backoff exponencial. */
+async function chamarAnthropicComResiliencia(
+  parametros: Anthropic.MessageCreateParamsNonStreaming
+): Promise<Anthropic.Message> {
+  return disjuntorAnthropic.executar(async () => {
+    const resultado = await retryWithTimeout(
+      () => clienteAnthropic().messages.create(parametros),
+      { maxAttempts: 2, timeoutMs: TIMEOUT_CHAMADA_MS, baseDelayMs: 500 }
+    );
+    if (!resultado.ok) throw resultado.error;
+    return resultado.value;
+  });
 }
 
 /**
@@ -76,7 +110,7 @@ export function criarExecutorAnthropic(
     acumulador.modelo = modelo;
 
     return async (payloadSanitizado: string): Promise<string> => {
-      const resposta = await clienteAnthropic().messages.create({
+      const resposta = await chamarAnthropicComResiliencia({
         model: modelo,
         max_tokens: MAX_TOKENS_SAIDA,
         messages: [

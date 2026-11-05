@@ -104,6 +104,19 @@ export interface Conversation {
   slaTicketId?: string | null;
 
   /**
+   * SAC Shield: `true` quando o fallback regulatório de SLA de handoff
+   * (ex.: Decreto do SAC) foi acionado nesta conversa porque nenhum operador
+   * assumiu o transbordo dentro da janela legal — ver
+   * `@/lib/server/sacShieldHandoffMonitor`. Distinto de
+   * `circuitBreakerAtivo`: este campo marca especificamente a causa
+   * regulatória, para que o painel de governança diferencie "frustração do
+   * cliente" de "estouro de prazo legal de atendimento".
+   */
+  sacShieldFallbackAtivo?: boolean;
+  sacShieldFallbackMotivo?: string | null;
+  sacShieldFallbackEm?: string | null;
+
+  /**
    * Identificador de sessão do visitante anônimo do Web Widget Corporativo
    * (gerado e persistido no navegador pelo próprio `widget.js`) — usado para
    * reencontrar a mesma conversa entre mensagens. Deliberadamente NÃO

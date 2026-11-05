@@ -317,4 +317,8 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "relatorio.lgpd.gerado": "Relatório de prontidão para regulação brasileira (LGPD) gerado",
   "procedimento.consentimento.registrado": "Consentimento de procedimento registrado",
   "procedimento.posatendimento.registrado": "Checagem pós-atendimento registrada",
+  "sacshield.handoff.fallback-acionado": "SAC Shield: fallback de SLA de handoff acionado",
+  "sacshield.canal.disparo-contido": "SAC Shield: disparo de canal contido por risco de banimento",
+  "sacshield.canal.disjuntor-aberto": "SAC Shield: disjuntor de canal externo aberto",
+  "sacshield.evidencia.pacote-gerado": "SAC Shield: pacote de evidência de conformidade gerado",
 };
