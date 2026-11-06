@@ -28,6 +28,7 @@ import {
   avaliarConsistencia,
   avaliarFundamentacao,
   detectarCicloNo,
+  detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
 } from "./consistency";
@@ -53,12 +54,14 @@ export {
   avaliarConsistencia,
   avaliarFundamentacao,
   detectarCicloNo,
+  detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
   similaridade,
   tokenizar,
 } from "./consistency";
 export {
+  POLITICA_IMOBILIARIO_ALTO_PADRAO,
   POLITICA_NO_CRITICO,
   POLITICA_PADRAO,
   POLITICA_SANDBOX,
@@ -425,6 +428,25 @@ export function inspecionarSaida(entrada: InspecaoSaidaInput): OutboundInspectio
       }
     } finally {
       cofreSaida.clear();
+    }
+
+    // 6. Proteção de Caixa (Módulo Vertical: Construtoras/Imobiliárias de
+    // Alto Padrão) — ver `detectarPromessaComercialNaoAutorizada` (`./consistency`).
+    // Sem escala de peso: qualquer casamento é `critica`, porque a regra de
+    // negócio é "nenhuma tolerância", não "depende do quanto" — o que, com
+    // `acaoPorSeveridade.critica` sempre resolvendo em `bloqueado`, é
+    // exatamente "qualquer tentativa de inventar preço dispara bloqueio e
+    // aciona o SAC Shield" (o bloqueio aciona `aoTransbordar` em
+    // `guardarChamadaLlm`, que abre o ticket P1).
+    if (politica.bloquearPromessaComercialNaoAutorizada) {
+      const promessa = detectarPromessaComercialNaoAutorizada(escolhida);
+      for (const descricao of promessa.descricoes) {
+        violacoes.push({
+          regra: "preco-comercial-nao-autorizado",
+          severidade: "critica",
+          mensagem: `Tentativa de comunicar condição comercial sem validação prévia da diretoria: ${descricao}.`,
+        });
+      }
     }
 
     // Placeholder que o cofre não reconhece = o modelo inventou um token de

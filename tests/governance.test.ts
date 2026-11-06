@@ -289,6 +289,10 @@ describe("transbordo: prioridade e SLA", () => {
     ).toBe("baixa-consistencia");
     // Sem violação específica, recai no veredito.
     expect(derivarMotivo([], "bloqueado")).toBe("guardrail-bloqueio");
+    // Proteção de Caixa (Módulo Vertical 1) — paridade com `hitlStore.ts`.
+    expect(
+      derivarMotivo([{ regra: "preco-comercial-nao-autorizado", severidade: "critica", mensagem: "" }], "bloqueado")
+    ).toBe("preco-nao-autorizado");
   });
 
   it("nunca copia o payload em claro para o ticket", () => {
@@ -300,6 +304,32 @@ describe("transbordo: prioridade e SLA", () => {
     });
     expect(ticket.payloadMascarado).toBe("cpf: [[PII:CPF:1]]");
     expect(JSON.stringify(ticket)).not.toContain("529.982.247-25");
+  });
+
+  it("carrega resumoExecutivo quando informado, e o omite quando ausente — paridade com `hitlStore.ts`", () => {
+    const comResumo = construirTicket({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-1",
+      flowNome: "Contato via Web Widget",
+      conversationId: "conv-1",
+      motivoForcado: "agendamento-visita-presencial",
+      resumoExecutivo: { nome: "Marina", faixaOrcamento: "até 1,5 milhão", imovelInteresse: "cobertura", objecaoMapeada: null },
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivo).toEqual({
+      nome: "Marina",
+      faixaOrcamento: "até 1,5 milhão",
+      imovelInteresse: "cobertura",
+      objecaoMapeada: null,
+    });
+
+    const semResumo = construirTicket({
+      solicitacao: solicitacao(),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivo).toBeUndefined();
   });
 });
 

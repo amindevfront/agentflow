@@ -39,6 +39,7 @@ import type {
   HandoffReason,
   HandoffStatus,
   HandoffTicket,
+  ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
 import { auth, db } from "./firebase";
@@ -81,6 +82,8 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "solicitacao-manual": "Solicitação manual",
   "frustracao-critica": "Frustração crítica do cliente",
   "compliance-preventivo": "Compliance preventivo (trabalhista/LGPD)",
+  "preco-nao-autorizado": "Preço/condição comercial não autorizada (Proteção de Caixa)",
+  "agendamento-visita-presencial": "Agendamento de visita presencial",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {
@@ -136,6 +139,7 @@ export function derivarMotivo(
     return "sem-fundamentacao";
   }
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
+  if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
 
@@ -160,6 +164,8 @@ export interface ConstruirTicketInput {
   criadoPor?: string;
   /** Sobrepõe o motivo derivado das violações (ex.: solicitação manual). */
   motivoForcado?: HandoffReason;
+  /** Handoff com Resumo Executivo Mastigado — ver `ResumoExecutivoHandoff`. */
+  resumoExecutivo?: ResumoExecutivoHandoff;
   /** Presente quando o ticket se origina da Neural Inbox, não de um fluxo. */
   conversationId?: string;
   /** Injetável para teste determinístico. */
@@ -200,6 +206,7 @@ export function construirTicket(entrada: ConstruirTicketInput): HandoffTicket {
     criadoEm: agora.toISOString(),
     criadoPor: entrada.criadoPor ?? "sistema",
     slaExpiraEm: slaExpiraEm.toISOString(),
+    ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

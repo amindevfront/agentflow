@@ -14,6 +14,7 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { analisarImagem, type ExecutorVisao, type ImagemEntrada } from "@/lib/inbox/multimodalPipeline";
+import { PiiVault, maskText } from "@/lib/guardrails";
 import { chaveAnthropic, diagnosticoOrquestrador, modeloOrquestrador } from "./env";
 
 /** Descrição curta é suficiente — isto alimenta uma mensagem de chat, não um relatório. */
@@ -63,7 +64,19 @@ export const executorVisaoAnthropic: ExecutorVisao = async (imagem: ImagemEntrad
 
 /**
  * Analisa uma imagem com o Claude real e devolve a descrição enriquecida no
- * formato `"[Imagem Analisada: ...]"`.
+ * formato `"[Imagem Analisada: ...]"`, JÁ MASCARADA pelo Shield-Layer
+ * (`@/lib/guardrails`).
+ *
+ * Um comprovante de pagamento ou documento imobiliário fotografado é
+ * exatamente o tipo de anexo que carrega PII/dado de crédito (CPF, valor,
+ * conta bancária) — e, diferente do texto digitado pelo cliente, aqui a
+ * rota HTTP (`/api/inbox/analisar-imagem`) devolve a descrição diretamente
+ * à resposta, antes de qualquer decisão do chamador sobre persistir. Mascarar
+ * só depois (no pipeline de ingestão da Neural Inbox) confiaria no chamador
+ * para nunca logar/exibir o resultado bruto entretanto — o mesmo
+ * anti-padrão já corrigido em `/api/audit/seal` (ver `auditDetalhes.ts`).
+ * Mascarar aqui, na origem, garante a mesma regra independentemente do que
+ * o chamador fizer com a resposta.
  *
  * Lança `Error` quando `ANTHROPIC_API_KEY` não está configurada — quem
  * chama (a rota de API) deve checar `diagnosticoOrquestrador()` antes,
@@ -75,5 +88,12 @@ export async function analisarImagemAdmin(imagem: { base64: string; mediaType: M
   if (!diagnostico.pronto) {
     throw new Error(`Motor de Visão indisponível. Variáveis ausentes: ${diagnostico.faltando.join(", ")}.`);
   }
-  return analisarImagem(imagem, executorVisaoAnthropic);
+  const descricao = await analisarImagem(imagem, executorVisaoAnthropic);
+
+  const vaultDescartavel = new PiiVault();
+  try {
+    return maskText(descricao, vaultDescartavel).texto;
+  } finally {
+    vaultDescartavel.clear();
+  }
 }

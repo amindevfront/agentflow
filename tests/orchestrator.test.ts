@@ -390,6 +390,40 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
     expect(resultadoFundamentado.transbordo).toBe(false);
     expect(resultadoFundamentado.bloqueado).toBe(false);
   });
+
+  it("aplica a política 'imobiliario-alto-padrao' (Módulo Vertical 1) quando informada, bloqueando promessa comercial não autorizada", async () => {
+    // `orchestratorAdmin.ts` seleciona esta política automaticamente para
+    // workspaces com `setor === "construtora-imobiliaria"` — este teste fixa
+    // o contrato de que, uma vez selecionada, a Proteção de Caixa bloqueia a
+    // saída de verdade na execução real (não só no Inspetor manual).
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Lead perguntou sobre condições de pagamento do apartamento.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Consigo fechar com 15% de desconto para você hoje."),
+      portas,
+      politica: "imobiliario-alto-padrao",
+    });
+
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
+
+  it("sem `politica` informada, mantém a política 'padrao' (retrocompatibilidade)", async () => {
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Lead perguntou sobre condições de pagamento do apartamento.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Consigo fechar com 15% de desconto para você hoje."),
+      portas,
+    });
+
+    expect(resultado.bloqueado).toBe(false);
+  });
 });
 
 describe("novoAcumuladorUso", () => {

@@ -23,6 +23,7 @@ import type {
   HandoffPriority,
   HandoffReason,
   HandoffTicket,
+  ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
 import { firestoreAdmin } from "./firebaseAdmin";
@@ -53,6 +54,7 @@ export function derivarMotivo(violacoes: GuardrailViolation[], veredito: Guardra
   if (regras.has("inconsistencia-estocastica")) return "baixa-consistencia";
   if (regras.has("alucinacao-sem-fundamento") || regras.has("numero-nao-fundamentado")) return "sem-fundamentacao";
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
+  if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
   return veredito === "bloqueado" ? "guardrail-bloqueio" : "guardrail-revisao";
@@ -89,6 +91,8 @@ export interface ConstruirTicketAdminInput {
   conversationId?: string;
   /** Sobrepõe o motivo derivado das violações — espelha `ConstruirTicketInput` do lado cliente. */
   motivoForcado?: HandoffReason;
+  /** Handoff com Resumo Executivo Mastigado — espelha `ConstruirTicketInput` do lado cliente. */
+  resumoExecutivo?: ResumoExecutivoHandoff;
   agora?: Date;
   gerarId?: () => string;
 }
@@ -120,6 +124,7 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     criadoEm: agora.toISOString(),
     criadoPor: entrada.criadoPor,
     slaExpiraEm: slaExpiraEm.toISOString(),
+    ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

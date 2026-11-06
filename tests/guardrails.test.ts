@@ -4,6 +4,7 @@ import {
   avaliarConsistencia,
   avaliarFundamentacao,
   detectarCicloNo,
+  detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
   estimarTokensTexto,
@@ -337,6 +338,39 @@ describe("prompt injection", () => {
   });
 });
 
+describe("promessa comercial não autorizada (Proteção de Caixa — Módulo Vertical 1)", () => {
+  it("detecta desconto percentual prometido", () => {
+    expect(detectarPromessaComercialNaoAutorizada("Consigo te dar 15% de desconto nesse imóvel.").suspeito).toBe(
+      true
+    );
+    expect(detectarPromessaComercialNaoAutorizada("Tem desconto de 10% para pagamento à vista.").suspeito).toBe(
+      true
+    );
+  });
+
+  it("detecta condição de parcelamento/financiamento prometida", () => {
+    expect(detectarPromessaComercialNaoAutorizada("Parcelamos em 48x direto com a construtora.").suspeito).toBe(
+      true
+    );
+    expect(detectarPromessaComercialNaoAutorizada("Temos entrada facilitada para esse empreendimento.").suspeito).toBe(
+      true
+    );
+  });
+
+  it("detecta valor de tabela aberto como oferta fechada", () => {
+    expect(detectarPromessaComercialNaoAutorizada("O preço final é esse, pode fechar.").suspeito).toBe(true);
+    expect(detectarPromessaComercialNaoAutorizada("Tabela: R$450.000 para a unidade 302.").suspeito).toBe(true);
+  });
+
+  it("não acusa qualificação legítima sem compromisso comercial", () => {
+    expect(
+      detectarPromessaComercialNaoAutorizada(
+        "Entendi — vou te direcionar ao corretor de plantão com os detalhes que você passou."
+      ).suspeito
+    ).toBe(false);
+  });
+});
+
 describe("inspecionarEntrada", () => {
   it("mascara PII e devolve veredito mascarado", () => {
     const { inspecao, vault } = inspecionarEntrada({
@@ -490,6 +524,30 @@ describe("inspecionarSaida", () => {
       tokensUsados: 5000,
     });
     expect(saida.violacoes.map((v) => v.regra)).toContain("orcamento-tokens");
+  });
+
+  it("política 'imobiliario-alto-padrao' bloqueia desconto prometido sem validação da diretoria", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["Consigo fechar com 15% de desconto para você hoje."],
+      vault,
+      politica: "imobiliario-alto-padrao",
+      sobrescritas: { amostrasConsistencia: 1 },
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).toContain("preco-comercial-nao-autorizado");
+    expect(saida.violacoes.find((v) => v.regra === "preco-comercial-nao-autorizado")?.severidade).toBe("critica");
+    expect(saida.veredito).toBe("bloqueado");
+  });
+
+  it("política padrão NÃO bloqueia a mesma saída — restrição é exclusiva do nicho imobiliário", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["Consigo fechar com 15% de desconto para você hoje."],
+      vault,
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).not.toContain("preco-comercial-nao-autorizado");
   });
 });
 

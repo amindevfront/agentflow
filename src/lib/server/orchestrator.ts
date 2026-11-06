@@ -73,6 +73,13 @@ export interface ExecutarFluxoInput {
   agora?: Date;
   gerarRunId?: () => string;
   /**
+   * Política base de guardrail. Padrão `"padrao"`, retrocompatível com todo
+   * chamador existente. `orchestratorAdmin.ts` seleciona `"imobiliario-alto-padrao"`
+   * automaticamente para workspaces do Módulo Vertical 1 (Construtoras/
+   * Imobiliárias de Alto Padrão) — ver `Workspace.setor`.
+   */
+  politica?: GuardrailPolicy | string;
+  /**
    * Ajustes de política de guardrail do workspace (`Workspace.guardrailOverrides`,
    * ver `@/types`), derivados do ralo de caixa informado no onboarding. Até esta
    * mudança, só o Inspetor de Guardrails (UI) os mesclava — a execução real de
@@ -220,7 +227,7 @@ export async function executarFluxo(input: ExecutarFluxoInput): Promise<Executar
   const resultado = await guardarChamadaLlm({
     payload: input.payload,
     executor,
-    politica: "padrao",
+    politica: input.politica ?? "padrao",
     sobrescritas: input.guardrailOverrides,
     contextos: input.contextosFundamentacao,
     traceId,

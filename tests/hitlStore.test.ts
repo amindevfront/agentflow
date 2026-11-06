@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
-import type { HandoffTicket } from "@/types";
+import type { HandoffTicket, ResumoExecutivoHandoff } from "@/types";
 import {
   SLA_MINUTOS,
   construirTicketAdmin,
@@ -53,6 +53,15 @@ describe("derivarMotivo (servidor) — paridade com o cliente", () => {
     expect(derivarMotivo([], "bloqueado")).toBe("guardrail-bloqueio");
     expect(derivarMotivo([], "transbordo")).toBe("guardrail-revisao");
   });
+
+  it("mapeia a Proteção de Caixa (preco-comercial-nao-autorizado) para preco-nao-autorizado", () => {
+    expect(
+      derivarMotivo(
+        [{ regra: "preco-comercial-nao-autorizado", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("preco-nao-autorizado");
+  });
 });
 
 describe("construirTicketAdmin", () => {
@@ -102,6 +111,38 @@ describe("construirTicketAdmin", () => {
 
     expect(ticket.conversationId).toBe("conv-widget-1");
     expect(ticket.motivo).toBe("frustracao-critica");
+  });
+
+  it("carrega resumoExecutivo quando informado (Handoff com Resumo Executivo Mastigado) e o omite quando ausente", () => {
+    const resumoExecutivo: ResumoExecutivoHandoff = {
+      nome: "Marina",
+      faixaOrcamento: "até 1,5 milhão",
+      imovelInteresse: "cobertura",
+      objecaoMapeada: null,
+    };
+
+    const comResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-widget-2",
+      flowNome: "Contato via Web Widget",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      conversationId: "conv-widget-2",
+      motivoForcado: "agendamento-visita-presencial",
+      resumoExecutivo,
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivo).toEqual(resumoExecutivo);
+
+    const semResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivo).toBeUndefined();
   });
 });
 

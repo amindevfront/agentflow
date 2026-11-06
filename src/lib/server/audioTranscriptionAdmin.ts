@@ -19,6 +19,7 @@
 // real.
 
 import { transcreverAudio, type AudioEntrada, type ExecutorTranscricao } from "@/lib/inbox/multimodalPipeline";
+import { PiiVault, evidenciaSegura, maskText } from "@/lib/guardrails";
 import { chaveTranscricao, diagnosticoTranscricao } from "./env";
 
 const ENDPOINT_TRANSCRICAO = "https://api.openai.com/v1/audio/transcriptions";
@@ -53,7 +54,10 @@ export const executorTranscricaoOpenAI: ExecutorTranscricao = async (audio: Audi
 
   if (!resposta.ok) {
     const corpo = await resposta.text().catch(() => "");
-    throw new Error(`Falha ao transcrever o áudio (HTTP ${resposta.status}): ${corpo.slice(0, 200)}`);
+    // `evidenciaSegura` mascara qualquer PII que o provedor eventualmente
+    // ecoe de volta no corpo de erro (ex.: parâmetros da requisição) antes
+    // de entrar na mensagem de exceção, que pode acabar em log do servidor.
+    throw new Error(`Falha ao transcrever o áudio (HTTP ${resposta.status}): ${evidenciaSegura(corpo, 200)}`);
   }
 
   const dados = (await resposta.json()) as { text?: string };
@@ -61,7 +65,16 @@ export const executorTranscricaoOpenAI: ExecutorTranscricao = async (audio: Audi
 };
 
 /**
- * Transcreve um áudio real via Whisper (OpenAI).
+ * Transcreve um áudio real via Whisper (OpenAI) e devolve o texto JÁ
+ * MASCARADO pelo Shield-Layer (`@/lib/guardrails`).
+ *
+ * Um lead pode falar um CPF, valor de orçamento ou dado de crédito em
+ * áudio — e, como em `analisarImagemAdmin` (`./visionAdmin`), a rota HTTP
+ * (`/api/inbox/transcrever-audio`) devolve o texto bruto direto na
+ * resposta, antes de qualquer decisão do chamador sobre persistir. Mascarar
+ * aqui, na origem, garante a mesma regra independentemente do que o
+ * chamador fizer com a resposta — mesmo princípio do Shield-Layer em
+ * `@/lib/guardrails/piiVault`.
  *
  * Lança `Error` quando `OPENAI_API_KEY` não está configurada — quem chama
  * (a rota de API) deve checar `diagnosticoTranscricao()` antes, para
@@ -72,5 +85,12 @@ export async function transcreverAudioAdmin(audio: AudioEntrada): Promise<string
   if (!diagnostico.pronto) {
     throw new Error(`Motor de Transcrição de Áudio indisponível. Variáveis ausentes: ${diagnostico.faltando.join(", ")}.`);
   }
-  return transcreverAudio(audio, executorTranscricaoOpenAI);
+  const texto = await transcreverAudio(audio, executorTranscricaoOpenAI);
+
+  const vaultDescartavel = new PiiVault();
+  try {
+    return maskText(texto, vaultDescartavel).texto;
+  } finally {
+    vaultDescartavel.clear();
+  }
 }

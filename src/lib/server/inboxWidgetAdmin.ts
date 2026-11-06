@@ -23,6 +23,7 @@ import type {
   ConversationMessage,
   HandoffPriority,
   MessageSender,
+  NicheKey,
 } from "@/types";
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
@@ -30,11 +31,35 @@ import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/
 import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
+import { construirResumoExecutivoHandoff, detectarGatilhoAgendamentoVisita } from "./imobiliarioAltoPadrao";
 
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
 const COLECAO_VAULT_MENSAGENS = "messageVaults";
 const COLECAO_CONECTORES = "connectors";
+const COLECAO_WORKSPACES = "workspaces";
+
+/** Nicho do Módulo Vertical 1 — ver `@/lib/server/imobiliarioAltoPadrao`. */
+const NICHO_IMOBILIARIO: NicheKey = "construtora-imobiliaria";
+
+/**
+ * `true` quando o workspace está classificado no nicho Construtoras/
+ * Imobiliárias de Alto Padrão — gate do Handoff com Resumo Executivo
+ * Mastigado abaixo, para que outros nichos (e-commerce, salão de beleza)
+ * não recebam um ticket inesperado só por mencionar a palavra "visita".
+ * Best-effort: falha de leitura nunca impede o registro da mensagem em si,
+ * apenas desativa esta funcionalidade adicional para esta chamada.
+ */
+async function workspaceEhImobiliarioAltoPadrao(workspaceId: string): Promise<boolean> {
+  try {
+    const snap = await firestoreAdmin().collection(COLECAO_WORKSPACES).doc(workspaceId).get();
+    const setor = snap.exists ? (snap.data() as { setor?: unknown }).setor : undefined;
+    return setor === NICHO_IMOBILIARIO;
+  } catch (erro) {
+    console.error(`[inbox/widget] falha ao ler o nicho do workspace ${workspaceId}:`, erro);
+    return false;
+  }
+}
 
 /** Mesmo rótulo usado em `src/app/(app)/connectors/page.tsx` — precisa coincidir exatamente para a checagem de opt-in abaixo. */
 export const TIPO_CONECTOR_WIDGET = "Web Widget Corporativo (Embed)";
@@ -284,6 +309,47 @@ export async function registrarMensagemWidgetAdmin(
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
       console.error("[inbox/widget] falha ao abrir P1 de frustração crítica:", erro);
+    }
+  }
+
+  // Handoff com Resumo Executivo Mastigado — Módulo Vertical 1
+  // (Construtoras/Imobiliárias de Alto Padrão): o lead pediu para agendar
+  // uma visita presencial. Gatilho positivo (nunca uma violação de
+  // guardrail), restrito ao nicho para não surpreender outras verticais com
+  // um ticket inesperado. `mensagensClienteRecentes` já foi lido acima para
+  // o Radar de Sentimento — reaproveitado aqui, sem nova consulta.
+  if (detectarGatilhoAgendamentoVisita(textoMascarado) && (await workspaceEhImobiliarioAltoPadrao(entrada.workspaceId))) {
+    try {
+      const resumoExecutivo = construirResumoExecutivoHandoff({
+        nomeCliente: conversa.participante.nome,
+        mensagensClienteRecentes: [...mensagensClienteRecentes, textoMascarado],
+      });
+      const ticket = await abrirTransbordoAdmin({
+        solicitacao: {
+          traceId: `widget_${messageId}`,
+          politicaId: "padrao",
+          severidade: "media",
+          veredito: "transbordo",
+          violacoes: [
+            {
+              regra: "agendamento-visita-presencial",
+              severidade: "media",
+              mensagem: "Lead solicitou agendamento de visita presencial — handoff com resumo executivo para o corretor.",
+            },
+          ],
+          payloadMascarado: textoMascarado,
+        },
+        flowId: conversa.id,
+        flowNome: conversa.assunto,
+        conversationId: conversa.id,
+        motivoForcado: "agendamento-visita-presencial",
+        resumoExecutivo,
+        workspaceId: entrada.workspaceId,
+        criadoPor: "sistema",
+      });
+      await refConversa.update({ slaTicketId: ticket.id });
+    } catch (erro) {
+      console.error("[inbox/widget] falha ao abrir handoff de agendamento de visita presencial:", erro);
     }
   }
 

@@ -49,6 +49,7 @@ export const POLITICA_PADRAO: GuardrailPolicy = {
   maxVisitasPorNo: 3,
   detectarPromptInjection: true,
   maxCaracteresPayload: 200_000,
+  bloquearPromessaComercialNaoAutorizada: false,
   acaoPorSeveridade: {
     info: "permitido",
     baixa: "mascarado",
@@ -101,10 +102,27 @@ export const POLITICA_SANDBOX: GuardrailPolicy = {
   },
 };
 
+/**
+ * Política do Módulo Vertical 1 — Construtoras/Imobiliárias de Alto Padrão.
+ *
+ * Estende `POLITICA_NO_CRITICO` (fundamentação exigida, múltiplas amostras
+ * de consistência — um lead de alto ticket merece a mesma rigidez de um nó
+ * de pagamento) com a Proteção de Caixa: nenhum valor de tabela exato,
+ * desconto ou condição de parcelamento sai sem validação da diretoria —
+ * qualquer tentativa é severidade `critica`, que `acaoPorSeveridade` já
+ * resolve em `bloqueado`.
+ */
+export const POLITICA_IMOBILIARIO_ALTO_PADRAO: GuardrailPolicy = {
+  ...POLITICA_NO_CRITICO,
+  id: "imobiliario-alto-padrao",
+  bloquearPromessaComercialNaoAutorizada: true,
+};
+
 export const POLITICAS_PREDEFINIDAS: Record<string, GuardrailPolicy> = {
   padrao: POLITICA_PADRAO,
   "no-critico": POLITICA_NO_CRITICO,
   sandbox: POLITICA_SANDBOX,
+  "imobiliario-alto-padrao": POLITICA_IMOBILIARIO_ALTO_PADRAO,
 };
 
 const LIMITES_NUMERICOS: Array<{ campo: keyof GuardrailPolicy; min: number; max: number }> = [

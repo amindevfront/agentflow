@@ -20,7 +20,21 @@ export type HandoffReason =
   /** Radar de sentimento da Neural Inbox: índice de frustração cruzou o limiar crítico. */
   | "frustracao-critica"
   /** Compliance Preventivo: mensagem de operador/IA com risco de passivo trabalhista ou propaganda enganosa. */
-  | "compliance-preventivo";
+  | "compliance-preventivo"
+  /**
+   * Proteção de Caixa (Módulo Vertical: Construtoras/Imobiliárias de Alto
+   * Padrão): a IA tentou abrir valor de tabela exato, desconto ou condição
+   * de parcelamento sem validação prévia da diretoria — ver
+   * `preco-comercial-nao-autorizado` em `GuardrailRuleId`.
+   */
+  | "preco-nao-autorizado"
+  /**
+   * Handoff com Resumo Executivo Mastigado (Módulo Vertical: Construtoras/
+   * Imobiliárias de Alto Padrão): o lead pediu para agendar uma visita
+   * presencial — ticket carrega `resumoExecutivo` para o corretor não
+   * repetir perguntas já respondidas.
+   */
+  | "agendamento-visita-presencial";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 
@@ -28,6 +42,26 @@ export type HandoffDecision = "aprovado" | "rejeitado" | "editado" | "escalado";
 
 /** P1 = incidente crítico (SLA mais curto), P4 = revisão informativa. */
 export type HandoffPriority = "p1" | "p2" | "p3" | "p4";
+
+/**
+ * Handoff com Resumo Executivo Mastigado (Módulo Vertical: Construtoras/
+ * Imobiliárias de Alto Padrão) — card pronto para o corretor humano assumir
+ * a conversa sem repetir perguntas já respondidas pelo lead. Todo campo é
+ * opcional e `null`/ausente quando o dado não pôde ser identificado na
+ * conversa: um card incompleto é preferível a um campo inventado (Artigo IV
+ * — No Invention).
+ *
+ * `faixaOrcamento` é deliberadamente uma FAIXA em texto livre extraída de
+ * menções por extenso ("até 800 mil", "entre 1 e 1,5 milhão"), nunca o valor
+ * exato que o PiiVault já mascara antes de qualquer persistência — ver
+ * `@/lib/server/imobiliarioAltoPadrao`.
+ */
+export interface ResumoExecutivoHandoff {
+  nome?: string | null;
+  faixaOrcamento?: string | null;
+  imovelInteresse?: string | null;
+  objecaoMapeada?: string | null;
+}
 
 export interface HandoffTicket {
   id: string;
@@ -73,6 +107,9 @@ export interface HandoffTicket {
   justificativa?: string;
   /** Saída corrigida pelo operador quando a decisão é `editado`. */
   saidaCorrigida?: string;
+
+  /** Presente apenas em tickets de `motivo: "agendamento-visita-presencial"` — ver `ResumoExecutivoHandoff`. */
+  resumoExecutivo?: ResumoExecutivoHandoff;
 }
 
 export interface HandoffQueueStats {

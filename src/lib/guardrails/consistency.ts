@@ -409,3 +409,57 @@ export function detectarPromptInjection(texto: string): DeteccaoInjecao {
   }
   return { suspeito: descricoes.length > 0, descricoes };
 }
+
+/**
+ * Proteção de Caixa — Módulo Vertical 1 (Construtoras/Imobiliárias de Alto
+ * Padrão).
+ *
+ * Diferente de `LEXICO_PROMESSA_INDEVIDA` (`./compliancePreventivo`, que
+ * NUNCA bloqueia — cobre risco de passivo trabalhista por linguagem vaga
+ * como "garantido"), este detector cobre um risco distinto e mais concreto:
+ * a IA abrindo um valor de tabela exato, desconto ou condição de
+ * parcelamento sem validação prévia da diretoria — risco financeiro direto
+ * de margem/caixa, não de propaganda enganosa. Qualquer casamento aqui é
+ * tratado como `critica` por `inspecionarSaida` (ver `./index`), sem escala
+ * de peso: a política de negócio é "nenhuma tolerância", não "depende do
+ * quanto".
+ *
+ * Cobre três sinais, cada um suficiente isoladamente:
+ *  1. desconto percentual prometido ("15% de desconto", "desconto de 10%");
+ *  2. condição de parcelamento/financiamento prometida ("parcelamos em
+ *     48x", "entrada facilitada", "sem entrada");
+ *  3. valor fechado como oferta ("preço final", "fecha por", "tabela: R$").
+ * Um valor monetário isolado (ex.: "imóveis a partir de R$ 500.000") já é
+ * coberto por outro mecanismo — a checagem de vazamento de PII na saída
+ * (`pii-vazamento-saida`), que em política crítica (`bloquearPiiNaSaida`)
+ * também bloqueia qualquer valor financeiro explícito. Este detector cobre
+ * especificamente o que aquele NÃO cobre: desconto/financiamento sem
+ * dígito de moeda, e linguagem de fechamento de negócio.
+ */
+const PADROES_PROMESSA_COMERCIAL: Array<{ padrao: RegExp; descricao: string }> = [
+  {
+    padrao: /\b\d{1,2}\s*%\s*(?:de\s+)?desconto\b|\bdesconto\s+de\s+\d{1,2}\s*%/i,
+    descricao: "desconto percentual prometido sem validação da diretoria",
+  },
+  {
+    padrao: /\bparcelamos?\s+em\s+\d+\s*x\b|\bentrada\s+facilitada\b|\bsem\s+entrada\b|\bcondi[çc][õo]es?\s+especiais?\s+de\s+pagamento\b/i,
+    descricao: "condição de parcelamento/financiamento prometida sem validação da diretoria",
+  },
+  {
+    padrao: /\b(?:valor|pre[çc]o)\s+(?:fechado|final)\b|\bfecha(?:mos)?\s+por\b|\bsai\s+por\s+(?:r\$|apenas\s+)?\d|\btabela\s*:\s*r\$/i,
+    descricao: "valor de tabela aberto como oferta fechada sem validação da diretoria",
+  },
+];
+
+export interface DeteccaoPromessaComercial {
+  suspeito: boolean;
+  descricoes: string[];
+}
+
+export function detectarPromessaComercialNaoAutorizada(texto: string): DeteccaoPromessaComercial {
+  const descricoes: string[] = [];
+  for (const { padrao, descricao } of PADROES_PROMESSA_COMERCIAL) {
+    if (padrao.test(texto)) descricoes.push(descricao);
+  }
+  return { suspeito: descricoes.length > 0, descricoes };
+}

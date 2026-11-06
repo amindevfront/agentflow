@@ -28,6 +28,23 @@ describe("gerarContextoNicho", () => {
     expect(contexto).toContain("corretor");
   });
 
+  it("construtora/imobiliária inclui o protocolo de qualificação estruturada (orçamento em faixa, metragem, prazo)", () => {
+    const contexto = gerarContextoNicho("construtora-imobiliaria");
+    expect(contexto).toContain("Protocolo de qualificação");
+    expect(contexto).toContain("faixa de orçamento");
+    expect(contexto).toContain("metragem");
+    expect(contexto).toContain("prazo");
+    // Defesa em profundidade: nunca repetir/pedir um valor exato em R$.
+    expect(contexto).toContain("nunca");
+  });
+
+  it("construtora/imobiliária inclui a restrição comercial contra preço/desconto não autorizado", () => {
+    const contexto = gerarContextoNicho("construtora-imobiliaria") ?? "";
+    expect(contexto).toContain("Restrição comercial");
+    expect(contexto).toContain("diretoria");
+    expect(contexto.toLowerCase()).toContain("desconto");
+  });
+
   it("gera o contexto de clínica médica/exames com foco em confirmação e no-show", () => {
     const contexto = gerarContextoNicho("clinica-medica-exames");
     expect(contexto).toContain("confirma");

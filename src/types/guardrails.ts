@@ -60,7 +60,25 @@ export type GuardrailRuleId =
   /** Compliance Preventivo: promessa comercial/financeira fora do padrão regulatório (ver `@/lib/guardrails/compliancePreventivo`). */
   | "promessa-comercial-indevida"
   /** Compliance Preventivo: linguagem ofensiva, assédio ou aproximação pessoal indevida de operador/IA ao cliente. */
-  | "conduta-inadequada";
+  | "conduta-inadequada"
+  /**
+   * Proteção de Caixa (Módulo Vertical: Construtoras/Imobiliárias de Alto
+   * Padrão — ver `@/lib/guardrails/consistency`): a saída do modelo abriu um
+   * valor de tabela exato, desconto ou condição de parcelamento sem
+   * validação prévia da diretoria. Diferente de `promessa-comercial-indevida`
+   * (que NUNCA bloqueia, só alerta — ver `@/lib/guardrails/compliancePreventivo`),
+   * esta regra é desenhada para bloquear: o risco aqui é financeiro direto
+   * (margem/caixa), não passivo trabalhista.
+   */
+  | "preco-comercial-nao-autorizado"
+  /**
+   * Handoff com Resumo Executivo Mastigado (Módulo Vertical: Construtoras/
+   * Imobiliárias de Alto Padrão): o lead pediu para agendar uma visita
+   * presencial — gatilho de transbordo positivo (não é violação de
+   * guardrail), aberto no mesmo formato de `SolicitacaoTransbordo` para
+   * reaproveitar a fila de HITL já existente.
+   */
+  | "agendamento-visita-presencial";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;
@@ -154,6 +172,17 @@ export interface GuardrailPolicy {
   maxCaracteresPayload: number;
   /** Orçamento de tokens por execução. Ausente = sem limite. */
   orcamentoTokens?: number;
+
+  /**
+   * Proteção de Caixa (Módulo Vertical: Construtoras/Imobiliárias de Alto
+   * Padrão). Quando `true`, a saída é varrida por `detectarPromessaComercialNaoAutorizada`
+   * (`@/lib/guardrails/consistency`) — valor de tabela exato, desconto ou
+   * condição de parcelamento sempre vira violação `critica`
+   * (`preco-comercial-nao-autorizado`), bloqueando a resposta e acionando o
+   * SAC Shield. `false` por padrão: nichos sem essa restrição comercial
+   * (ex.: e-commerce, salão de beleza) continuam podendo cotar preço livremente.
+   */
+  bloquearPromessaComercialNaoAutorizada: boolean;
 
   /** Mapa severidade → ação. Permite afrouxar/endurecer por nó. */
   acaoPorSeveridade: Record<GuardrailSeverity, GuardrailVerdict>;
