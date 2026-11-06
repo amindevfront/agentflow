@@ -28,6 +28,7 @@ import type {
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import { construirResumoExecutivoClinico, detectarGatilhoConfirmacaoAgendamento } from "./clinicaAltoPadrao";
 import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
@@ -39,25 +40,23 @@ const COLECAO_VAULT_MENSAGENS = "messageVaults";
 const COLECAO_CONECTORES = "connectors";
 const COLECAO_WORKSPACES = "workspaces";
 
-/** Nicho do Módulo Vertical 1 — ver `@/lib/server/imobiliarioAltoPadrao`. */
-const NICHO_IMOBILIARIO: NicheKey = "construtora-imobiliaria";
-
 /**
- * `true` quando o workspace está classificado no nicho Construtoras/
- * Imobiliárias de Alto Padrão — gate do Handoff com Resumo Executivo
- * Mastigado abaixo, para que outros nichos (e-commerce, salão de beleza)
- * não recebam um ticket inesperado só por mencionar a palavra "visita".
+ * Lê o nicho (`Workspace.setor`) do workspace — gate dos handoffs com
+ * Resumo Executivo específicos de vertical abaixo, para que um nicho sem
+ * esse protocolo (e-commerce, salão de beleza) não receba um ticket
+ * inesperado só por mencionar uma palavra-gatilho de outra vertical.
  * Best-effort: falha de leitura nunca impede o registro da mensagem em si,
- * apenas desativa esta funcionalidade adicional para esta chamada.
+ * apenas desativa essa funcionalidade adicional para esta chamada —
+ * devolve `null`, tratado como "nenhum nicho específico" por quem chama.
  */
-async function workspaceEhImobiliarioAltoPadrao(workspaceId: string): Promise<boolean> {
+async function lerSetorWorkspace(workspaceId: string): Promise<NicheKey | null> {
   try {
     const snap = await firestoreAdmin().collection(COLECAO_WORKSPACES).doc(workspaceId).get();
     const setor = snap.exists ? (snap.data() as { setor?: unknown }).setor : undefined;
-    return setor === NICHO_IMOBILIARIO;
+    return typeof setor === "string" ? (setor as NicheKey) : null;
   } catch (erro) {
     console.error(`[inbox/widget] falha ao ler o nicho do workspace ${workspaceId}:`, erro);
-    return false;
+    return null;
   }
 }
 
@@ -312,13 +311,18 @@ export async function registrarMensagemWidgetAdmin(
     }
   }
 
-  // Handoff com Resumo Executivo Mastigado — Módulo Vertical 1
-  // (Construtoras/Imobiliárias de Alto Padrão): o lead pediu para agendar
-  // uma visita presencial. Gatilho positivo (nunca uma violação de
-  // guardrail), restrito ao nicho para não surpreender outras verticais com
-  // um ticket inesperado. `mensagensClienteRecentes` já foi lido acima para
-  // o Radar de Sentimento — reaproveitado aqui, sem nova consulta.
-  if (detectarGatilhoAgendamentoVisita(textoMascarado) && (await workspaceEhImobiliarioAltoPadrao(entrada.workspaceId))) {
+  // Handoffs com Resumo Executivo específicos de vertical — gatilhos
+  // positivos (nunca uma violação de guardrail), restritos ao nicho para
+  // não surpreender outras verticais com um ticket inesperado. Uma única
+  // leitura do nicho do workspace serve os dois gates abaixo (mutuamente
+  // exclusivos na prática, já que um workspace tem um único `setor`).
+  // `mensagensClienteRecentes` já foi lido acima para o Radar de
+  // Sentimento — reaproveitado aqui, sem nova consulta.
+  const setorWorkspace = await lerSetorWorkspace(entrada.workspaceId);
+
+  // Módulo Vertical 1 (Construtoras/Imobiliárias de Alto Padrão): o lead
+  // pediu para agendar uma visita presencial.
+  if (setorWorkspace === "construtora-imobiliaria" && detectarGatilhoAgendamentoVisita(textoMascarado)) {
     try {
       const resumoExecutivo = construirResumoExecutivoHandoff({
         nomeCliente: conversa.participante.nome,
@@ -350,6 +354,44 @@ export async function registrarMensagemWidgetAdmin(
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
       console.error("[inbox/widget] falha ao abrir handoff de agendamento de visita presencial:", erro);
+    }
+  }
+
+  // Módulo Vertical 2 (Clínicas de Saúde, Estética Avançada &
+  // Especialistas de Alto Padrão): o paciente confirmou o agendamento da
+  // avaliação/consulta.
+  if (setorWorkspace === "clinica-alto-padrao" && detectarGatilhoConfirmacaoAgendamento(textoMascarado)) {
+    try {
+      const resumoExecutivoClinico = construirResumoExecutivoClinico({
+        nomePaciente: conversa.participante.nome,
+        mensagensClienteRecentes: [...mensagensClienteRecentes, textoMascarado],
+      });
+      const ticket = await abrirTransbordoAdmin({
+        solicitacao: {
+          traceId: `widget_${messageId}`,
+          politicaId: "padrao",
+          severidade: "media",
+          veredito: "transbordo",
+          violacoes: [
+            {
+              regra: "confirmacao-agendamento-clinico",
+              severidade: "media",
+              mensagem: "Paciente confirmou agendamento de consulta/avaliação — handoff com resumo executivo clínico para a equipe.",
+            },
+          ],
+          payloadMascarado: textoMascarado,
+        },
+        flowId: conversa.id,
+        flowNome: conversa.assunto,
+        conversationId: conversa.id,
+        motivoForcado: "confirmacao-agendamento-clinico",
+        resumoExecutivoClinico,
+        workspaceId: entrada.workspaceId,
+        criadoPor: "sistema",
+      });
+      await refConversa.update({ slaTicketId: ticket.id });
+    } catch (erro) {
+      console.error("[inbox/widget] falha ao abrir handoff de confirmação de agendamento clínico:", erro);
     }
   }
 

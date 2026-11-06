@@ -78,7 +78,24 @@ export type GuardrailRuleId =
    * guardrail), aberto no mesmo formato de `SolicitacaoTransbordo` para
    * reaproveitar a fila de HITL já existente.
    */
-  | "agendamento-visita-presencial";
+  | "agendamento-visita-presencial"
+  /**
+   * Guardrail Clínico/Ético — Proteção de Responsabilidade (Módulo Vertical:
+   * Clínicas de Saúde, Estética Avançada & Especialistas de Alto Padrão —
+   * ver `@/lib/guardrails/consistency`): a saída do modelo afirmou um
+   * diagnóstico ou prometeu/garantiu um resultado estético sem avaliação
+   * presencial. Sempre `critica`: o risco aqui é responsabilidade
+   * civil/ética direta, não passivo trabalhista genérico (diferente de
+   * `promessa-comercial-indevida`, que nunca bloqueia).
+   */
+  | "diagnostico-ou-resultado-nao-autorizado"
+  /**
+   * Handoff com Resumo Executivo Clínico (Módulo Vertical: Clínicas de
+   * Saúde, Estética Avançada & Especialistas de Alto Padrão): o paciente
+   * confirmou o agendamento da avaliação/consulta — gatilho de transbordo
+   * positivo, mesmo desenho de `agendamento-visita-presencial`.
+   */
+  | "confirmacao-agendamento-clinico";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;
@@ -183,6 +200,17 @@ export interface GuardrailPolicy {
    * (ex.: e-commerce, salão de beleza) continuam podendo cotar preço livremente.
    */
   bloquearPromessaComercialNaoAutorizada: boolean;
+
+  /**
+   * Guardrail Clínico/Ético (Módulo Vertical: Clínicas de Saúde, Estética
+   * Avançada & Especialistas de Alto Padrão). Quando `true`, a saída é
+   * varrida por `detectarAlucinacaoMedica` (`@/lib/guardrails/consistency`)
+   * — afirmação de diagnóstico ou promessa/garantia de resultado estético
+   * sempre vira violação `critica` (`diagnostico-ou-resultado-nao-autorizado`),
+   * bloqueando a resposta e acionando o SAC Shield. `false` por padrão:
+   * nichos sem risco clínico (ex.: imobiliário, e-commerce) não são afetados.
+   */
+  bloquearDiagnosticoOuResultadoClinico: boolean;
 
   /** Mapa severidade → ação. Permite afrouxar/endurecer por nó. */
   acaoPorSeveridade: Record<GuardrailSeverity, GuardrailVerdict>;

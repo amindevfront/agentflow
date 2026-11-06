@@ -34,7 +34,22 @@ export type HandoffReason =
    * presencial — ticket carrega `resumoExecutivo` para o corretor não
    * repetir perguntas já respondidas.
    */
-  | "agendamento-visita-presencial";
+  | "agendamento-visita-presencial"
+  /**
+   * Guardrail Clínico/Ético (Módulo Vertical: Clínicas de Saúde, Estética
+   * Avançada & Especialistas de Alto Padrão): a IA afirmou um diagnóstico ou
+   * prometeu/garantiu um resultado estético sem avaliação presencial — ver
+   * `diagnostico-ou-resultado-nao-autorizado` em `GuardrailRuleId`.
+   */
+  | "diagnostico-nao-autorizado"
+  /**
+   * Handoff com Resumo Executivo Clínico (Módulo Vertical: Clínicas de
+   * Saúde, Estética Avançada & Especialistas de Alto Padrão): o paciente
+   * confirmou o agendamento da avaliação/consulta — ticket carrega
+   * `resumoExecutivoClinico` para a equipe não repetir perguntas já
+   * respondidas.
+   */
+  | "confirmacao-agendamento-clinico";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 
@@ -60,6 +75,22 @@ export interface ResumoExecutivoHandoff {
   nome?: string | null;
   faixaOrcamento?: string | null;
   imovelInteresse?: string | null;
+  objecaoMapeada?: string | null;
+}
+
+/**
+ * Handoff com Resumo Executivo Clínico (Módulo Vertical: Clínicas de Saúde,
+ * Estética Avançada & Especialistas de Alto Padrão) — card pronto para a
+ * equipe assumir a consulta/avaliação sem repetir perguntas já respondidas
+ * pelo paciente. Mesmo princípio de `ResumoExecutivoHandoff` (campo ausente
+ * fica `null`/ausente, nunca inventado — Artigo IV), com campos próprios do
+ * contexto clínico em vez dos campos de orçamento/imóvel do Vertical 1 —
+ * ver `@/lib/server/clinicaAltoPadrao`.
+ */
+export interface ResumoExecutivoClinico {
+  nome?: string | null;
+  queixaPrincipal?: string | null;
+  historicoResumido?: string | null;
   objecaoMapeada?: string | null;
 }
 
@@ -110,6 +141,8 @@ export interface HandoffTicket {
 
   /** Presente apenas em tickets de `motivo: "agendamento-visita-presencial"` — ver `ResumoExecutivoHandoff`. */
   resumoExecutivo?: ResumoExecutivoHandoff;
+  /** Presente apenas em tickets de `motivo: "confirmacao-agendamento-clinico"` — ver `ResumoExecutivoClinico`. */
+  resumoExecutivoClinico?: ResumoExecutivoClinico;
 }
 
 export interface HandoffQueueStats {

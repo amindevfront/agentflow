@@ -252,10 +252,10 @@ export async function executarFluxoReal(
   // sob a política "padrao" pura (sem endurecimento), o mesmo comportamento de
   // antes desta correção.
   let guardrailOverrides: Partial<GuardrailPolicy> | undefined;
-  // Política base por nicho — Módulo Vertical 1 (Construtoras/Imobiliárias de
-  // Alto Padrão, ver `ExecutarFluxoInput.politica`): workspaces deste setor
-  // recebem automaticamente a Proteção de Caixa e a rigidez de
-  // `POLITICA_NO_CRITICO`, sem exigir configuração manual de `guardrailOverrides`
+  // Política base por nicho (ver `ExecutarFluxoInput.politica`): workspaces
+  // dos Módulos Verticais 1 (Construtoras/Imobiliárias) e 2 (Clínicas de
+  // Saúde/Estética) recebem automaticamente a política endurecida
+  // correspondente, sem exigir configuração manual de `guardrailOverrides`
   // por workspace. Qualquer outro setor (ou setor ausente) mantém "padrao".
   let politicaBase: string = "padrao";
   try {
@@ -274,6 +274,8 @@ export async function executarFluxoReal(
     contextoNicho = gerarContextoNicho(setor);
     if (setor === "construtora-imobiliaria") {
       politicaBase = "imobiliario-alto-padrao";
+    } else if (setor === "clinica-alto-padrao") {
+      politicaBase = "clinica-alto-padrao";
     }
     if (
       dados?.guardrailOverrides &&

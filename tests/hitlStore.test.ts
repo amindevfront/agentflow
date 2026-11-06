@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
-import type { HandoffTicket, ResumoExecutivoHandoff } from "@/types";
+import type { HandoffTicket, ResumoExecutivoClinico, ResumoExecutivoHandoff } from "@/types";
 import {
   SLA_MINUTOS,
   construirTicketAdmin,
@@ -61,6 +61,15 @@ describe("derivarMotivo (servidor) — paridade com o cliente", () => {
         "bloqueado"
       )
     ).toBe("preco-nao-autorizado");
+  });
+
+  it("mapeia o Guardrail Clínico/Ético (diagnostico-ou-resultado-nao-autorizado) para diagnostico-nao-autorizado", () => {
+    expect(
+      derivarMotivo(
+        [{ regra: "diagnostico-ou-resultado-nao-autorizado", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("diagnostico-nao-autorizado");
   });
 });
 
@@ -143,6 +152,38 @@ describe("construirTicketAdmin", () => {
       agora: AGORA,
     });
     expect(semResumo.resumoExecutivo).toBeUndefined();
+  });
+
+  it("carrega resumoExecutivoClinico quando informado (Handoff com Resumo Executivo Clínico) e o omite quando ausente", () => {
+    const resumoExecutivoClinico: ResumoExecutivoClinico = {
+      nome: "Carla",
+      queixaPrincipal: "harmonização facial",
+      historicoResumido: "já fez botox antes",
+      objecaoMapeada: null,
+    };
+
+    const comResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-widget-3",
+      flowNome: "Contato via Web Widget",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      conversationId: "conv-widget-3",
+      motivoForcado: "confirmacao-agendamento-clinico",
+      resumoExecutivoClinico,
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivoClinico).toEqual(resumoExecutivoClinico);
+
+    const semResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivoClinico).toBeUndefined();
   });
 });
 

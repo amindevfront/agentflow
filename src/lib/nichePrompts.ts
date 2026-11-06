@@ -30,14 +30,16 @@ export interface PerfilNicho {
    */
   protocoloQualificacao?: string;
   /**
-   * Restrição comercial explícita no próprio prompt — defesa em profundidade
-   * junto do guardrail `preco-comercial-nao-autorizado`
-   * (`@/lib/guardrails/consistency`): instruir o modelo a nunca tentar a
-   * promessa já ajuda a reduzir a taxa de tentativas, mesmo que o guardrail
-   * seja a garantia real (o modelo pode ignorar a instrução; não pode
-   * ignorar o bloqueio).
+   * Restrição explícita no próprio prompt — defesa em profundidade junto do
+   * guardrail correspondente (`preco-comercial-nao-autorizado` e/ou
+   * `diagnostico-ou-resultado-nao-autorizado`, em `@/lib/guardrails/consistency`):
+   * instruir o modelo a nunca tentar a promessa já ajuda a reduzir a taxa de
+   * tentativas, mesmo que o guardrail seja a garantia real (o modelo pode
+   * ignorar a instrução; não pode ignorar o bloqueio). Deliberadamente
+   * genérico (não "restricaoComercial"): nichos diferentes têm riscos
+   * diferentes — financeiro num, clínico/ético noutro.
    */
-  restricaoComercial?: string;
+  restricao?: string;
 }
 
 export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
@@ -48,10 +50,26 @@ export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
     tomAtendimento: "simpático, ágil e direto",
   },
   "clinica-alto-padrao": {
-    foco: "qualificação de leads para procedimentos de alto ticket (estética, odontologia, harmonização)",
+    foco:
+      "acolhimento e triagem de leads de procedimentos estéticos/médicos de alto ticket (estética avançada, " +
+      "odontologia, harmonização, especialistas), a qualquer hora — nenhum paciente pode ficar sem resposta " +
+      "por causa do horário",
     acaoPrincipal:
-      "qualificar se o cliente já realizou o procedimento antes e agendar uma consulta de avaliação — nunca estimar preço de procedimento sem avaliação presencial",
-    tomAtendimento: "refinado, exclusivo e consultivo",
+      "qualificar com o protocolo estruturado abaixo e agendar uma consulta de avaliação presencial — nunca " +
+      "estimar preço, diagnosticar ou prometer resultado de procedimento sem avaliação presencial",
+    tomAtendimento: "refinado, exclusivo, acolhedor e consultivo — nunca clínico/frio",
+    protocoloQualificacao:
+      "Conduza o acolhimento de forma polida e conversacional (nunca como uma triagem fria) até reunir: " +
+      "(1) queixa principal, na própria descrição do paciente; (2) objetivo do paciente com o procedimento " +
+      "(estético, funcional, ambos); (3) se já realizou avaliação ou procedimento semelhante antes. Nunca " +
+      "ofereça diagnóstico, estimativa de resultado ou orçamento fechado — direcione sempre para uma avaliação " +
+      "presencial com o especialista. Se o paciente confirmar o agendamento, informe que a equipe dará " +
+      "continuidade com o resumo já levantado — não repita perguntas que o paciente já respondeu.",
+    restricao:
+      "Nunca forneça diagnóstico médico, nunca prometa ou garanta resultado estético, e nunca informe orçamento " +
+      "fechado de procedimento invasivo — essas decisões exigem avaliação presencial com o especialista. Quando " +
+      "perguntado sobre resultado ou preço, explique que depende da avaliação presencial e direcione o " +
+      "agendamento.",
   },
   "construtora-imobiliaria": {
     foco:
@@ -69,7 +87,7 @@ export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
       "(imediato, poucos meses, sem pressa). Se o lead pedir para agendar uma visita presencial, confirme o " +
       "interesse e informe que um corretor dará continuidade com os detalhes já levantados — não repita " +
       "perguntas que o lead já respondeu.",
-    restricaoComercial:
+    restricao:
       "Nunca informe valor de tabela exato, percentual de desconto ou condição de parcelamento/financiamento — " +
       "essas informações exigem validação prévia da diretoria. Quando perguntado sobre preço, responda em faixas " +
       "aproximadas e direcione a negociação final ao corretor humano.",
@@ -100,8 +118,8 @@ export function gerarContextoNicho(nicho: NicheKey | null | undefined): string |
   if (perfil.protocoloQualificacao) {
     contexto += ` Protocolo de qualificação: ${perfil.protocoloQualificacao}`;
   }
-  if (perfil.restricaoComercial) {
-    contexto += ` Restrição comercial: ${perfil.restricaoComercial}`;
+  if (perfil.restricao) {
+    contexto += ` Restrição: ${perfil.restricao}`;
   }
 
   return contexto;

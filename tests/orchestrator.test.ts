@@ -424,6 +424,26 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
 
     expect(resultado.bloqueado).toBe(false);
   });
+
+  it("aplica a política 'clinica-alto-padrao' (Módulo Vertical 2) quando informada, bloqueando diagnóstico sem avaliação presencial", async () => {
+    // `orchestratorAdmin.ts` seleciona esta política automaticamente para
+    // workspaces com `setor === "clinica-alto-padrao"` — mesmo contrato do
+    // teste equivalente do Vertical 1: a Proteção de Responsabilidade
+    // bloqueia a saída de verdade na execução real.
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Paciente perguntou se tem rosácea.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "O seu diagnóstico é rosácea, pode ficar tranquilo."),
+      portas,
+      politica: "clinica-alto-padrao",
+    });
+
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
 });
 
 describe("novoAcumuladorUso", () => {

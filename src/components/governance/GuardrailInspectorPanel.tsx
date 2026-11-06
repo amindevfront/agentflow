@@ -31,6 +31,8 @@ const OPCOES_POLITICA: Array<{ valor: IdPolitica; label: string }> = [
   { valor: "padrao", label: "Padrão" },
   { valor: "no-critico", label: "Nó crítico" },
   { valor: "sandbox", label: "Sandbox" },
+  { valor: "imobiliario-alto-padrao", label: "Imobiliário (Alto Padrão)" },
+  { valor: "clinica-alto-padrao", label: "Clínica (Alto Padrão)" },
 ];
 
 const corVeredito: Record<GuardrailVerdict, string> = {

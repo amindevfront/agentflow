@@ -39,6 +39,7 @@ import type {
   HandoffReason,
   HandoffStatus,
   HandoffTicket,
+  ResumoExecutivoClinico,
   ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
@@ -84,6 +85,8 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "compliance-preventivo": "Compliance preventivo (trabalhista/LGPD)",
   "preco-nao-autorizado": "Preço/condição comercial não autorizada (Proteção de Caixa)",
   "agendamento-visita-presencial": "Agendamento de visita presencial",
+  "diagnostico-nao-autorizado": "Diagnóstico/resultado não autorizado (Guardrail Clínico/Ético)",
+  "confirmacao-agendamento-clinico": "Confirmação de agendamento clínico",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {
@@ -140,6 +143,7 @@ export function derivarMotivo(
   }
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
+  if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
 
@@ -166,6 +170,8 @@ export interface ConstruirTicketInput {
   motivoForcado?: HandoffReason;
   /** Handoff com Resumo Executivo Mastigado — ver `ResumoExecutivoHandoff`. */
   resumoExecutivo?: ResumoExecutivoHandoff;
+  /** Handoff com Resumo Executivo Clínico — ver `ResumoExecutivoClinico`. */
+  resumoExecutivoClinico?: ResumoExecutivoClinico;
   /** Presente quando o ticket se origina da Neural Inbox, não de um fluxo. */
   conversationId?: string;
   /** Injetável para teste determinístico. */
@@ -207,6 +213,7 @@ export function construirTicket(entrada: ConstruirTicketInput): HandoffTicket {
     criadoPor: entrada.criadoPor ?? "sistema",
     slaExpiraEm: slaExpiraEm.toISOString(),
     ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
+    ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

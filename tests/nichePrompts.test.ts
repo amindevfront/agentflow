@@ -40,9 +40,24 @@ describe("gerarContextoNicho", () => {
 
   it("construtora/imobiliária inclui a restrição comercial contra preço/desconto não autorizado", () => {
     const contexto = gerarContextoNicho("construtora-imobiliaria") ?? "";
-    expect(contexto).toContain("Restrição comercial");
+    expect(contexto).toContain("Restrição");
     expect(contexto).toContain("diretoria");
     expect(contexto.toLowerCase()).toContain("desconto");
+  });
+
+  it("clínica de alto padrão inclui o protocolo de acolhimento 24/7 (queixa principal, objetivo do paciente)", () => {
+    const contexto = gerarContextoNicho("clinica-alto-padrao") ?? "";
+    expect(contexto).toContain("Protocolo de qualificação");
+    expect(contexto).toContain("queixa principal");
+    expect(contexto).toContain("objetivo do paciente");
+    expect(contexto).toContain("avaliação presencial");
+  });
+
+  it("clínica de alto padrão inclui a restrição contra diagnóstico/promessa de resultado sem avaliação presencial", () => {
+    const contexto = gerarContextoNicho("clinica-alto-padrao") ?? "";
+    expect(contexto).toContain("Restrição");
+    expect(contexto.toLowerCase()).toContain("diagnóstico");
+    expect(contexto.toLowerCase()).toContain("resultado estético");
   });
 
   it("gera o contexto de clínica médica/exames com foco em confirmação e no-show", () => {

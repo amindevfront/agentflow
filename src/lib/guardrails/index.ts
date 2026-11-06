@@ -27,6 +27,7 @@ import type {
 import {
   avaliarConsistencia,
   avaliarFundamentacao,
+  detectarAlucinacaoMedica,
   detectarCicloNo,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
@@ -53,6 +54,7 @@ export {
 export {
   avaliarConsistencia,
   avaliarFundamentacao,
+  detectarAlucinacaoMedica,
   detectarCicloNo,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
@@ -61,6 +63,7 @@ export {
   tokenizar,
 } from "./consistency";
 export {
+  POLITICA_CLINICA_ALTO_PADRAO,
   POLITICA_IMOBILIARIO_ALTO_PADRAO,
   POLITICA_NO_CRITICO,
   POLITICA_PADRAO,
@@ -445,6 +448,21 @@ export function inspecionarSaida(entrada: InspecaoSaidaInput): OutboundInspectio
           regra: "preco-comercial-nao-autorizado",
           severidade: "critica",
           mensagem: `Tentativa de comunicar condição comercial sem validação prévia da diretoria: ${descricao}.`,
+        });
+      }
+    }
+
+    // 7. Guardrail Clínico/Ético — Proteção de Responsabilidade (Módulo
+    // Vertical 2: Clínicas de Saúde, Estética Avançada & Especialistas de
+    // Alto Padrão) — ver `detectarAlucinacaoMedica` (`./consistency`). Mesmo
+    // racional do item 6: sempre `critica`, bloqueio + SAC Shield.
+    if (politica.bloquearDiagnosticoOuResultadoClinico) {
+      const alucinacao = detectarAlucinacaoMedica(escolhida);
+      for (const descricao of alucinacao.descricoes) {
+        violacoes.push({
+          regra: "diagnostico-ou-resultado-nao-autorizado",
+          severidade: "critica",
+          mensagem: `Tentativa de ${descricao}.`,
         });
       }
     }

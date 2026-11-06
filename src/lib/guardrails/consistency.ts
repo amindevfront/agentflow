@@ -463,3 +463,56 @@ export function detectarPromessaComercialNaoAutorizada(texto: string): DeteccaoP
   }
   return { suspeito: descricoes.length > 0, descricoes };
 }
+
+/**
+ * Guardrail Clínico/Ético — Proteção de Responsabilidade (Módulo Vertical 2:
+ * Clínicas de Saúde, Estética Avançada & Especialistas de Alto Padrão).
+ *
+ * Mesma filosofia de `PADROES_PROMESSA_COMERCIAL`: casamento é tratado como
+ * `critica` por `inspecionarSaida` (ver `./index`), sem escala de peso — a
+ * regra de negócio é "a IA nunca diagnostica nem garante resultado", não
+ * "depende do quanto". Cobre dois sinais, cada um suficiente isoladamente:
+ *
+ *  1. afirmação de diagnóstico — framing assertivo ("o diagnóstico é",
+ *     "você está com um caso de", "você sofre de", "confirmo que você tem")
+ *     ou um substantivo com sufixo clínico comum em português
+ *     ("-ite", "-ose", "-oma", "-patia": sinusite, artrose, lipoma,
+ *     cardiopatia) após "você está com";
+ *  2. promessa/garantia de resultado estético ("resultado garantido",
+ *     "garantimos que você vai ficar/parecer", "100% de resultado/satisfação",
+ *     "sem risco nenhum de complicação/cicatriz").
+ *
+ * "Orçamento fechado de procedimento invasivo" é coberto por
+ * `detectarPromessaComercialNaoAutorizada` (mesmo mecanismo do Vertical 1) —
+ * a política clínica liga os dois detectores, não duplica o de preço aqui.
+ */
+const PADROES_ALUCINACAO_MEDICA: Array<{ padrao: RegExp; descricao: string }> = [
+  {
+    padrao:
+      // `\b` depois de uma vogal acentuada (ex.: "é") não funciona como
+      // esperado em regex JS — acentos não contam como "word char" para
+      // `\b` (ver nota equivalente nos detectores de PII, `./pii`), então as
+      // duas primeiras alternativas abaixo evitam ancorar `\b` logo após um
+      // caractere acentuado.
+      /\b(?:o\s+seu\s+)?diagn[óo]stico\s+[ée](?:\s|[:.,]|$)|\bvoc[eê]\s+est[áa]\s+com\s+(?:um\s+caso\s+de\s+)?[a-zà-ÿ]+(?:ite|ose|oma|patia)\b|\bvoc[eê]\s+sofre\s+de\b|\bconfirmo\s+que\s+voc[eê]\s+tem\b/i,
+    descricao: "afirmação de diagnóstico médico sem avaliação presencial",
+  },
+  {
+    padrao:
+      /\bresultado\s+garantido\b|\bgarantimos\s+que\s+(?:voc[eê]\s+)?(?:vai|ir[áa])\s+(?:ficar|parecer)\b|\b100\s*%\s+(?:de\s+)?(?:resultado|satisfa[çc][ãa]o)\b|\bsem\s+risco\s+(?:algum|nenhum)\s+de\s+(?:complica[çc][ãa]o|cicatriz)\b/i,
+    descricao: "promessa/garantia de resultado estético sem avaliação presencial",
+  },
+];
+
+export interface DeteccaoAlucinacaoMedica {
+  suspeito: boolean;
+  descricoes: string[];
+}
+
+export function detectarAlucinacaoMedica(texto: string): DeteccaoAlucinacaoMedica {
+  const descricoes: string[] = [];
+  for (const { padrao, descricao } of PADROES_ALUCINACAO_MEDICA) {
+    if (padrao.test(texto)) descricoes.push(descricao);
+  }
+  return { suspeito: descricoes.length > 0, descricoes };
+}

@@ -23,6 +23,7 @@ import type {
   HandoffPriority,
   HandoffReason,
   HandoffTicket,
+  ResumoExecutivoClinico,
   ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
@@ -55,6 +56,7 @@ export function derivarMotivo(violacoes: GuardrailViolation[], veredito: Guardra
   if (regras.has("alucinacao-sem-fundamento") || regras.has("numero-nao-fundamentado")) return "sem-fundamentacao";
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
+  if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
   return veredito === "bloqueado" ? "guardrail-bloqueio" : "guardrail-revisao";
@@ -93,6 +95,8 @@ export interface ConstruirTicketAdminInput {
   motivoForcado?: HandoffReason;
   /** Handoff com Resumo Executivo Mastigado — espelha `ConstruirTicketInput` do lado cliente. */
   resumoExecutivo?: ResumoExecutivoHandoff;
+  /** Handoff com Resumo Executivo Clínico — espelha `ConstruirTicketInput` do lado cliente. */
+  resumoExecutivoClinico?: ResumoExecutivoClinico;
   agora?: Date;
   gerarId?: () => string;
 }
@@ -125,6 +129,7 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     criadoPor: entrada.criadoPor,
     slaExpiraEm: slaExpiraEm.toISOString(),
     ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
+    ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

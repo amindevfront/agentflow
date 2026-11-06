@@ -3,6 +3,7 @@ import {
   PiiVault,
   avaliarConsistencia,
   avaliarFundamentacao,
+  detectarAlucinacaoMedica,
   detectarCicloNo,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
@@ -371,6 +372,28 @@ describe("promessa comercial não autorizada (Proteção de Caixa — Módulo Ve
   });
 });
 
+describe("alucinação médica (Guardrail Clínico/Ético — Módulo Vertical 2)", () => {
+  it("detecta afirmação de diagnóstico", () => {
+    expect(detectarAlucinacaoMedica("O seu diagnóstico é sinusite crônica.").suspeito).toBe(true);
+    expect(detectarAlucinacaoMedica("Você está com um caso de dermatite.").suspeito).toBe(true);
+    expect(detectarAlucinacaoMedica("Confirmo que você tem o problema que descreveu.").suspeito).toBe(true);
+  });
+
+  it("detecta promessa/garantia de resultado estético", () => {
+    expect(detectarAlucinacaoMedica("O resultado garantido é uma pele mais firme.").suspeito).toBe(true);
+    expect(detectarAlucinacaoMedica("Garantimos que você vai ficar com a pele perfeita.").suspeito).toBe(true);
+    expect(detectarAlucinacaoMedica("Temos 100% de satisfação nesse procedimento.").suspeito).toBe(true);
+  });
+
+  it("não acusa acolhimento legítimo sem diagnóstico ou promessa", () => {
+    expect(
+      detectarAlucinacaoMedica(
+        "Entendi sua queixa — vou te direcionar para uma avaliação presencial com o especialista."
+      ).suspeito
+    ).toBe(false);
+  });
+});
+
 describe("inspecionarEntrada", () => {
   it("mascara PII e devolve veredito mascarado", () => {
     const { inspecao, vault } = inspecionarEntrada({
@@ -548,6 +571,45 @@ describe("inspecionarSaida", () => {
     });
 
     expect(saida.violacoes.map((v) => v.regra)).not.toContain("preco-comercial-nao-autorizado");
+  });
+
+  it("política 'clinica-alto-padrao' bloqueia afirmação de diagnóstico sem avaliação presencial", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["O seu diagnóstico é rosácea, e eu recomendo começar o tratamento agora mesmo."],
+      vault,
+      politica: "clinica-alto-padrao",
+      sobrescritas: { amostrasConsistencia: 1 },
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).toContain("diagnostico-ou-resultado-nao-autorizado");
+    expect(
+      saida.violacoes.find((v) => v.regra === "diagnostico-ou-resultado-nao-autorizado")?.severidade
+    ).toBe("critica");
+    expect(saida.veredito).toBe("bloqueado");
+  });
+
+  it("política 'clinica-alto-padrao' também bloqueia orçamento fechado de procedimento invasivo (reaproveita a Proteção de Caixa)", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["O preço final é esse, pode fechar a cirurgia."],
+      vault,
+      politica: "clinica-alto-padrao",
+      sobrescritas: { amostrasConsistencia: 1 },
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).toContain("preco-comercial-nao-autorizado");
+    expect(saida.veredito).toBe("bloqueado");
+  });
+
+  it("política padrão NÃO bloqueia a mesma saída — restrição clínica é exclusiva do nicho de clínicas", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["O seu diagnóstico é rosácea."],
+      vault,
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).not.toContain("diagnostico-ou-resultado-nao-autorizado");
   });
 });
 

@@ -27,7 +27,10 @@ const PROMPT_ANALISE = [
   "imagem enviada por um cliente em um atendimento comercial (WhatsApp ou Web Widget).",
   "Se for um comprovante de pagamento (PIX, transferência, boleto), inclua o valor e o método quando",
   "estiverem legíveis. Se for planta/documento imobiliário, inclua metragem e número de cômodos quando",
-  "legíveis. Se for foto de agendamento, exame ou procedimento, descreva objetivamente o que é visível.",
+  "legíveis. Se for documento de exame médico, descreva apenas o tipo de exame e o achado clínico",
+  "relevante (ex.: \"exame de sangue com colesterol alterado\") — NUNCA transcreva nome completo, CPF,",
+  "número de documento ou de prontuário, mesmo que estejam legíveis na imagem. Se for foto de",
+  "agendamento ou procedimento (não de rosto/corpo do paciente), descreva objetivamente o que é visível.",
   "NUNCA invente um dado que não esteja legível na imagem — se não conseguir ler, diga isso explicitamente.",
   "Responda APENAS com a descrição em português, sem introdução nem comentário adicional.",
 ].join(" ");

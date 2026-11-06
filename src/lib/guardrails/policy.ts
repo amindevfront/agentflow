@@ -50,6 +50,7 @@ export const POLITICA_PADRAO: GuardrailPolicy = {
   detectarPromptInjection: true,
   maxCaracteresPayload: 200_000,
   bloquearPromessaComercialNaoAutorizada: false,
+  bloquearDiagnosticoOuResultadoClinico: false,
   acaoPorSeveridade: {
     info: "permitido",
     baixa: "mascarado",
@@ -118,11 +119,32 @@ export const POLITICA_IMOBILIARIO_ALTO_PADRAO: GuardrailPolicy = {
   bloquearPromessaComercialNaoAutorizada: true,
 };
 
+/**
+ * Política do Módulo Vertical 2 — Clínicas de Saúde, Estética Avançada &
+ * Especialistas de Alto Padrão.
+ *
+ * Estende `POLITICA_NO_CRITICO` com o Guardrail Clínico/Ético: nenhum
+ * diagnóstico, promessa/garantia de resultado estético ou orçamento fechado
+ * de procedimento invasivo sai sem avaliação presencial — qualquer
+ * tentativa é severidade `critica`, que `acaoPorSeveridade` já resolve em
+ * `bloqueado`. Reaproveita `bloquearPromessaComercialNaoAutorizada` (mesmo
+ * mecanismo do Vertical 1): "orçamento fechado de procedimento invasivo" é
+ * estruturalmente o mesmo risco que "valor de tabela/desconto sem validação
+ * da diretoria".
+ */
+export const POLITICA_CLINICA_ALTO_PADRAO: GuardrailPolicy = {
+  ...POLITICA_NO_CRITICO,
+  id: "clinica-alto-padrao",
+  bloquearPromessaComercialNaoAutorizada: true,
+  bloquearDiagnosticoOuResultadoClinico: true,
+};
+
 export const POLITICAS_PREDEFINIDAS: Record<string, GuardrailPolicy> = {
   padrao: POLITICA_PADRAO,
   "no-critico": POLITICA_NO_CRITICO,
   sandbox: POLITICA_SANDBOX,
   "imobiliario-alto-padrao": POLITICA_IMOBILIARIO_ALTO_PADRAO,
+  "clinica-alto-padrao": POLITICA_CLINICA_ALTO_PADRAO,
 };
 
 const LIMITES_NUMERICOS: Array<{ campo: keyof GuardrailPolicy; min: number; max: number }> = [

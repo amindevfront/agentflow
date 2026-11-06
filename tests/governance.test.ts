@@ -293,6 +293,13 @@ describe("transbordo: prioridade e SLA", () => {
     expect(
       derivarMotivo([{ regra: "preco-comercial-nao-autorizado", severidade: "critica", mensagem: "" }], "bloqueado")
     ).toBe("preco-nao-autorizado");
+    // Guardrail Clínico/Ético (Módulo Vertical 2) — paridade com `hitlStore.ts`.
+    expect(
+      derivarMotivo(
+        [{ regra: "diagnostico-ou-resultado-nao-autorizado", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("diagnostico-nao-autorizado");
   });
 
   it("nunca copia o payload em claro para o ticket", () => {
@@ -330,6 +337,37 @@ describe("transbordo: prioridade e SLA", () => {
       agora: AGORA,
     });
     expect(semResumo.resumoExecutivo).toBeUndefined();
+  });
+
+  it("carrega resumoExecutivoClinico quando informado, e o omite quando ausente — paridade com `hitlStore.ts`", () => {
+    const comResumo = construirTicket({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-2",
+      flowNome: "Contato via Web Widget",
+      conversationId: "conv-2",
+      motivoForcado: "confirmacao-agendamento-clinico",
+      resumoExecutivoClinico: {
+        nome: "Carla",
+        queixaPrincipal: "harmonização facial",
+        historicoResumido: "já fez botox antes",
+        objecaoMapeada: null,
+      },
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivoClinico).toEqual({
+      nome: "Carla",
+      queixaPrincipal: "harmonização facial",
+      historicoResumido: "já fez botox antes",
+      objecaoMapeada: null,
+    });
+
+    const semResumo = construirTicket({
+      solicitacao: solicitacao(),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivoClinico).toBeUndefined();
   });
 });
 
