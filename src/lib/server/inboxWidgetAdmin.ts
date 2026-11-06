@@ -27,6 +27,7 @@ import type {
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
 
@@ -230,6 +231,29 @@ export async function registrarMensagemWidgetAdmin(
     status: conversa.status === "resolvida" ? "aberta" : conversa.status,
     ...(congelarBot ? { atribuidoTipo: "nenhum", atribuidoId: null, atribuidoNome: null } : {}),
   });
+
+  // Motor de Memória Episódica e Contexto Multi-Canal: indexa esta interação
+  // no grafo do cliente — `visitorId` é a MESMA identidade já usada acima
+  // (`encontrarOuCriarConversa`) para correlacionar mensagens dentro deste
+  // canal, nunca uma identidade nova inventada aqui. Best-effort: a mesma
+  // degradação graciosa do selo do cofre acima — perder esta indexação nunca
+  // pode impedir a mensagem em si de ser registrada.
+  try {
+    await registrarInteracaoEpisodica(
+      {
+        workspaceId: entrada.workspaceId,
+        clienteId: entrada.visitorId,
+        canal: "webchat",
+        conversationId: conversa.id,
+        assunto: conversa.assunto,
+        resumoCurto: textoMascarado,
+        desfechoConversao: conversa.desfechoConversao ?? null,
+      },
+      agora
+    );
+  } catch (erro) {
+    console.error("[inbox/widget] falha ao indexar memória episódica:", erro);
+  }
 
   if (circuitBreakerDisparadoAgora) {
     try {

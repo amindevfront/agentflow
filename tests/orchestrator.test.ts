@@ -139,6 +139,27 @@ describe("montarPrompt", () => {
     expect(montarPrompt(FLOW_BASE, "payload", null, null)).not.toContain("Nicho do negócio");
     expect(montarPrompt(FLOW_BASE, "payload", null, "")).not.toContain("Nicho do negócio");
   });
+
+  // Motor de Memória Episódica e Contexto Multi-Canal: `contextoMemoriaEpisodica`
+  // é o resumo unificado do cliente entre canais (ver `@/lib/server/episodicMemory`).
+  it("injeta o contexto de memória episódica quando fornecido, depois do contexto de conversão", () => {
+    const prompt = montarPrompt(
+      FLOW_BASE,
+      "payload qualquer",
+      "68% fechados.",
+      "Nicho do negócio: foco em agendamento rápido.",
+      "Histórico cross-channel deste cliente: 2 interação(ões) em 2 canal(is)."
+    );
+    expect(prompt).toContain("Memória episódica multi-canal");
+    expect(prompt).toContain("Histórico cross-channel deste cliente");
+    expect(prompt.indexOf("Contexto de conversão")).toBeLessThan(prompt.indexOf("Memória episódica multi-canal"));
+  });
+
+  it("omite o bloco de memória episódica quando ausente, null ou vazio (retrocompatibilidade)", () => {
+    expect(montarPrompt(FLOW_BASE, "payload")).not.toContain("Memória episódica multi-canal");
+    expect(montarPrompt(FLOW_BASE, "payload", null, null, null)).not.toContain("Memória episódica multi-canal");
+    expect(montarPrompt(FLOW_BASE, "payload", null, null, "")).not.toContain("Memória episódica multi-canal");
+  });
 });
 
 describe("executarFluxo — integração completa (guardrails → métrica → ROI)", () => {

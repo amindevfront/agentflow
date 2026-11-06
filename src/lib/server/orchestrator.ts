@@ -109,12 +109,19 @@ function novoRunId(): string {
  * workspace (salão de beleza, clínica de alto padrão, imobiliária, clínica
  * médica) — mesmo mecanismo de injeção de `contextoConversao`, outro
  * parâmetro opcional e retrocompatível.
+ *
+ * `contextoMemoriaEpisodica` é o Motor de Memória Episódica e Contexto
+ * Multi-Canal (`@/lib/server/episodicMemory`): o resumo unificado do cliente
+ * entre canais (WhatsApp, Instagram, Widget...), já de tamanho limitado por
+ * desenho (ver `formatarResumoUnificado`) — mesmo mecanismo de injeção dos
+ * dois contextos acima, mais um parâmetro opcional e retrocompatível.
  */
 export function montarPrompt(
   flow: Pick<Flow, "nome" | "gatilho" | "origem">,
   payloadSanitizado: string,
   contextoConversao?: string | null,
-  contextoNicho?: string | null
+  contextoNicho?: string | null,
+  contextoMemoriaEpisodica?: string | null
 ): string {
   const linhas = [
     `Você está operando o fluxo de automação "${flow.nome}" do AgentFlow.`,
@@ -127,6 +134,10 @@ export function montarPrompt(
 
   if (contextoConversao) {
     linhas.push("", `Contexto de conversão (Auto-Feedback, histórico real deste workspace): ${contextoConversao}`);
+  }
+
+  if (contextoMemoriaEpisodica) {
+    linhas.push("", `Memória episódica multi-canal (Motor de Contexto Cross-Channel): ${contextoMemoriaEpisodica}`);
   }
 
   linhas.push(

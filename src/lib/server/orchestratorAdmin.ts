@@ -35,6 +35,7 @@ import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "@/lib/pricing";
 import { gerarContextoNicho } from "@/lib/nichePrompts";
 import { retryWithTimeout } from "@/lib/promiseUtils";
 import { chaveAnthropic, modeloOrquestrador } from "./env";
+import { obterResumoUnificadoCliente } from "./episodicMemory";
 import { DisjuntorChamadaExterna } from "./externalApiBreaker";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
@@ -101,7 +102,9 @@ export function criarExecutorAnthropic(
   /** Auto-Feedback de Conversão — ver `montarPrompt` em `./orchestrator`. */
   contextoConversao?: string | null,
   /** Engine Auto-Moldável por Nicho — ver `montarPrompt` em `./orchestrator`. */
-  contextoNicho?: string | null
+  contextoNicho?: string | null,
+  /** Motor de Memória Episódica e Contexto Multi-Canal — ver `montarPrompt` em `./orchestrator`. */
+  contextoMemoriaEpisodica?: string | null
 ): (acumulador: AcumuladorUso) => ExecutorLlm {
   const modelo = modeloOrquestrador();
   const preco = PRECOS_REFERENCIA[modelo];
@@ -114,7 +117,16 @@ export function criarExecutorAnthropic(
         model: modelo,
         max_tokens: MAX_TOKENS_SAIDA,
         messages: [
-          { role: "user", content: montarPrompt(flow, payloadSanitizado, contextoConversao, contextoNicho) },
+          {
+            role: "user",
+            content: montarPrompt(
+              flow,
+              payloadSanitizado,
+              contextoConversao,
+              contextoNicho,
+              contextoMemoriaEpisodica
+            ),
+          },
         ],
       });
 
@@ -141,6 +153,20 @@ export function criarExecutorAnthropic(
   };
 }
 
+/**
+ * Lê o workspaceId do usuário autenticado, a partir de `users/{uid}`.
+ *
+ * Extraído como função própria (em vez de ficar só dentro de `portasAdmin`)
+ * para que outras rotas que precisam da MESMA verificação de posse de
+ * workspace — ex.: a leitura da Memória Episódica — reaproveitem exatamente
+ * esta leitura, sem duplicá-la.
+ */
+export async function lerWorkspaceIdDoUsuarioAdmin(uid: string): Promise<string | null> {
+  const snap = await firestoreAdmin().collection("users").doc(uid).get();
+  const workspaceId = snap.exists ? (snap.data() as { workspaceId?: unknown }).workspaceId : null;
+  return typeof workspaceId === "string" ? workspaceId : null;
+}
+
 /** Portas concretas sobre o Firestore via Admin SDK. */
 export const portasAdmin: PortasExecucao = {
   async lerFlow(flowId) {
@@ -148,11 +174,7 @@ export const portasAdmin: PortasExecucao = {
     return snap.exists ? ({ ...(snap.data() as Flow), id: snap.id }) : null;
   },
 
-  async lerWorkspaceIdDoUsuario(uid) {
-    const snap = await firestoreAdmin().collection("users").doc(uid).get();
-    const workspaceId = snap.exists ? (snap.data() as { workspaceId?: unknown }).workspaceId : null;
-    return typeof workspaceId === "string" ? workspaceId : null;
-  },
+  lerWorkspaceIdDoUsuario: lerWorkspaceIdDoUsuarioAdmin,
 
   async escreverFlowRun(run: FlowRun) {
     await firestoreAdmin().collection("flowRuns").doc(run.id).set(run);
@@ -164,6 +186,29 @@ export const portasAdmin: PortasExecucao = {
 };
 
 /**
+ * Lê um fluxo e confirma que o usuário autenticado pertence ao seu
+ * workspace — mesma verificação de posse que `executarFluxo` já faz
+ * internamente (ver `./orchestrator`), extraída aqui para que outras rotas
+ * que precisam do fluxo ANTES de decidir se seguem (ex.: o Simulador de A/B
+ * Testing, que não quer gastar chamadas reais à Anthropic num fluxo que o
+ * usuário não pode nem executar) reaproveitem a mesma checagem, em vez de
+ * duplicá-la.
+ */
+export async function lerFlowComPosseAdmin(flowId: string, uid: string): Promise<Flow> {
+  const flow = await portasAdmin.lerFlow(flowId);
+  if (!flow) {
+    throw new ErroApi(404, "Fluxo não encontrado.", "fluxo_nao_encontrado");
+  }
+
+  const workspaceIdUsuario = await lerWorkspaceIdDoUsuarioAdmin(uid);
+  if (!workspaceIdUsuario || workspaceIdUsuario !== flow.workspaceId) {
+    throw new ErroApi(403, "Usuário não pertence ao workspace deste fluxo.", "workspace_incompativel");
+  }
+
+  return flow;
+}
+
+/**
  * Executa um fluxo real: fiação completa (Anthropic + Admin SDK) sobre o
  * núcleo puro `executarFluxo`. Ponto de entrada usado por
  * `/api/flows/execute`.
@@ -171,7 +216,14 @@ export const portasAdmin: PortasExecucao = {
 export async function executarFluxoReal(
   flowId: string,
   payload: string,
-  usuario: { uid: string }
+  usuario: { uid: string },
+  /**
+   * Motor de Memória Episódica e Contexto Multi-Canal: identidade do cliente
+   * já correlacionada entre canais por quem chama (ver nota de "No Invention"
+   * no cabeçalho de `./episodicMemory`) — opcional, pois nem toda execução de
+   * fluxo está atrelada a um cliente específico (ex.: automações agendadas).
+   */
+  clienteId?: string
 ): Promise<ExecutarFluxoResultado> {
   // O fluxo precisa ser lido antes de montar o executor (o prompt depende do
   // nome/gatilho/origem do fluxo) — mas `executarFluxo` também lê o fluxo
@@ -209,11 +261,23 @@ export async function executarFluxoReal(
     console.error(`[orchestrator] falha ao ler contexto do workspace ${flow.workspaceId}:`, erro);
   }
 
+  // Motor de Memória Episódica: leitura O(1) (ver `obterResumoUnificadoCliente`
+  // em `./episodicMemory`) — best-effort, mesma degradação graciosa dos dois
+  // contextos acima. Sem `clienteId`, nenhuma leitura é feita.
+  let contextoMemoriaEpisodica: string | null = null;
+  if (clienteId) {
+    try {
+      contextoMemoriaEpisodica = await obterResumoUnificadoCliente(flow.workspaceId, clienteId);
+    } catch (erro) {
+      console.error(`[orchestrator] falha ao ler memória episódica do cliente ${clienteId}:`, erro);
+    }
+  }
+
   return executarFluxo({
     flowId,
     payload,
     usuario,
-    criarExecutor: criarExecutorAnthropic(flow, contextoConversao, contextoNicho),
+    criarExecutor: criarExecutorAnthropic(flow, contextoConversao, contextoNicho, contextoMemoriaEpisodica),
     portas: portasAdmin,
   });
 }

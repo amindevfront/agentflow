@@ -46,6 +46,13 @@ const MAX_PAYLOAD = 32 * 1024;
 interface CorpoExecutarFluxo {
   flowId?: unknown;
   payload?: unknown;
+  /**
+   * Motor de Memória Episódica e Contexto Multi-Canal (opcional): identidade
+   * do cliente já correlacionada entre canais por quem chama esta rota — ver
+   * `@/lib/server/episodicMemory`. Ausente, a execução segue exatamente como
+   * antes, sem esse contexto adicional.
+   */
+  clienteId?: unknown;
 }
 
 export const POST = comGuarda(
@@ -71,8 +78,9 @@ export const POST = comGuarda(
     const corpo = await corpoJson<CorpoExecutarFluxo>(requisicao, MAX_PAYLOAD);
     const flowId = exigirIdentificador(corpo.flowId, "flowId");
     const payload = exigirTexto(corpo.payload, "payload", { max: MAX_PAYLOAD, min: 1 });
+    const clienteId = corpo.clienteId !== undefined ? exigirIdentificador(corpo.clienteId, "clienteId") : undefined;
 
-    const resultado = await executarFluxoReal(flowId, payload, { uid: usuario.uid });
+    const resultado = await executarFluxoReal(flowId, payload, { uid: usuario.uid }, clienteId);
 
     return respostaJson({
       runId: resultado.run.id,
