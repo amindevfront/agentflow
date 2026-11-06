@@ -21,7 +21,7 @@
 // executor falsos e verifica o resultado byte a byte. A fiação real (Admin
 // SDK + Anthropic) vive em `orchestratorAdmin.ts`, que importa este módulo.
 
-import type { Flow, FlowRun, FlowRunStep, HandoffTicket, RunCostMetrics } from "@/types";
+import type { Flow, FlowRun, FlowRunStep, GuardrailPolicy, HandoffTicket, RunCostMetrics } from "@/types";
 import type { ExecutorLlm, SolicitacaoTransbordo } from "@/lib/guardrails";
 import { guardarChamadaLlm, novoTraceId } from "@/lib/guardrails";
 import { ErroApi } from "./http";
@@ -72,6 +72,25 @@ export interface ExecutarFluxoInput {
   portas: PortasExecucao;
   agora?: Date;
   gerarRunId?: () => string;
+  /**
+   * Ajustes de política de guardrail do workspace (`Workspace.guardrailOverrides`,
+   * ver `@/types`), derivados do ralo de caixa informado no onboarding. Até esta
+   * mudança, só o Inspetor de Guardrails (UI) os mesclava — a execução real de
+   * fluxo sempre rodava sob a política "padrao" pura, então um workspace que
+   * endureceu sua política (ex.: exigir fundamentação para evitar alucinação
+   * comercial) não tinha esse endurecimento aplicado onde de fato importa.
+   */
+  guardrailOverrides?: Partial<GuardrailPolicy>;
+  /**
+   * Trechos de contexto que sustentam a resposta (Auto-Feedback de Conversão,
+   * Engine de Nicho, Memória Episódica — ver `./orchestratorAdmin`), repassados
+   * à checagem de fundamentação (`avaliarFundamentacao`) de `inspecionarSaida`.
+   * Sem isto, um workspace que liga `exigirFundamentacao` nunca tinha material
+   * real contra o qual validar a saída — a checagem sempre caía no ramo "nenhum
+   * contexto fornecido" (severidade alta, transbordo), fail-safe mas incapaz de
+   * de fato distinguir uma alucinação comercial de uma resposta fundamentada.
+   */
+  contextosFundamentacao?: string[];
 }
 
 export interface ExecutarFluxoResultado {
@@ -202,6 +221,8 @@ export async function executarFluxo(input: ExecutarFluxoInput): Promise<Executar
     payload: input.payload,
     executor,
     politica: "padrao",
+    sobrescritas: input.guardrailOverrides,
+    contextos: input.contextosFundamentacao,
     traceId,
     nodeId,
     trace: nodeId ? [nodeId] : [],

@@ -291,11 +291,12 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
   });
 
   it("usa a política padrão (uma amostra) e contabiliza exatamente essa chamada", async () => {
-    // `executarFluxo` sempre resolve a política "padrao" (amostrasConsistencia:
-    // 1) — não há, hoje, um conceito de "fluxo crítico" no modelo de dados de
-    // `Flow` (ver limitação documentada em `orchestratorAdmin.ts`). Este teste
-    // fixa esse comportamento: exatamente uma chamada ao executor, cujo uso é
-    // integralmente refletido na métrica — nenhuma chamada "fantasma" e
+    // `executarFluxo` resolve a política "padrao" (amostrasConsistencia: 1)
+    // quando nenhum `guardrailOverrides` de workspace é informado — não há,
+    // hoje, um conceito de "fluxo crítico" no modelo de dados de `Flow` (ver
+    // limitação documentada em `orchestratorAdmin.ts`), só de workspace. Este
+    // teste fixa esse comportamento: exatamente uma chamada ao executor, cujo
+    // uso é integralmente refletido na métrica — nenhuma chamada "fantasma" e
     // nenhuma perda de contagem.
     const { portas } = criarPortasFalsas();
     let chamadasExecutor = 0;
@@ -322,6 +323,72 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
     expect(chamadasExecutor).toBe(1);
     expect(resultado.run.metrica?.tokensEntrada).toBe(100);
     expect(resultado.run.metrica?.tokensSaida).toBe(40);
+  });
+
+  it("aplica `guardrailOverrides` do workspace à execução real (fail-safe sem contexto de fundamentação)", async () => {
+    // Antes desta correção, `Workspace.guardrailOverrides` só era mesclado no
+    // Inspetor de Guardrails (UI) — a execução real de fluxo sempre rodava sob
+    // a política "padrao" pura (exigirFundamentacao: false). Um workspace que
+    // endureceu a política no onboarding (ex.: por risco de alucinação
+    // comercial) não tinha esse endurecimento aplicado aqui. Sem
+    // `contextosFundamentacao`, a checagem cai no ramo fail-safe ("nenhum
+    // contexto fornecido" → severidade alta → transbordo) — o que já prova que
+    // o override chegou à execução real.
+    const { portas } = criarPortasFalsas();
+
+    const criarExecutorQualquer = (acumulador: AcumuladorUso): ExecutorLlm => {
+      acumulador.modelo = "modelo-de-teste";
+      return async () => {
+        acumulador.tokensEntrada += 50;
+        acumulador.tokensSaida += 20;
+        acumulador.chamadas += 1;
+        return "Confirmado! Você ganhou 40% de desconto na próxima compra.";
+      };
+    };
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Cliente pediu status do pedido PED-003.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorQualquer,
+      portas,
+      guardrailOverrides: { exigirFundamentacao: true, minGroundedness: 0.85 },
+    });
+
+    expect(resultado.transbordo).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
+
+  it("com contexto de fundamentação real, barra a alucinação comercial sem derrubar a resposta fundamentada", async () => {
+    // `contextosFundamentacao` é o que `orchestratorAdmin.ts` monta a partir do
+    // Auto-Feedback de Conversão, do Engine de Nicho e da Memória Episódica —
+    // o mesmo material já injetado no prompt, agora também visível para
+    // `avaliarFundamentacao` validar a saída.
+    const { portas } = criarPortasFalsas();
+    const contextosFundamentacao = ["Política vigente: cupom ATIVA10 concede 10% de desconto."];
+
+    const resultadoAlucinado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Cliente perguntou sobre desconto disponível.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Você ganhou 40% de desconto na próxima compra."),
+      portas,
+      guardrailOverrides: { exigirFundamentacao: true, minGroundedness: 0.85 },
+      contextosFundamentacao,
+    });
+    expect(resultadoAlucinado.transbordo).toBe(true);
+
+    const resultadoFundamentado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Cliente perguntou sobre desconto disponível.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Aplicando o cupom ATIVA10, você tem 10% de desconto."),
+      portas,
+      guardrailOverrides: { exigirFundamentacao: true, minGroundedness: 0.85 },
+      contextosFundamentacao,
+    });
+    expect(resultadoFundamentado.transbordo).toBe(false);
+    expect(resultadoFundamentado.bloqueado).toBe(false);
   });
 });
 

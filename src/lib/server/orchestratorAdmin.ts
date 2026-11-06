@@ -29,7 +29,7 @@
 // responde 503 com uma mensagem acionável (ver `/api/flows/execute`).
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { Flow, FlowRun, HandoffTicket, NicheKey } from "@/types";
+import type { Flow, FlowRun, GuardrailPolicy, HandoffTicket, NicheKey } from "@/types";
 import type { ExecutorLlm } from "@/lib/guardrails";
 import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "@/lib/pricing";
 import { gerarContextoNicho } from "@/lib/nichePrompts";
@@ -246,10 +246,20 @@ export async function executarFluxoReal(
   // contextos extraídos dele.
   let contextoConversao: string | undefined;
   let contextoNicho: string | null | undefined;
+  // Ajustes de guardrail do workspace (ver nota em `ExecutarFluxoInput.guardrailOverrides`,
+  // `./orchestrator`): lidos best-effort, do mesmo documento acima — a ausência
+  // ou malformação deste campo nunca impede a execução, apenas deixa o fluxo
+  // sob a política "padrao" pura (sem endurecimento), o mesmo comportamento de
+  // antes desta correção.
+  let guardrailOverrides: Partial<GuardrailPolicy> | undefined;
   try {
     const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(flow.workspaceId).get();
     const dados = workspaceSnap.exists
-      ? (workspaceSnap.data() as { insightsConversaoTexto?: unknown; setor?: unknown })
+      ? (workspaceSnap.data() as {
+          insightsConversaoTexto?: unknown;
+          setor?: unknown;
+          guardrailOverrides?: unknown;
+        })
       : null;
     if (typeof dados?.insightsConversaoTexto === "string") {
       contextoConversao = dados.insightsConversaoTexto;
@@ -257,6 +267,13 @@ export async function executarFluxoReal(
     contextoNicho = gerarContextoNicho(
       typeof dados?.setor === "string" ? (dados.setor as NicheKey) : undefined
     );
+    if (
+      dados?.guardrailOverrides &&
+      typeof dados.guardrailOverrides === "object" &&
+      !Array.isArray(dados.guardrailOverrides)
+    ) {
+      guardrailOverrides = dados.guardrailOverrides as Partial<GuardrailPolicy>;
+    }
   } catch (erro) {
     console.error(`[orchestrator] falha ao ler contexto do workspace ${flow.workspaceId}:`, erro);
   }
@@ -273,11 +290,17 @@ export async function executarFluxoReal(
     }
   }
 
+  const contextosFundamentacao = [contextoConversao, contextoNicho, contextoMemoriaEpisodica].filter(
+    (contexto): contexto is string => typeof contexto === "string" && contexto.length > 0
+  );
+
   return executarFluxo({
     flowId,
     payload,
     usuario,
     criarExecutor: criarExecutorAnthropic(flow, contextoConversao, contextoNicho, contextoMemoriaEpisodica),
     portas: portasAdmin,
+    guardrailOverrides,
+    contextosFundamentacao,
   });
 }
