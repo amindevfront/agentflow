@@ -82,6 +82,17 @@ function agora(): number {
   return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
+/**
+ * Estimativa grosseira de tokens a partir de caracteres (heurística
+ * ~4 chars/token, comum a modelos de língua natural em português/inglês).
+ * Usada apenas para a checagem PREVENTIVA de orçamento abaixo — nunca para
+ * cobrança real, que vem sempre do `usage` relatado pelo provedor
+ * (ver `RunCostMetrics` em `@/types/roi`).
+ */
+export function estimarTokensTexto(texto: string): number {
+  return Math.ceil(texto.length / 4);
+}
+
 /** Deriva o veredito final a partir das violações e da política. */
 function derivarVeredito(
   violacoes: GuardrailViolation[],
@@ -560,6 +571,49 @@ export async function guardarChamadaLlm(
     }
 
     const totalAmostras = Math.max(1, politica.amostrasConsistencia);
+
+    // Orçamento de tokens: checagem PREVENTIVA, antes de qualquer chamada ao
+    // provedor. A checagem equivalente em `inspecionarSaida` (via
+    // `tokensUsados`) é necessariamente pós-fato — útil para o Inspetor de
+    // Guardrails (UI), que mede o uso real e o informa de volta, mas incapaz
+    // de evitar o gasto em si. Aqui a estimativa (payload sanitizado × número
+    // de amostras que SERIAM pedidas) decide, antes de gastar um único token,
+    // se a execução sequer deve começar.
+    if (politica.orcamentoTokens !== undefined) {
+      const estimativaTokens = estimarTokensTexto(entradaInspecionada.payloadSanitizado) * totalAmostras;
+      if (estimativaTokens > politica.orcamentoTokens) {
+        const violacaoOrcamento: GuardrailViolation = {
+          regra: "orcamento-tokens",
+          severidade: "alta",
+          mensagem:
+            `Estimativa de ${estimativaTokens} tokens (payload sanitizado × ${totalAmostras} amostra(s)) ` +
+            `excede o orçamento de ${politica.orcamentoTokens} desta execução — chamada bloqueada antes de ` +
+            "qualquer gasto ao provedor.",
+          score: estimativaTokens,
+          limite: politica.orcamentoTokens,
+        };
+
+        await notificarTransbordo(entrada.aoTransbordar, {
+          traceId,
+          politicaId: politica.id,
+          nodeId: entrada.nodeId,
+          severidade: "alta",
+          veredito: "bloqueado",
+          violacoes: [violacaoOrcamento],
+          payloadMascarado: entradaInspecionada.payloadSanitizado,
+        });
+
+        return {
+          traceId,
+          entrada: entradaInspecionada,
+          saida: null,
+          resultado: null,
+          bloqueado: true,
+          transbordo: false,
+        };
+      }
+    }
+
     const amostras: string[] = [];
     const falhas: string[] = [];
 

@@ -6,7 +6,9 @@ import {
   detectarCicloNo,
   detectarPromptInjection,
   detectarRepeticao,
+  estimarTokensTexto,
   evidenciaSegura,
+  guardarChamadaLlm,
   inspecionarEntrada,
   inspecionarSaida,
   maskDeep,
@@ -488,5 +490,81 @@ describe("inspecionarSaida", () => {
       tokensUsados: 5000,
     });
     expect(saida.violacoes.map((v) => v.regra)).toContain("orcamento-tokens");
+  });
+});
+
+describe("guardarChamadaLlm — orçamento de tokens preventivo", () => {
+  it("bloqueia ANTES de chamar o executor quando a estimativa já excede o orçamento", async () => {
+    let executorFoiChamado = false;
+    // "abc " (4 chars, com espaço) em vez de um caractere só repetido: uma
+    // corrida de 200+ alfanuméricos contíguos sem espaço casaria com a
+    // heurística de blob base64 de `detectarPromptInjection`, poluindo o
+    // teste com uma violação de entrada que nada tem a ver com orçamento.
+    const payloadGrande = "abc ".repeat(500); // 2000 chars ≈ 500 tokens estimados.
+
+    const resultado = await guardarChamadaLlm({
+      payload: payloadGrande,
+      executor: async () => {
+        executorFoiChamado = true;
+        return "resposta";
+      },
+      sobrescritas: { orcamentoTokens: 100, amostrasConsistencia: 1 },
+    });
+
+    expect(executorFoiChamado).toBe(false);
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.resultado).toBeNull();
+    expect(resultado.entrada.veredito).not.toBe("bloqueado"); // a entrada em si passou — o bloqueio é do orçamento.
+  });
+
+  it("considera o número de amostras na estimativa (amostrasConsistencia multiplica o custo projetado)", async () => {
+    let chamadasExecutor = 0;
+    // ~75 tokens por amostra; com 1 amostra fica dentro do orçamento, com 3 não.
+    const payload = "abc ".repeat(75); // 300 chars.
+
+    const comUmaAmostra = await guardarChamadaLlm({
+      payload,
+      executor: async () => {
+        chamadasExecutor += 1;
+        return "ok";
+      },
+      sobrescritas: { orcamentoTokens: 100, amostrasConsistencia: 1 },
+    });
+    expect(comUmaAmostra.bloqueado).toBe(false);
+    expect(chamadasExecutor).toBe(1);
+
+    const comTresAmostras = await guardarChamadaLlm({
+      payload,
+      executor: async () => {
+        chamadasExecutor += 1;
+        return "ok";
+      },
+      sobrescritas: { orcamentoTokens: 100, amostrasConsistencia: 3 },
+    });
+    expect(comTresAmostras.bloqueado).toBe(true);
+    expect(chamadasExecutor).toBe(1); // não incrementou de novo — a segunda chamada nunca pediu amostra.
+  });
+
+  it("sem `orcamentoTokens` configurado, o comportamento é inalterado (retrocompatibilidade)", async () => {
+    let chamadasExecutor = 0;
+    const resultado = await guardarChamadaLlm({
+      payload: "abc ".repeat(25_000), // 100.000 chars.
+      executor: async () => {
+        chamadasExecutor += 1;
+        return "ok";
+      },
+      sobrescritas: { amostrasConsistencia: 3 },
+    });
+
+    expect(resultado.bloqueado).toBe(false);
+    expect(chamadasExecutor).toBe(3);
+  });
+});
+
+describe("estimarTokensTexto", () => {
+  it("aproxima ~4 caracteres por token", () => {
+    expect(estimarTokensTexto("")).toBe(0);
+    expect(estimarTokensTexto("abcd")).toBe(1);
+    expect(estimarTokensTexto("a".repeat(400))).toBe(100);
   });
 });

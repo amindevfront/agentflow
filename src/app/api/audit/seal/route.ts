@@ -24,6 +24,7 @@
 // pode registrar um evento em nome de outra pessoa.
 
 import type { AuditEventBody, AuditEventType, AuditOutcome } from "@/types";
+import { normalizarDetalhesAuditoria } from "@/lib/server/auditDetalhes";
 import { selarEPersistirEntrada } from "@/lib/server/auditChainStore";
 import { selarDetalhesAuditoria } from "@/lib/crypto/envelope";
 import { chaveAuditoria, diagnosticoCripto } from "@/lib/server/env";
@@ -65,53 +66,11 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);
 
-/** Teto de campos em `detalhes`, para que a entrada não se torne um depósito. */
-const MAX_DETALHES = 24;
-
 interface CorpoSelarAuditoria {
   corpo?: Record<string, unknown>;
   /** Detalhes sensíveis a cifrar em repouso, em vez de gravar em claro. */
   detalhesSensiveis?: unknown;
 }
-
-/**
- * Normaliza `detalhes`: aceita apenas escalares.
- * Estruturas aninhadas iriam para o campo cifrado — misturar texto livre em um
- * campo legível é a via mais comum de PII vazar para dentro de um log.
- */
-function normalizarDetalhes(bruto: unknown): Record<string, string | number | boolean | null> {
-  if (bruto === undefined || bruto === null) return {};
-  if (typeof bruto !== "object" || Array.isArray(bruto)) {
-    throw new ErroApi(400, 'Campo "corpo.detalhes" deve ser um objeto.', "campo_invalido");
-  }
-
-  const entradas = Object.entries(bruto as Record<string, unknown>);
-  if (entradas.length > MAX_DETALHES) {
-    throw new ErroApi(400, `"corpo.detalhes" excede ${MAX_DETALHES} campos.`, "campo_invalido");
-  }
-
-  const saida: Record<string, string | number | boolean | null> = {};
-  for (const [chave, valor] of entradas) {
-    if (!/^[A-Za-z0-9_.-]{1,48}$/.test(chave)) {
-      throw new ErroApi(400, `Chave inválida em detalhes: ${chave}`, "campo_invalido");
-    }
-    if (valor === null || typeof valor === "boolean") {
-      saida[chave] = valor;
-    } else if (typeof valor === "number") {
-      saida[chave] = Number.isFinite(valor) ? valor : null;
-    } else if (typeof valor === "string") {
-      saida[chave] = valor.slice(0, 512);
-    } else {
-      throw new ErroApi(
-        400,
-        `Detalhe "${chave}" deve ser escalar. Use "detalhesSensiveis" para estruturas.`,
-        "campo_invalido"
-      );
-    }
-  }
-  return saida;
-}
-
 
 export const POST = comGuarda(
   async ({ requisicao, usuario }) => {
@@ -186,7 +145,7 @@ export const POST = comGuarda(
       recurso,
       traceId,
       severidade: typeof bruto.severidade === "string" ? (bruto.severidade as AuditEventBody["severidade"]) : undefined,
-      detalhes: normalizarDetalhes(bruto.detalhes),
+      detalhes: normalizarDetalhesAuditoria(bruto.detalhes),
       detalhesCifrados,
       // Horário do servidor: um relógio adiantado no cliente não pode reordenar
       // a trilha nem antedatar um evento.

@@ -226,11 +226,13 @@ export async function executarFluxo(input: ExecutarFluxoInput): Promise<Executar
     traceId,
     nodeId,
     trace: nodeId ? [nodeId] : [],
-    // `guardarChamadaLlm` só aceita `tokensUsados` fixado antes da chamada, não
-    // o valor real medido depois — a política "padrao" não define
-    // `orcamentoTokens`, então esta checagem não se aplica aqui. Um orçamento
-    // por execução exigiria estender aquele contrato para aceitar o uso
-    // medido após o fato; fora do escopo desta integração.
+    // O orçamento de tokens, quando configurado via `guardrailOverrides`, já é
+    // aplicado PREVENTIVAMENTE por `guardarChamadaLlm` (estimativa antes de
+    // qualquer chamada ao provedor — ver `estimarTokensTexto` em
+    // `@/lib/guardrails`). `tokensUsados` aqui alimenta só a checagem pós-fato
+    // de `inspecionarSaida`, que não se aplica a este caminho: o uso real só é
+    // conhecido depois que `AcumuladorUso` já mediu a resposta do provedor, e
+    // não há como injetá-lo de volta na mesma chamada que o produziu.
     tokensUsados: 0,
     aoTransbordar: async (solicitacao) => {
       const ticket = await input.portas.abrirTransbordo({
