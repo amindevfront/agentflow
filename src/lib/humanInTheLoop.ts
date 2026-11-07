@@ -39,6 +39,7 @@ import type {
   HandoffReason,
   HandoffStatus,
   HandoffTicket,
+  ResumoExecutivoB2B,
   ResumoExecutivoClinico,
   ResumoExecutivoHandoff,
 } from "@/types";
@@ -87,6 +88,8 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "agendamento-visita-presencial": "Agendamento de visita presencial",
   "diagnostico-nao-autorizado": "Diagnóstico/resultado não autorizado (Guardrail Clínico/Ético)",
   "confirmacao-agendamento-clinico": "Confirmação de agendamento clínico",
+  "exito-nao-autorizado": "Garantia de êxito não autorizada (Guardrail Ético-Profissional)",
+  "confirmacao-reuniao-diagnostico-b2b": "Confirmação de reunião de diagnóstico B2B",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {
@@ -144,6 +147,7 @@ export function derivarMotivo(
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
+  if (regras.has("garantia-exito-nao-autorizada")) return "exito-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
 
@@ -172,6 +176,8 @@ export interface ConstruirTicketInput {
   resumoExecutivo?: ResumoExecutivoHandoff;
   /** Handoff com Resumo Executivo Clínico — ver `ResumoExecutivoClinico`. */
   resumoExecutivoClinico?: ResumoExecutivoClinico;
+  /** Handoff com Resumo Executivo B2B — ver `ResumoExecutivoB2B`. */
+  resumoExecutivoB2B?: ResumoExecutivoB2B;
   /** Presente quando o ticket se origina da Neural Inbox, não de um fluxo. */
   conversationId?: string;
   /** Injetável para teste determinístico. */
@@ -214,6 +220,7 @@ export function construirTicket(entrada: ConstruirTicketInput): HandoffTicket {
     slaExpiraEm: slaExpiraEm.toISOString(),
     ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
     ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
+    ...(entrada.resumoExecutivoB2B ? { resumoExecutivoB2B: entrada.resumoExecutivoB2B } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

@@ -321,4 +321,5 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "sacshield.canal.disparo-contido": "SAC Shield: disparo de canal contido por risco de banimento",
   "sacshield.canal.disjuntor-aberto": "SAC Shield: disjuntor de canal externo aberto",
   "sacshield.evidencia.pacote-gerado": "SAC Shield: pacote de evidência de conformidade gerado",
+  "connecthub.webhook.despachado": "AgentFlow Connect Hub: evento despachado ao webhook de saída",
 };

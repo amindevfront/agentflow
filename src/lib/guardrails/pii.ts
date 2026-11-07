@@ -24,6 +24,7 @@ export const CLASSIFICACAO_POR_KIND: Record<PiiKind, PiiClassificacao> = {
   ip: "tecnico",
   "ssn-us": "identificador-pessoal",
   "nin-uk": "identificador-pessoal",
+  "nif-pt": "identificador-pessoal",
 };
 
 export const ROTULO_POR_KIND: Record<PiiKind, string> = {
@@ -41,6 +42,7 @@ export const ROTULO_POR_KIND: Record<PiiKind, string> = {
   ip: "Endereço IP",
   "ssn-us": "SSN (EUA)",
   "nin-uk": "National Insurance Number (UK)",
+  "nif-pt": "NIF (Portugal)",
 };
 
 const PREFIXO_PLACEHOLDER = "[[PII:";
@@ -234,6 +236,26 @@ export function validarNin(entrada: string): boolean {
   return true;
 }
 
+/**
+ * Valida um NIF português (Número de Identificação Fiscal, 9 dígitos) pelo
+ * dígito verificador — algoritmo público da Autoridade Tributária (mesma
+ * família do CPF/CNPJ brasileiro: módulo 11, pesos decrescentes 9..2 sobre
+ * os oito primeiros dígitos).
+ */
+export function validarNifPt(entrada: string): boolean {
+  const d = apenasDigitos(entrada);
+  if (d.length !== 9) return false;
+  if (/^(\d)\1{8}$/.test(d)) return false;
+
+  let soma = 0;
+  for (let i = 0; i < 8; i += 1) {
+    soma += Number(d[i]) * (9 - i);
+  }
+  const resto = soma % 11;
+  const esperado = resto < 2 ? 0 : 11 - resto;
+  return esperado === Number(d[8]);
+}
+
 function validarIpv4(entrada: string): boolean {
   const partes = entrada.split(".");
   if (partes.length !== 4) return false;
@@ -379,6 +401,21 @@ const DETECTORES: Detector[] = [
     regex: /\d{4}[\s-]\d{4}[\s-]\d{4}[\s-]\d{1,7}|\d{13,19}/g,
     bordaNumerica: true,
     aceita: (valor) => validarLuhn(valor),
+  },
+
+  // Expansão global (EUA/Portugal) — identificador fiscal português.
+  // Prioridade ACIMA de ssn-us: o dígito verificador módulo 11 é um teste
+  // muito mais seletivo (~1 em 11 números de 9 dígitos passa) do que a
+  // checagem de faixa do SSN (quase todo número de 9 dígitos passa, exceto
+  // as poucas faixas nunca emitidas) — em caso de colisão, a evidência mais
+  // forte deve vencer, mesmo padrão já documentado para outros detectores
+  // com dígito verificador neste arquivo.
+  {
+    kind: "nif-pt",
+    prioridade: 87,
+    regex: /\b\d{3}\s?\d{3}\s?\d{3}\b/g,
+    bordaNumerica: true,
+    aceita: (valor) => validarNifPt(valor),
   },
 
   // Identificadores pessoais internacionais (Canais Globais — EUA/UK).

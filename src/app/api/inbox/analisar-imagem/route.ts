@@ -1,15 +1,15 @@
-// POST /api/inbox/analisar-imagem — Motor de Visão Computacional.
+// POST /api/inbox/analisar-imagem — Motor de Visão Computacional (imagens e documentos PDF).
 //
 // Autenticada (ID token do Firebase, via `comGuarda`) — diferente dos
 // webhooks de canal externo, esta rota é chamada pelo PRÓPRIO operador
-// logado (harness de "simular imagem do cliente" na Neural Inbox, mesmo
-// espírito do `PayloadSimulator` dos fluxos: nunca finge ser o canal real,
-// só exercita o pipeline real de ponta a ponta).
+// logado (harness de "simular imagem/documento do cliente" na Neural Inbox,
+// mesmo espírito do `PayloadSimulator` dos fluxos: nunca finge ser o canal
+// real, só exercita o pipeline real de ponta a ponta).
 //
 // Graceful degradation: sem `ANTHROPIC_API_KEY`, responde 503 com mensagem
 // acionável — nunca deixa a exceção do provedor subir como 500 genérico.
 
-import { analisarImagemAdmin, type MediaTypeImagem } from "@/lib/server/visionAdmin";
+import { analisarImagemAdmin, type MediaTypeAnalise } from "@/lib/server/visionAdmin";
 import { diagnosticoOrquestrador } from "@/lib/server/env";
 import {
   ErroApi,
@@ -22,11 +22,21 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** ~6 MB de imagem em base64 (≈4,5 MB binários) — generoso para uma foto de comprovante/planta, sob o teto de corpo de função serverless. */
-const MAX_BYTES_CORPO = 6 * 1024 * 1024;
-const MAX_BASE64 = 8_000_000;
+/**
+ * ~16 MB em base64 (≈12 MB binários) — generoso para uma foto de comprovante/
+ * planta ou um PDF de contrato/balanço B2B (Módulo Vertical 3), sob o teto de
+ * corpo de função serverless.
+ */
+const MAX_BYTES_CORPO = 16 * 1024 * 1024;
+const MAX_BASE64 = 21_000_000;
 
-const MEDIA_TYPES_SUPORTADOS = new Set<MediaTypeImagem>(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const MEDIA_TYPES_SUPORTADOS = new Set<MediaTypeAnalise>([
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/pdf",
+]);
 
 interface CorpoAnalisarImagem {
   base64?: unknown;
@@ -48,7 +58,7 @@ export const POST = comGuarda(
     const base64 = exigirTexto(corpo.base64, "base64", { max: MAX_BASE64, min: 10 });
     const mediaTypeTexto = exigirTexto(corpo.mediaType, "mediaType", { max: 32 });
 
-    if (!MEDIA_TYPES_SUPORTADOS.has(mediaTypeTexto as MediaTypeImagem)) {
+    if (!MEDIA_TYPES_SUPORTADOS.has(mediaTypeTexto as MediaTypeAnalise)) {
       throw new ErroApi(
         400,
         `"mediaType" inválido: ${mediaTypeTexto}. Suportados: ${[...MEDIA_TYPES_SUPORTADOS].join(", ")}.`,
@@ -57,13 +67,13 @@ export const POST = comGuarda(
     }
 
     try {
-      const descricao = await analisarImagemAdmin({ base64, mediaType: mediaTypeTexto as MediaTypeImagem });
+      const descricao = await analisarImagemAdmin({ base64, mediaType: mediaTypeTexto as MediaTypeAnalise });
       return respostaJson({ descricao });
     } catch (erro) {
-      console.error("[inbox/analisar-imagem] falha ao analisar imagem:", erro);
+      console.error("[inbox/analisar-imagem] falha ao analisar imagem/documento:", erro);
       throw new ErroApi(
         502,
-        erro instanceof Error ? erro.message : "Não foi possível analisar a imagem.",
+        erro instanceof Error ? erro.message : "Não foi possível analisar a imagem/documento.",
         "falha_analise"
       );
     }

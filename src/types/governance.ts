@@ -49,7 +49,21 @@ export type HandoffReason =
    * `resumoExecutivoClinico` para a equipe não repetir perguntas já
    * respondidas.
    */
-  | "confirmacao-agendamento-clinico";
+  | "confirmacao-agendamento-clinico"
+  /**
+   * Guardrail Ético-Profissional (Módulo Vertical: Advocacia, Contabilidade
+   * & Serviços B2B): a IA garantiu resultado de processo/causa ou prometeu
+   * prazo judicial sem análise técnica prévia — ver
+   * `garantia-exito-nao-autorizada` em `GuardrailRuleId`.
+   */
+  | "exito-nao-autorizado"
+  /**
+   * Handoff com Resumo Executivo B2B (Módulo Vertical: Advocacia,
+   * Contabilidade & Serviços B2B): o lead confirmou a reunião de
+   * diagnóstico — ticket carrega `resumoExecutivoB2B` para a equipe de
+   * sócios não repetir perguntas já respondidas.
+   */
+  | "confirmacao-reuniao-diagnostico-b2b";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 
@@ -92,6 +106,44 @@ export interface ResumoExecutivoClinico {
   queixaPrincipal?: string | null;
   historicoResumido?: string | null;
   objecaoMapeada?: string | null;
+}
+
+/**
+ * Handoff com Resumo Executivo B2B (Módulo Vertical: Advocacia,
+ * Contabilidade & Serviços B2B) — card pronto para a equipe de sócios
+ * assumir a reunião de diagnóstico sem repetir perguntas já respondidas
+ * pelo lead. Mesmo princípio dos outros `ResumoExecutivo*` (campo ausente
+ * fica `null`/ausente, nunca inventado — Artigo IV), com campos próprios do
+ * contexto B2B — ver `@/lib/server/advocaciaContabilidadeB2B`.
+ */
+export interface ResumoExecutivoB2B {
+  nome?: string | null;
+  /** "Pessoa física" ou "Pessoa jurídica" — nunca inferido, só quando o próprio lead informou. */
+  perfilLead?: string | null;
+  /** Porte aproximado do caso/empresa, em categoria (ex.: "pequena empresa", "startup") — nunca valor exato. */
+  porteCaso?: string | null;
+  objetivoMapeado?: string | null;
+}
+
+/**
+ * Ghost Coach / Shadow AI — sugestão silenciosa gerada para o operador
+ * humano que vai assumir o ticket, baseada no histórico episódico do lead
+ * (`@/lib/server/episodicMemory`) quando disponível. Nunca enviada
+ * automaticamente ao cliente — é um rascunho para o operador revisar,
+ * editar ou ignorar, mesmo espírito de `payloadMascarado`/`saidaMascarada`
+ * (o operador decide, a IA só instrumenta a decisão). Gerada best-effort:
+ * ausência deste campo no ticket significa apenas que a sugestão não pôde
+ * ser gerada (Anthropic indisponível, disjuntor aberto, etc.) — nunca um
+ * erro que bloqueia o handoff em si.
+ */
+export interface SugestaoGhostCoach {
+  /** Rascunho de resposta sugerido — sempre já mascarado (Shield-Layer). */
+  respostaSugerida: string;
+  /** Argumento sugerido para a objeção mais provável, a partir do histórico — sempre já mascarado. */
+  argumentoObjecao: string;
+  /** `true` quando a sugestão usou o resumo unificado cross-channel do lead, não só o payload deste ticket. */
+  baseadoEmHistoricoEpisodico: boolean;
+  geradoEm: string;
 }
 
 export interface HandoffTicket {
@@ -143,6 +195,10 @@ export interface HandoffTicket {
   resumoExecutivo?: ResumoExecutivoHandoff;
   /** Presente apenas em tickets de `motivo: "confirmacao-agendamento-clinico"` — ver `ResumoExecutivoClinico`. */
   resumoExecutivoClinico?: ResumoExecutivoClinico;
+  /** Presente apenas em tickets de `motivo: "confirmacao-reuniao-diagnostico-b2b"` — ver `ResumoExecutivoB2B`. */
+  resumoExecutivoB2B?: ResumoExecutivoB2B;
+  /** Presente apenas em tickets originados da Neural Inbox (`conversationId` definido) — ver `SugestaoGhostCoach`. */
+  ghostCoach?: SugestaoGhostCoach;
 }
 
 export interface HandoffQueueStats {
@@ -265,7 +321,14 @@ export type AuditEventType =
   /** SAC Shield: disjuntor de um canal externo de mensageria abriu — conexão instável isolada. */
   | "sacshield.canal.disjuntor-aberto"
   /** SAC Shield: Pacote de Evidência de Conformidade exportado para auditoria corporativa. */
-  | "sacshield.evidencia.pacote-gerado";
+  | "sacshield.evidencia.pacote-gerado"
+  /**
+   * AgentFlow Connect Hub: evento despachado (ou enfileirado para retry) ao
+   * webhook de saída do workspace — ver `@/lib/server/connectors`. Todo
+   * egresso de dados a um sistema de terceiros é auditado, mesmo quando o
+   * payload já está mascarado (rastreabilidade LGPD de ponta a ponta).
+   */
+  | "connecthub.webhook.despachado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

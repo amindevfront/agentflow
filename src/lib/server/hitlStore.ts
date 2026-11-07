@@ -23,13 +23,83 @@ import type {
   HandoffPriority,
   HandoffReason,
   HandoffTicket,
+  ResumoExecutivoB2B,
   ResumoExecutivoClinico,
   ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
+import type { ConnectHubEventType } from "@/types";
+import type { Idioma } from "@/lib/jurisdiction";
+import { despacharEventoConnectHubAdmin, montarPayloadConnectHub } from "./connectors";
 import { firestoreAdmin } from "./firebaseAdmin";
+import { gerarSugestaoGhostCoachAdmin } from "./ghostCoach";
 
 const COLECAO = "hitlTickets";
+
+/**
+ * Motivos de ticket que representam um agendamento/reunião confirmado pelo
+ * próprio lead/paciente (Módulos Verticais 1-3) — ver `ConnectHubEventType`
+ * e, no Painel de ROI (`@/lib/server/roiDashboard`), `agendamentosConfirmados`.
+ * Qualquer outro motivo de ticket é um handoff genérico bem-sucedido.
+ * Exportado para que os dois consumidores nunca divirjam sobre "o que conta
+ * como agendamento confirmado".
+ */
+export const MOTIVOS_AGENDAMENTO_VALIDADO = new Set<HandoffReason>([
+  "agendamento-visita-presencial",
+  "confirmacao-agendamento-clinico",
+  "confirmacao-reuniao-diagnostico-b2b",
+]);
+
+/**
+ * AgentFlow Connect Hub: todo ticket HITL criado com sucesso é, por
+ * definição, um handoff que funcionou — a IA identificou corretamente que
+ * o caso precisava de um humano e a escalação foi persistida. Notificar o
+ * webhook de saída do workspace aqui, no ÚNICO ponto que cria um ticket
+ * (tanto `abrirTransbordoAdmin` quanto, indiretamente,
+ * `criarHandlerDeTransbordoAdmin`), cobre os dois eventos do Connect Hub
+ * sem duplicar a decisão em cada chamador: motivos de confirmação de
+ * agendamento/reunião (Módulos Verticais 1-3) viram `"agendamento.validado"`;
+ * qualquer outro motivo vira `"handoff.sucesso"`.
+ *
+ * Best-effort e nunca bloqueante: a ausência de Connect Hub configurado, uma
+ * falha de rede no webhook do cliente ou qualquer outro erro aqui NUNCA
+ * podem impedir a criação do ticket em si — o dado já está seguro em
+ * `hitlTickets`, o Connect Hub é um reforço de integração, não um
+ * pré-requisito do handoff.
+ */
+async function notificarConnectHub(ticket: HandoffTicket): Promise<void> {
+  try {
+    const evento: ConnectHubEventType = MOTIVOS_AGENDAMENTO_VALIDADO.has(ticket.motivo)
+      ? "agendamento.validado"
+      : "handoff.sucesso";
+
+    const payload = montarPayloadConnectHub({
+      evento,
+      workspaceId: ticket.workspaceId,
+      traceId: ticket.traceId,
+      dados: {
+        ticketId: ticket.id,
+        flowId: ticket.flowId,
+        flowNome: ticket.flowNome,
+        conversationId: ticket.conversationId ?? null,
+        motivo: ticket.motivo,
+        prioridade: ticket.prioridade,
+        severidade: ticket.severidade,
+        payloadMascarado: ticket.payloadMascarado,
+        saidaMascarada: ticket.saidaMascarada ?? null,
+        resumoExecutivo: ticket.resumoExecutivo ?? null,
+        resumoExecutivoClinico: ticket.resumoExecutivoClinico ?? null,
+        resumoExecutivoB2B: ticket.resumoExecutivoB2B ?? null,
+        criadoEm: ticket.criadoEm,
+        slaExpiraEm: ticket.slaExpiraEm,
+      },
+    });
+
+    await despacharEventoConnectHubAdmin({ workspaceId: ticket.workspaceId, payload });
+  } catch (erro) {
+    console.error(`[connect-hub] falha ao notificar o webhook de saída para o ticket ${ticket.id}:`, erro);
+  }
+}
 
 /** Espelha `SLA_MINUTOS` de `@/lib/humanInTheLoop` — mesmos prazos, por prioridade. */
 export const SLA_MINUTOS: Record<HandoffPriority, number> = { p1: 15, p2: 60, p3: 240, p4: 1440 };
@@ -57,6 +127,7 @@ export function derivarMotivo(violacoes: GuardrailViolation[], veredito: Guardra
   if (regras.has("segredo-em-payload") || regras.has("pii-vazamento-saida")) return "pii-sensivel";
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
+  if (regras.has("garantia-exito-nao-autorizada")) return "exito-nao-autorizado";
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
   return veredito === "bloqueado" ? "guardrail-bloqueio" : "guardrail-revisao";
@@ -97,6 +168,25 @@ export interface ConstruirTicketAdminInput {
   resumoExecutivo?: ResumoExecutivoHandoff;
   /** Handoff com Resumo Executivo Clínico — espelha `ConstruirTicketInput` do lado cliente. */
   resumoExecutivoClinico?: ResumoExecutivoClinico;
+  /** Handoff com Resumo Executivo B2B — espelha `ConstruirTicketInput` do lado cliente. */
+  resumoExecutivoB2B?: ResumoExecutivoB2B;
+  /**
+   * Identidade do cliente já correlacionada entre canais (ver "No Invention"
+   * em `@/lib/server/episodicMemory`) — usada SOMENTE para o Ghost Coach
+   * buscar o histórico episódico do lead (`./ghostCoach`). Não é um campo do
+   * ticket em si (não aparece em `HandoffTicket`), só um insumo desta chamada.
+   */
+  clienteId?: string | null;
+  /**
+   * Expansão Global (EUA/Portugal): idioma provável do cliente final, para
+   * o Ghost Coach escrever o rascunho de resposta nesse idioma (ver
+   * `./ghostCoach`). Mesmo caráter de `clienteId`: insumo desta chamada, não
+   * um campo do ticket. Quem tem um telefone em claro no momento da
+   * ingestão pode inferir isto via `@/lib/jurisdiction` — hoje, nenhum canal
+   * real ligado a esta função ainda carrega essa inferência adiante (ver
+   * `@/lib/inbox/channelAdapters`, que já a calcula no adaptador Twilio).
+   */
+  idiomaCliente?: Idioma | null;
   agora?: Date;
   gerarId?: () => string;
 }
@@ -130,6 +220,7 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     slaExpiraEm: slaExpiraEm.toISOString(),
     ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
     ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
+    ...(entrada.resumoExecutivoB2B ? { resumoExecutivoB2B: entrada.resumoExecutivoB2B } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };
@@ -138,7 +229,37 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
 /** Persiste o ticket via Admin SDK — bypassa as regras do Firestore por desenho. */
 export async function abrirTransbordoAdmin(entrada: ConstruirTicketAdminInput): Promise<HandoffTicket> {
   const ticket = construirTicketAdmin(entrada);
-  await firestoreAdmin().collection(COLECAO).doc(ticket.id).set(ticket);
+  const refTicket = firestoreAdmin().collection(COLECAO).doc(ticket.id);
+  await refTicket.set(ticket);
+  await notificarConnectHub(ticket);
+
+  // Ghost Coach / Shadow AI: só faz sentido para tickets conversacionais
+  // (Neural Inbox, `conversationId` definido) — um ticket de guardrail de
+  // fluxo não tem um "lead" do outro lado para sugerir resposta/objeção.
+  // Best-effort e nunca bloqueante para o CHAMADOR original: o ticket já foi
+  // devolvido ao chamador só depois desta chamada terminar (ver limitação
+  // documentada no cabeçalho de `./ghostCoach`), mas uma falha aqui nunca
+  // impede o handoff — só o deixa sem o rascunho extra desta vez.
+  if (ticket.conversationId) {
+    try {
+      const sugestao = await gerarSugestaoGhostCoachAdmin({
+        workspaceId: ticket.workspaceId,
+        payloadMascarado: ticket.payloadMascarado,
+        saidaMascarada: ticket.saidaMascarada,
+        motivo: ticket.motivo,
+        severidade: ticket.severidade,
+        clienteId: entrada.clienteId,
+        idiomaResposta: entrada.idiomaCliente ?? undefined,
+      });
+      if (sugestao) {
+        await refTicket.update({ ghostCoach: sugestao });
+        ticket.ghostCoach = sugestao;
+      }
+    } catch (erro) {
+      console.error(`[ghost-coach] falha ao gerar sugestão para o ticket ${ticket.id}:`, erro);
+    }
+  }
+
   return ticket;
 }
 

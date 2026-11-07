@@ -1,19 +1,24 @@
 // Tipos do motor de ROI e métricas financeiras.
 
-export type Moeda = "BRL" | "USD" | "GBP";
+export type Moeda = "BRL" | "USD" | "GBP" | "EUR";
 
 /**
  * Regime de encargos usado para decompor o custo humano evitado.
  * - `clt-br`: INSS patronal, FGTS, 13º, férias, provisão de rescisão.
  * - `payroll-us-uk`: FICA patronal, FUTA/SUTA, workers' comp, benefícios e
  *   overhead de BPO (call center terceirizado) — ver `ComposicaoCustoPayroll`.
+ * - `1099-us`: contractor americano (não-W2) — o residual de encargos
+ *   patronais é quase nulo por desenho, porque quem recolhe o imposto sobre
+ *   o próprio trabalho é o contractor, não a empresa (ver `ComposicaoCusto1099Us`).
+ * - `seguranca-social-pt`: Segurança Social portuguesa (TSU — Taxa Social
+ *   Única), regime geral (ver `ComposicaoCustoSegurancaSocialPt`).
  *
- * As DUAS decomposições são sempre calculadas em `calcularRoi`, independente
+ * TODAS as decomposições são sempre calculadas em `calcularRoi`, independente
  * deste campo — ele só escolhe qual lente o painel mostra por padrão.
- * Trocar o regime nunca recalcula nem descarta histórico: ambas as visões
+ * Trocar o regime nunca recalcula nem descarta histórico: todas as visões
  * derivam do mesmo `custoHumanoEvitadoBrl`.
  */
-export type RegimeEncargos = "clt-br" | "payroll-us-uk";
+export type RegimeEncargos = "clt-br" | "payroll-us-uk" | "1099-us" | "seguranca-social-pt";
 
 /**
  * Preço de um modelo em USD por 1 milhão de tokens.
@@ -77,6 +82,32 @@ export interface ComposicaoCustoPayroll {
 }
 
 /**
+ * Decomposição para contractor americano classificado como 1099 (não-W2).
+ * Diferente de `ComposicaoCustoPayroll`: o contractor recolhe o próprio
+ * self-employment tax — a empresa não carrega FICA/FUTA/workers' comp sobre
+ * esse custo-hora. O único campo é um overhead OPCIONAL (gestão de
+ * contratos, risco de reclassificação/misclassification) que cada workspace
+ * configura para o seu próprio caso; o valor padrão é 0 — nenhum percentual
+ * é inventado aqui.
+ */
+export interface ComposicaoCusto1099Us {
+  /** Overhead opcional de gestão/compliance do contractor — 0 por padrão (sem dado para inventar um número). */
+  percentualOverheadGestaoContratante: number;
+}
+
+/**
+ * Decomposição para o regime geral da Segurança Social portuguesa (TSU —
+ * Taxa Social Única). Valor padrão (`COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO`,
+ * em `@/lib/roi`) é a alíquota patronal do regime geral (23,75%), estimativa
+ * de referência pública, não uma tabela fiscal oficial fechada — cada
+ * workspace deve ajustar ao seu próprio enquadramento.
+ */
+export interface ComposicaoCustoSegurancaSocialPt {
+  /** TSU — parte patronal do regime geral, base legal pública em Portugal. */
+  percentualSegurancaSocialPatronal: number;
+}
+
+/**
  * Parâmetros econômicos do workspace. Persistido em
  * `workspaces/{id}.roiConfig` e editável por administradores.
  */
@@ -87,10 +118,16 @@ export interface RoiConfig {
   composicaoClt: ComposicaoCustoClt;
   /** Decomposição equivalente em Payroll Tax (EUA/Reino Unido). */
   composicaoPayroll: ComposicaoCustoPayroll;
+  /** Decomposição equivalente para contractor 1099 (EUA, não-W2). */
+  composicao1099: ComposicaoCusto1099Us;
+  /** Decomposição equivalente em Segurança Social (Portugal, TSU). */
+  composicaoSegurancaSocialPt: ComposicaoCustoSegurancaSocialPt;
   /** Lente padrão de exibição do Tax Shield — não afeta o cálculo, só a visão inicial. */
   regimeEncargos: RegimeEncargos;
   /** Taxa de conversão GBP → BRL, para exibição em libras. */
   cambioGbpBrl: number;
+  /** Taxa de conversão EUR → BRL, para exibição em euros. */
+  cambioEurBrl: number;
   /** Minutos que um humano gastaria para executar manualmente um fluxo. */
   minutosManuaisPorExecucao: number;
   /** Minutos consumidos por um operador em cada transbordo (custo da revisão). */
@@ -185,6 +222,20 @@ export interface RoiSnapshot {
   encargosBeneficiosBrl: number;
   encargosBpoOverheadBrl: number;
   encargosTotaisPayrollBrl: number;
+
+  // (Tax Shield — 1099 EUA) Mesma decomposição, lente contractor 1099 —
+  // SEMPRE calculada a partir do mesmo `custoHumanoEvitadoBrl`, em paralelo
+  // às demais. Residual próximo de 100% salário base por desenho: ver
+  // `ComposicaoCusto1099Us`.
+  salarioBaseEvitado1099Brl: number;
+  encargosOverheadGestaoContratanteBrl: number;
+  encargosTotais1099Brl: number;
+
+  // (Tax Shield — Segurança Social Portugal) Mesma decomposição, lente TSU —
+  // SEMPRE calculada a partir do mesmo `custoHumanoEvitadoBrl`.
+  salarioBaseEvitadoSegurancaSocialPtBrl: number;
+  encargosSegurancaSocialPatronalBrl: number;
+  encargosTotaisSegurancaSocialPtBrl: number;
 
   // (c) Autonomia
   /** Execuções concluídas sem nenhuma intervenção humana ÷ execuções terminais. */

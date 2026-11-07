@@ -22,7 +22,9 @@ export type PiiKind =
   /** Social Security Number (EUA) — formato AAA-GG-SSSS, validado por faixa (ver `validarSsn`). */
   | "ssn-us"
   /** National Insurance Number (Reino Unido) — formato AA999999A, validado pelas regras públicas do HMRC (ver `validarNin`). */
-  | "nin-uk";
+  | "nin-uk"
+  /** Número de Identificação Fiscal (Portugal) — 9 dígitos, validado por dígito verificador módulo 11 (ver `validarNifPt`). */
+  | "nif-pt";
 
 /** Base legal/classificação LGPD de cada categoria — usada na trilha de auditoria. */
 export type PiiClassificacao = "identificador-pessoal" | "financeiro" | "contato" | "credencial" | "tecnico";
@@ -95,7 +97,23 @@ export type GuardrailRuleId =
    * confirmou o agendamento da avaliação/consulta — gatilho de transbordo
    * positivo, mesmo desenho de `agendamento-visita-presencial`.
    */
-  | "confirmacao-agendamento-clinico";
+  | "confirmacao-agendamento-clinico"
+  /**
+   * Guardrail Ético-Profissional — Proteção de Êxito (Módulo Vertical:
+   * Advocacia, Contabilidade & Serviços B2B — ver
+   * `@/lib/guardrails/consistency`): a saída do modelo garantiu o resultado
+   * de um processo/causa ou prometeu um prazo judicial sem análise técnica
+   * prévia (ex.: Código de Ética da OAB, art. 48 — proibição de captação de
+   * causa mediante garantia de resultado). Sempre `critica`.
+   */
+  | "garantia-exito-nao-autorizada"
+  /**
+   * Handoff com Resumo Executivo B2B (Módulo Vertical: Advocacia,
+   * Contabilidade & Serviços B2B): o lead confirmou a reunião de
+   * diagnóstico — gatilho de transbordo positivo, mesmo desenho de
+   * `agendamento-visita-presencial`/`confirmacao-agendamento-clinico`.
+   */
+  | "confirmacao-reuniao-diagnostico-b2b";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;
@@ -211,6 +229,18 @@ export interface GuardrailPolicy {
    * nichos sem risco clínico (ex.: imobiliário, e-commerce) não são afetados.
    */
   bloquearDiagnosticoOuResultadoClinico: boolean;
+
+  /**
+   * Guardrail Ético-Profissional (Módulo Vertical: Advocacia, Contabilidade
+   * & Serviços B2B). Quando `true`, a saída é varrida por
+   * `detectarGarantiaExitoNaoAutorizada` (`@/lib/guardrails/consistency`) —
+   * garantia de resultado de processo/causa ou promessa de prazo judicial
+   * sempre vira violação `critica` (`garantia-exito-nao-autorizada`),
+   * bloqueando a resposta e acionando o SAC Shield. `false` por padrão:
+   * nichos sem risco ético-profissional (ex.: imobiliário, e-commerce) não
+   * são afetados.
+   */
+  bloquearGarantiaExitoNaoAutorizada: boolean;
 
   /** Mapa severidade → ação. Permite afrouxar/endurecer por nó. */
   acaoPorSeveridade: Record<GuardrailSeverity, GuardrailVerdict>;

@@ -60,6 +60,22 @@ describe("gerarContextoNicho", () => {
     expect(contexto.toLowerCase()).toContain("resultado estético");
   });
 
+  it("advocacia/contabilidade inclui o protocolo de triagem B2B (pessoa física/jurídica, porte, objetivo)", () => {
+    const contexto = gerarContextoNicho("advocacia-contabilidade") ?? "";
+    expect(contexto).toContain("Protocolo de qualificação");
+    expect(contexto.toLowerCase()).toContain("pessoa física ou jurídica");
+    expect(contexto.toLowerCase()).toContain("porte");
+    expect(contexto).toContain("reunião de diagnóstico");
+  });
+
+  it("advocacia/contabilidade inclui a restrição contra garantia de êxito/prazo/honorário sem análise técnica", () => {
+    const contexto = gerarContextoNicho("advocacia-contabilidade") ?? "";
+    expect(contexto).toContain("Restrição");
+    expect(contexto.toLowerCase()).toContain("garanta o resultado");
+    expect(contexto.toLowerCase()).toContain("prazo judicial");
+    expect(contexto.toLowerCase()).toContain("honorário");
+  });
+
   it("gera o contexto de clínica médica/exames com foco em confirmação e no-show", () => {
     const contexto = gerarContextoNicho("clinica-medica-exames");
     expect(contexto).toContain("confirma");

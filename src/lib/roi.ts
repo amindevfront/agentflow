@@ -14,8 +14,10 @@
 import { doc, getDoc, onSnapshot, setDoc, type Unsubscribe } from "firebase/firestore";
 import type {
   Campaign,
+  ComposicaoCusto1099Us,
   ComposicaoCustoClt,
   ComposicaoCustoPayroll,
+  ComposicaoCustoSegurancaSocialPt,
   Conversation,
   FlowRun,
   HandoffTicket,
@@ -81,6 +83,25 @@ export const COMPOSICAO_PAYROLL_PADRAO: ComposicaoCustoPayroll = {
   percentualBpoOverhead: 0.08,
 };
 
+/**
+ * Decomposição padrão para contractor 1099 (EUA) — ver
+ * `ComposicaoCusto1099Us`. Overhead zerado por padrão: não há tabela fiscal
+ * para inventar aqui, já que o self-employment tax é recolhido pelo próprio
+ * contractor, não pela empresa.
+ */
+export const COMPOSICAO_1099_PADRAO: ComposicaoCusto1099Us = {
+  percentualOverheadGestaoContratante: 0,
+};
+
+/**
+ * Decomposição padrão para a Segurança Social portuguesa (TSU) — ver
+ * `ComposicaoCustoSegurancaSocialPt`. 23,75% é a alíquota patronal pública
+ * do regime geral; estimativa de referência, não tabela fiscal oficial.
+ */
+export const COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO: ComposicaoCustoSegurancaSocialPt = {
+  percentualSegurancaSocialPatronal: 0.2375,
+};
+
 export const ROI_CONFIG_PADRAO: RoiConfig = {
   // Custo-hora totalmente carregado de um analista de operações no Brasil
   // (salário + encargos + benefícios + overhead). Valor de partida conservador;
@@ -88,8 +109,11 @@ export const ROI_CONFIG_PADRAO: RoiConfig = {
   custoHoraOperadorBrl: 62,
   composicaoClt: COMPOSICAO_CLT_PADRAO,
   composicaoPayroll: COMPOSICAO_PAYROLL_PADRAO,
+  composicao1099: COMPOSICAO_1099_PADRAO,
+  composicaoSegurancaSocialPt: COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO,
   regimeEncargos: "clt-br",
   cambioGbpBrl: 6.9,
+  cambioEurBrl: 5.9,
   minutosManuaisPorExecucao: 12,
   minutosRevisaoHumana: 8,
   // Uma conversa de chat manual típica (ler, entender, responder, registrar)
@@ -228,8 +252,28 @@ function composicaoPayrollValida(bruta: Partial<ComposicaoCustoPayroll> | undefi
   };
 }
 
+/** Mesma normalização de `composicaoCltValida`, para o overhead opcional de contractor 1099. */
+function composicao1099Valida(bruta: Partial<ComposicaoCusto1099Us> | undefined): ComposicaoCusto1099Us {
+  const base = { ...COMPOSICAO_1099_PADRAO, ...(bruta ?? {}) };
+  const numero = Number(base.percentualOverheadGestaoContratante);
+  const valido = Number.isFinite(numero) && numero >= 0 ? numero : COMPOSICAO_1099_PADRAO.percentualOverheadGestaoContratante;
+  return { percentualOverheadGestaoContratante: Math.min(valido, 0.95) };
+}
+
+/** Mesma normalização de `composicaoCltValida`, para a TSU patronal portuguesa. */
+function composicaoSegurancaSocialPtValida(
+  bruta: Partial<ComposicaoCustoSegurancaSocialPt> | undefined
+): ComposicaoCustoSegurancaSocialPt {
+  const base = { ...COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO, ...(bruta ?? {}) };
+  const numero = Number(base.percentualSegurancaSocialPatronal);
+  const valido =
+    Number.isFinite(numero) && numero >= 0 ? numero : COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO.percentualSegurancaSocialPatronal;
+  return { percentualSegurancaSocialPatronal: Math.min(valido, 0.95) };
+}
+
 function regimeEncargosValido(bruto: unknown): RegimeEncargos {
-  return bruto === "payroll-us-uk" ? "payroll-us-uk" : "clt-br";
+  if (bruto === "payroll-us-uk" || bruto === "1099-us" || bruto === "seguranca-social-pt") return bruto;
+  return "clt-br";
 }
 
 function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
@@ -245,8 +289,11 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
   return {
     composicaoClt: composicaoCltValida(base.composicaoClt),
     composicaoPayroll: composicaoPayrollValida(base.composicaoPayroll),
+    composicao1099: composicao1099Valida(base.composicao1099),
+    composicaoSegurancaSocialPt: composicaoSegurancaSocialPtValida(base.composicaoSegurancaSocialPt),
     regimeEncargos: regimeEncargosValido(base.regimeEncargos),
     cambioGbpBrl: positivo(base.cambioGbpBrl, ROI_CONFIG_PADRAO.cambioGbpBrl, 1000),
+    cambioEurBrl: positivo(base.cambioEurBrl, ROI_CONFIG_PADRAO.cambioEurBrl, 1000),
     custoHoraOperadorBrl: positivo(base.custoHoraOperadorBrl, ROI_CONFIG_PADRAO.custoHoraOperadorBrl, 100_000),
     minutosManuaisPorExecucao: positivo(base.minutosManuaisPorExecucao, ROI_CONFIG_PADRAO.minutosManuaisPorExecucao, 10_080),
     minutosRevisaoHumana: positivo(base.minutosRevisaoHumana, ROI_CONFIG_PADRAO.minutosRevisaoHumana, 10_080),
@@ -263,7 +310,9 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
     cambioUsdBrl: positivo(base.cambioUsdBrl, ROI_CONFIG_PADRAO.cambioUsdBrl, 1000),
     custoPlataformaMensalBrl: positivo(base.custoPlataformaMensalBrl, 0, 10_000_000),
     moedaExibicao:
-      base.moedaExibicao === "USD" || base.moedaExibicao === "GBP" ? base.moedaExibicao : "BRL",
+      base.moedaExibicao === "USD" || base.moedaExibicao === "GBP" || base.moedaExibicao === "EUR"
+        ? base.moedaExibicao
+        : "BRL",
     precoModeloPadrao: {
       modelo: base.precoModeloPadrao?.modelo ?? ROI_CONFIG_PADRAO.precoModeloPadrao.modelo,
       entradaUsdPorMilhao: positivo(
@@ -509,6 +558,18 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
     encargosFicaBrl + encargosFutaSutaBrl + encargosWorkersCompBrl + encargosBeneficiosBrl + encargosBpoOverheadBrl;
   const salarioBaseEvitadoPayrollBrl = Math.max(0, custoHumanoEvitadoBrl - encargosTotaisPayrollBrl);
 
+  // --- Tax Shield — Contractor 1099 (EUA) — sempre calculada, mesma lógica. ---
+  const encargosOverheadGestaoContratanteBrl =
+    custoHumanoEvitadoBrl * config.composicao1099.percentualOverheadGestaoContratante;
+  const encargosTotais1099Brl = encargosOverheadGestaoContratanteBrl;
+  const salarioBaseEvitado1099Brl = Math.max(0, custoHumanoEvitadoBrl - encargosTotais1099Brl);
+
+  // --- Tax Shield — Segurança Social Portugal (TSU) — sempre calculada, mesma lógica. ---
+  const encargosSegurancaSocialPatronalBrl =
+    custoHumanoEvitadoBrl * config.composicaoSegurancaSocialPt.percentualSegurancaSocialPatronal;
+  const encargosTotaisSegurancaSocialPtBrl = encargosSegurancaSocialPatronalBrl;
+  const salarioBaseEvitadoSegurancaSocialPtBrl = Math.max(0, custoHumanoEvitadoBrl - encargosTotaisSegurancaSocialPtBrl);
+
   return {
     execucoesTotais: execucoes.length,
     execucoesConcluidas: concluidas,
@@ -544,6 +605,14 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
     encargosBeneficiosBrl: arredondar(encargosBeneficiosBrl),
     encargosBpoOverheadBrl: arredondar(encargosBpoOverheadBrl),
     encargosTotaisPayrollBrl: arredondar(encargosTotaisPayrollBrl),
+
+    salarioBaseEvitado1099Brl: arredondar(salarioBaseEvitado1099Brl),
+    encargosOverheadGestaoContratanteBrl: arredondar(encargosOverheadGestaoContratanteBrl),
+    encargosTotais1099Brl: arredondar(encargosTotais1099Brl),
+
+    salarioBaseEvitadoSegurancaSocialPtBrl: arredondar(salarioBaseEvitadoSegurancaSocialPtBrl),
+    encargosSegurancaSocialPatronalBrl: arredondar(encargosSegurancaSocialPatronalBrl),
+    encargosTotaisSegurancaSocialPtBrl: arredondar(encargosTotaisSegurancaSocialPtBrl),
 
     taxaZeroTouch: arredondar(razaoSegura(zeroTouch, terminais), 4),
     taxaSucesso: arredondar(razaoSegura(concluidas, terminais), 4),
@@ -596,17 +665,24 @@ const LOCALE_POR_MOEDA: Record<Moeda, string> = {
   BRL: "pt-BR",
   USD: "en-US",
   GBP: "en-GB",
+  // pt-PT, não um locale genérico de zona do euro: Portugal é o mercado
+  // explicitamente alvo desta expansão (ver @/lib/jurisdiction).
+  EUR: "pt-PT",
 };
 
 /**
  * Taxa de conversão (1 unidade da moeda → BRL) a aplicar na exibição.
  * BRL é a moeda de cálculo interna — sempre 1. Centraliza a escolha entre
- * `cambioUsdBrl`/`cambioGbpBrl` para que nenhum componente repita a mesma
- * ternária em cada card.
+ * `cambioUsdBrl`/`cambioGbpBrl`/`cambioEurBrl` para que nenhum componente
+ * repita a mesma ternária em cada card.
  */
-export function cambioParaMoeda(config: Pick<RoiConfig, "cambioUsdBrl" | "cambioGbpBrl">, moeda: Moeda): number {
+export function cambioParaMoeda(
+  config: Pick<RoiConfig, "cambioUsdBrl" | "cambioGbpBrl" | "cambioEurBrl">,
+  moeda: Moeda
+): number {
   if (moeda === "USD") return config.cambioUsdBrl;
   if (moeda === "GBP") return config.cambioGbpBrl;
+  if (moeda === "EUR") return config.cambioEurBrl;
   return 1;
 }
 

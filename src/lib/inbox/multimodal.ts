@@ -9,7 +9,7 @@
 import type { Canal } from "@/types";
 import { auth } from "@/lib/firebase";
 import { registrarMensagemCliente, type RegistrarMensagemClienteResultado } from "./firestore";
-import type { MediaTypeImagem } from "@/lib/server/visionAdmin";
+import type { MediaTypeAnalise } from "@/lib/server/visionAdmin";
 
 async function idToken(): Promise<string> {
   const usuario = auth?.currentUser;
@@ -28,12 +28,13 @@ export interface ProcessarImagemClienteInput {
   canal: Canal;
   workspaceId?: string;
   base64: string;
-  mediaType: MediaTypeImagem;
+  mediaType: MediaTypeAnalise;
 }
 
 /**
- * Envia uma imagem ao Motor de Visão real e registra a descrição retornada
- * como uma mensagem do cliente — mesmo caminho de qualquer texto.
+ * Envia uma imagem ou documento (PDF — contratos, balanços, Módulo Vertical
+ * 3) ao Motor de Visão real e registra a descrição retornada como uma
+ * mensagem do cliente — mesmo caminho de qualquer texto.
  */
 export async function processarImagemCliente(
   entrada: ProcessarImagemClienteInput
@@ -46,7 +47,7 @@ export async function processarImagemCliente(
 
   const dados = (await resposta.json().catch(() => ({}))) as RespostaErroApi & { descricao?: string };
   if (!resposta.ok || !dados.descricao) {
-    throw new Error(dados.erro?.mensagem ?? `Falha ao analisar a imagem (HTTP ${resposta.status}).`);
+    throw new Error(dados.erro?.mensagem ?? `Falha ao analisar a imagem/documento (HTTP ${resposta.status}).`);
   }
 
   return registrarMensagemCliente({
@@ -54,7 +55,7 @@ export async function processarImagemCliente(
     texto: dados.descricao,
     canal: entrada.canal,
     workspaceId: entrada.workspaceId,
-    tipoConteudo: "imagem-analisada",
+    tipoConteudo: entrada.mediaType === "application/pdf" ? "documento-analisado" : "imagem-analisada",
   });
 }
 

@@ -22,6 +22,7 @@ import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
 import {
   ROI_CONFIG_PADRAO,
+  cambioParaMoeda,
   calcularRoi,
   formatarHoras,
   formatarMoeda,
@@ -47,6 +48,7 @@ const OPCOES_PERIODO: Array<{ valor: JanelaPeriodo; label: string }> = [
 const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
   { valor: "BRL", label: "R$" },
   { valor: "USD", label: "US$" },
+  { valor: "EUR", label: "€" },
 ];
 
 function resolverPeriodo(janela: JanelaPeriodo, referencia: Date): RoiPeriodo {
@@ -135,7 +137,11 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
     [execucoes, tickets, conversas, campanhas, config, janela, referencia]
   );
 
-  const moedaDoValor = (valor: number) => formatarMoeda(valor, moeda, config.cambioUsdBrl);
+  // `cambioParaMoeda` escolhe a taxa certa por moeda (USD/GBP/EUR) — antes
+  // desta correção, qualquer moeda diferente de USD herdava `cambioUsdBrl`
+  // por engano; passava sem ser notado porque GBP nunca esteve em
+  // `OPCOES_MOEDA`, mas EUR expõe o mesmo caminho agora.
+  const moedaDoValor = (valor: number) => formatarMoeda(valor, moeda, cambioParaMoeda(config, moeda));
   // "Sem dados" precisa olhar as três origens — um workspace que só usa a
   // Neural Inbox (zero fluxos) ainda tem ROI real para mostrar.
   const semDados =
@@ -235,7 +241,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
                 <MetricCard
                   rotulo="Custo humano evitado"
                   valor={moedaDoValor(snapshot.custoHumanoEvitadoBrl)}
-                  detalhe={`${formatarMoeda(config.custoHoraOperadorBrl, moeda, config.cambioUsdBrl)}/hora de operador`}
+                  detalhe={`${formatarMoeda(config.custoHoraOperadorBrl, moeda, cambioParaMoeda(config, moeda))}/hora de operador`}
                   dica="Horas economizadas brutas multiplicadas pelo custo-hora carregado configurado para o workspace."
                 />
               </div>

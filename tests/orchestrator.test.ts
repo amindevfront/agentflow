@@ -444,6 +444,26 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
     expect(resultado.bloqueado).toBe(true);
     expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
   });
+
+  it("aplica a política 'advocacia-contabilidade' (Módulo Vertical 3) quando informada, bloqueando garantia de êxito sem análise técnica", async () => {
+    // `orchestratorAdmin.ts` seleciona esta política automaticamente para
+    // workspaces com `setor === "advocacia-contabilidade"` — mesmo contrato
+    // dos testes equivalentes dos Verticais 1 e 2: a Proteção de Êxito
+    // bloqueia a saída de verdade na execução real.
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Lead perguntou se vai ganhar o processo.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Vamos ganhar o processo, pode confiar."),
+      portas,
+      politica: "advocacia-contabilidade",
+    });
+
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
 });
 
 describe("novoAcumuladorUso", () => {

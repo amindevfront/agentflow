@@ -171,7 +171,7 @@ export type MessageSender = "cliente" | "operador" | "agente" | "sistema";
  * `@/lib/server/visionAdmin`) — nunca o dado bruto (áudio/imagem não são
  * persistidos nesta estrutura).
  */
-export type TipoConteudoMensagem = "texto" | "audio-transcrito" | "imagem-analisada";
+export type TipoConteudoMensagem = "texto" | "audio-transcrito" | "imagem-analisada" | "documento-analisado";
 
 export interface ConversationMessage {
   id: string;

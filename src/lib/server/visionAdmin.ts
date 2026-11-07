@@ -1,5 +1,5 @@
-// Motor de Visão Computacional — análise REAL de imagens via Claude
-// (Anthropic Messages API, bloco de imagem). SERVER-ONLY.
+// Motor de Visão Computacional — análise REAL de imagens e documentos (PDF)
+// via Claude (Anthropic Messages API, blocos de imagem/documento). SERVER-ONLY.
 //
 // Mesma credencial e modelo já usados pelo motor de orquestração de texto
 // (`chaveAnthropic`/`modeloOrquestrador`, em `./env`) — nenhuma chave nova.
@@ -8,9 +8,12 @@
 // `ANTHROPIC_API_KEY` não está configurada, em vez de um 500 genérico no
 // meio da chamada ao provedor.
 //
-// A lógica de "o que fazer com a resposta" (formatar o envelope, rejeitar
-// resposta vazia) vive em `@/lib/inbox/multimodalPipeline` — este arquivo só
-// fornece o executor real.
+// Suporte a PDF (Módulo Vertical 3 — Advocacia/Contabilidade/B2B: contratos,
+// balanços e petições chegam como documento, não como foto) via o bloco
+// `document` da Messages API (`Base64PDFSource`) — mesmo cliente Anthropic,
+// nenhuma dependência nova. A lógica de "o que fazer com a resposta"
+// (formatar o envelope, rejeitar resposta vazia) vive em
+// `@/lib/inbox/multimodalPipeline` — este arquivo só fornece o executor real.
 
 import Anthropic from "@anthropic-ai/sdk";
 import { analisarImagem, type ExecutorVisao, type ImagemEntrada } from "@/lib/inbox/multimodalPipeline";
@@ -21,17 +24,28 @@ import { chaveAnthropic, diagnosticoOrquestrador, modeloOrquestrador } from "./e
 const MAX_TOKENS_SAIDA = 300;
 
 export type MediaTypeImagem = "image/jpeg" | "image/png" | "image/webp" | "image/gif";
+/** PDF — contratos, balanços, petições e demais documentos B2B (Módulo Vertical 3). */
+export type MediaTypeDocumento = "application/pdf";
+export type MediaTypeAnalise = MediaTypeImagem | MediaTypeDocumento;
+
+function ehDocumento(mediaType: string): mediaType is MediaTypeDocumento {
+  return mediaType === "application/pdf";
+}
 
 const PROMPT_ANALISE = [
   "Você é um assistente que descreve, em UMA frase objetiva (até 160 caracteres), o conteúdo de uma",
-  "imagem enviada por um cliente em um atendimento comercial (WhatsApp ou Web Widget).",
+  "imagem ou documento enviado por um cliente em um atendimento comercial (WhatsApp ou Web Widget).",
   "Se for um comprovante de pagamento (PIX, transferência, boleto), inclua o valor e o método quando",
   "estiverem legíveis. Se for planta/documento imobiliário, inclua metragem e número de cômodos quando",
   "legíveis. Se for documento de exame médico, descreva apenas o tipo de exame e o achado clínico",
-  "relevante (ex.: \"exame de sangue com colesterol alterado\") — NUNCA transcreva nome completo, CPF,",
-  "número de documento ou de prontuário, mesmo que estejam legíveis na imagem. Se for foto de",
-  "agendamento ou procedimento (não de rosto/corpo do paciente), descreva objetivamente o que é visível.",
-  "NUNCA invente um dado que não esteja legível na imagem — se não conseguir ler, diga isso explicitamente.",
+  "relevante (ex.: \"exame de sangue com colesterol alterado\"). Se for contrato, petição, balanço ou",
+  "outro documento B2B (advocacia/contabilidade), descreva apenas o TIPO de documento e o assunto geral",
+  "(ex.: \"contrato de prestação de serviços\", \"balanço patrimonial do último exercício\") — NUNCA",
+  "transcreva cláusulas, valores, números de processo ou qualquer texto literal do documento.",
+  "Em qualquer caso, NUNCA transcreva nome completo, CPF/CNPJ, número de documento, de prontuário ou",
+  "de processo, mesmo que estejam legíveis. Se for foto de agendamento ou procedimento (não de",
+  "rosto/corpo do paciente), descreva objetivamente o que é visível.",
+  "NUNCA invente um dado que não esteja legível no arquivo — se não conseguir ler, diga isso explicitamente.",
   "Responda APENAS com a descrição em português, sem introdução nem comentário adicional.",
 ].join(" ");
 
@@ -44,19 +58,23 @@ function clienteAnthropic(): Anthropic {
 
 /** Executor real — chama o Claude de verdade. Injetado em `analisarImagem` (núcleo puro). */
 export const executorVisaoAnthropic: ExecutorVisao = async (imagem: ImagemEntrada): Promise<string> => {
+  const blocoMidia: Anthropic.ImageBlockParam | Anthropic.DocumentBlockParam = ehDocumento(imagem.mediaType)
+    ? {
+        type: "document",
+        source: { type: "base64", media_type: "application/pdf", data: imagem.base64 },
+      }
+    : {
+        type: "image",
+        source: { type: "base64", media_type: imagem.mediaType as MediaTypeImagem, data: imagem.base64 },
+      };
+
   const resposta = await clienteAnthropic().messages.create({
     model: modeloOrquestrador(),
     max_tokens: MAX_TOKENS_SAIDA,
     messages: [
       {
         role: "user",
-        content: [
-          {
-            type: "image",
-            source: { type: "base64", media_type: imagem.mediaType as MediaTypeImagem, data: imagem.base64 },
-          },
-          { type: "text", text: PROMPT_ANALISE },
-        ],
+        content: [blocoMidia, { type: "text", text: PROMPT_ANALISE }],
       },
     ],
   });
@@ -86,7 +104,7 @@ export const executorVisaoAnthropic: ExecutorVisao = async (imagem: ImagemEntrad
  * exatamente como `/api/flows/execute` já faz, para responder 503 em vez de
  * deixar a exceção subir como 500.
  */
-export async function analisarImagemAdmin(imagem: { base64: string; mediaType: MediaTypeImagem }): Promise<string> {
+export async function analisarImagemAdmin(imagem: { base64: string; mediaType: MediaTypeAnalise }): Promise<string> {
   const diagnostico = diagnosticoOrquestrador();
   if (!diagnostico.pronto) {
     throw new Error(`Motor de Visão indisponível. Variáveis ausentes: ${diagnostico.faltando.join(", ")}.`);

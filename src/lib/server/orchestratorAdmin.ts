@@ -253,10 +253,11 @@ export async function executarFluxoReal(
   // antes desta correção.
   let guardrailOverrides: Partial<GuardrailPolicy> | undefined;
   // Política base por nicho (ver `ExecutarFluxoInput.politica`): workspaces
-  // dos Módulos Verticais 1 (Construtoras/Imobiliárias) e 2 (Clínicas de
-  // Saúde/Estética) recebem automaticamente a política endurecida
-  // correspondente, sem exigir configuração manual de `guardrailOverrides`
-  // por workspace. Qualquer outro setor (ou setor ausente) mantém "padrao".
+  // dos Módulos Verticais 1 (Construtoras/Imobiliárias), 2 (Clínicas de
+  // Saúde/Estética) e 3 (Advocacia/Contabilidade/B2B) recebem
+  // automaticamente a política endurecida correspondente, sem exigir
+  // configuração manual de `guardrailOverrides` por workspace. Qualquer
+  // outro setor (ou setor ausente) mantém "padrao".
   let politicaBase: string = "padrao";
   try {
     const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(flow.workspaceId).get();
@@ -276,6 +277,8 @@ export async function executarFluxoReal(
       politicaBase = "imobiliario-alto-padrao";
     } else if (setor === "clinica-alto-padrao") {
       politicaBase = "clinica-alto-padrao";
+    } else if (setor === "advocacia-contabilidade") {
+      politicaBase = "advocacia-contabilidade";
     }
     if (
       dados?.guardrailOverrides &&

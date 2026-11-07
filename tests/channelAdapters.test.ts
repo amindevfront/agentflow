@@ -21,6 +21,8 @@ describe("normalizarMensagemTwilioSms", () => {
       identificadorRemetente: "+15551234567",
       texto: "Olá, quero saber o status do meu pedido.",
       idExterno: "SM123",
+      jurisdicao: "us-privacy",
+      idiomaProvavel: "en",
     });
   });
 
@@ -31,6 +33,22 @@ describe("normalizarMensagemTwilioSms", () => {
   it("lança quando o corpo (Body) está ausente ou vazio", () => {
     expect(() => normalizarMensagemTwilioSms({ From: "+15551234567", Body: "" })).toThrow(/Body/);
     expect(() => normalizarMensagemTwilioSms({ From: "+15551234567" })).toThrow(/Body/);
+  });
+
+  it("infere jurisdição/idioma a partir do DDI do remetente (Expansão Global — EUA/Portugal)", () => {
+    const deBrasil = normalizarMensagemTwilioSms({ From: "+5547999998888", Body: "Oi" });
+    expect(deBrasil.jurisdicao).toBe("br-lgpd");
+    expect(deBrasil.idiomaProvavel).toBe("pt");
+
+    const dePortugal = normalizarMensagemTwilioSms({ From: "+351912345678", Body: "Olá" });
+    expect(dePortugal.jurisdicao).toBe("eu-gdpr");
+    expect(dePortugal.idiomaProvavel).toBe("pt");
+  });
+
+  it("devolve jurisdição 'desconhecida' e idioma 'en' de fallback para DDI não catalogado", () => {
+    const resultado = normalizarMensagemTwilioSms({ From: "+999999", Body: "Oi" });
+    expect(resultado.jurisdicao).toBe("desconhecida");
+    expect(resultado.idiomaProvavel).toBe("en");
   });
 });
 

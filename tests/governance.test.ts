@@ -300,6 +300,13 @@ describe("transbordo: prioridade e SLA", () => {
         "bloqueado"
       )
     ).toBe("diagnostico-nao-autorizado");
+    // Guardrail Ético-Profissional (Módulo Vertical 3) — paridade com `hitlStore.ts`.
+    expect(
+      derivarMotivo(
+        [{ regra: "garantia-exito-nao-autorizada", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("exito-nao-autorizado");
   });
 
   it("nunca copia o payload em claro para o ticket", () => {
@@ -368,6 +375,37 @@ describe("transbordo: prioridade e SLA", () => {
       agora: AGORA,
     });
     expect(semResumo.resumoExecutivoClinico).toBeUndefined();
+  });
+
+  it("carrega resumoExecutivoB2B quando informado, e o omite quando ausente — paridade com `hitlStore.ts`", () => {
+    const comResumo = construirTicket({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-3",
+      flowNome: "Contato via Web Widget",
+      conversationId: "conv-3",
+      motivoForcado: "confirmacao-reuniao-diagnostico-b2b",
+      resumoExecutivoB2B: {
+        nome: "Ricardo",
+        perfilLead: "Pessoa jurídica",
+        porteCaso: "Startup",
+        objetivoMapeado: "due diligence",
+      },
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivoB2B).toEqual({
+      nome: "Ricardo",
+      perfilLead: "Pessoa jurídica",
+      porteCaso: "Startup",
+      objetivoMapeado: "due diligence",
+    });
+
+    const semResumo = construirTicket({
+      solicitacao: solicitacao(),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivoB2B).toBeUndefined();
   });
 });
 

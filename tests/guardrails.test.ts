@@ -5,6 +5,7 @@ import {
   avaliarFundamentacao,
   detectarAlucinacaoMedica,
   detectarCicloNo,
+  detectarGarantiaExitoNaoAutorizada,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
@@ -19,6 +20,7 @@ import {
   validarCnpj,
   validarCpf,
   validarLuhn,
+  validarNifPt,
   validarNin,
   validarSsn,
 } from "@/lib/guardrails";
@@ -31,6 +33,8 @@ const CARTAO_VALIDO = "4111 1111 1111 1111";
 const SSN_VALIDO = "123-45-6789";
 // NIN sem os prefixos/letras nunca emitidos pelo HMRC.
 const NIN_VALIDO = "AB123456C";
+// NIF português válido pelo dígito verificador módulo 11.
+const NIF_PT_VALIDO = "123456789";
 
 describe("validadores de documento", () => {
   it("aceita CPF e CNPJ com dígito verificador correto", () => {
@@ -96,6 +100,23 @@ describe("validadores internacionais (Canais Globais — EUA/UK)", () => {
   it("rejeita sufixo fora de A-D ou formato totalmente errado", () => {
     expect(validarNin("AB123456E")).toBe(false);
     expect(validarNin("AB12345C")).toBe(false); // 5 dígitos em vez de 6
+  });
+
+  it("aceita um NIF português bem formado (Expansão Global — Portugal)", () => {
+    expect(validarNifPt(NIF_PT_VALIDO)).toBe(true);
+    expect(validarNifPt("123 456 789")).toBe(true); // espaços de agrupamento são normalizados
+  });
+
+  it("rejeita um NIF português com dígito verificador errado", () => {
+    expect(validarNifPt("123456780")).toBe(false);
+  });
+
+  it("rejeita um NIF português com os nove dígitos repetidos", () => {
+    expect(validarNifPt("111111111")).toBe(false);
+  });
+
+  it("rejeita entrada de NIF que não tem 9 dígitos", () => {
+    expect(validarNifPt("12345678")).toBe(false);
   });
 });
 
@@ -180,6 +201,27 @@ describe("mascaramento de PII", () => {
     expect(resultado.texto).not.toContain(NIN_VALIDO);
     expect(resultado.kindsMascarados).toContain("ssn-us");
     expect(resultado.kindsMascarados).toContain("nin-uk");
+  });
+
+  it("mascara NIF português em texto livre (Expansão Global — Portugal)", () => {
+    const vault = new PiiVault();
+    const texto = `NIF ${NIF_PT_VALIDO} do cliente de Portugal.`;
+    const resultado = maskText(texto, vault);
+
+    expect(resultado.texto).not.toContain(NIF_PT_VALIDO);
+    expect(resultado.kindsMascarados).toContain("nif-pt");
+  });
+
+  it("em colisão (9 dígitos passam tanto validarSsn quanto validarNifPt), o dígito verificador mais forte (NIF) vence", () => {
+    // 123456789 passa validarSsn (faixa permissiva) E validarNifPt (módulo 11) —
+    // a mesma colisão que SSN_VALIDO ("123-45-6789") teria sem os hifens.
+    expect(validarSsn(NIF_PT_VALIDO)).toBe(true);
+    expect(validarNifPt(NIF_PT_VALIDO)).toBe(true);
+
+    const vault = new PiiVault();
+    const resultado = maskText(`Documento: ${NIF_PT_VALIDO}.`, vault);
+    expect(resultado.kindsMascarados).toContain("nif-pt");
+    expect(resultado.kindsMascarados).not.toContain("ssn-us");
   });
 
   it("recusa serializar o cofre, para que um log acidental falhe alto", () => {
@@ -389,6 +431,29 @@ describe("alucinação médica (Guardrail Clínico/Ético — Módulo Vertical 2
     expect(
       detectarAlucinacaoMedica(
         "Entendi sua queixa — vou te direcionar para uma avaliação presencial com o especialista."
+      ).suspeito
+    ).toBe(false);
+  });
+});
+
+describe("garantia de êxito não autorizada (Guardrail Ético-Profissional — Módulo Vertical 3)", () => {
+  it("detecta garantia de resultado de processo/causa", () => {
+    expect(detectarGarantiaExitoNaoAutorizada("Vamos ganhar o processo, pode confiar.").suspeito).toBe(true);
+    expect(detectarGarantiaExitoNaoAutorizada("Você vai ganhar a causa com certeza.").suspeito).toBe(true);
+    expect(detectarGarantiaExitoNaoAutorizada("Temos 100% de chance de ganhar esse caso.").suspeito).toBe(true);
+  });
+
+  it("detecta promessa de prazo judicial", () => {
+    expect(detectarGarantiaExitoNaoAutorizada("O processo sai em 30 dias, garantido.").suspeito).toBe(true);
+    expect(
+      detectarGarantiaExitoNaoAutorizada("Garantimos que a sentença sai em dois meses.").suspeito
+    ).toBe(true);
+  });
+
+  it("não acusa triagem legítima sem garantia de resultado ou prazo", () => {
+    expect(
+      detectarGarantiaExitoNaoAutorizada(
+        "Entendi o seu caso — vou te direcionar para a reunião de diagnóstico com a equipe."
       ).suspeito
     ).toBe(false);
   });
@@ -610,6 +675,45 @@ describe("inspecionarSaida", () => {
     });
 
     expect(saida.violacoes.map((v) => v.regra)).not.toContain("diagnostico-ou-resultado-nao-autorizado");
+  });
+
+  it("política 'advocacia-contabilidade' bloqueia garantia de êxito sem análise técnica prévia", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["Vamos ganhar o processo, pode confiar."],
+      vault,
+      politica: "advocacia-contabilidade",
+      sobrescritas: { amostrasConsistencia: 1 },
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).toContain("garantia-exito-nao-autorizada");
+    expect(
+      saida.violacoes.find((v) => v.regra === "garantia-exito-nao-autorizada")?.severidade
+    ).toBe("critica");
+    expect(saida.veredito).toBe("bloqueado");
+  });
+
+  it("política 'advocacia-contabilidade' também bloqueia honorário fechado sem análise técnica (reaproveita a Proteção de Caixa)", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["O honorário final é esse, pode fechar comigo agora."],
+      vault,
+      politica: "advocacia-contabilidade",
+      sobrescritas: { amostrasConsistencia: 1 },
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).toContain("preco-comercial-nao-autorizado");
+    expect(saida.veredito).toBe("bloqueado");
+  });
+
+  it("política padrão NÃO bloqueia a mesma saída — restrição ético-profissional é exclusiva do nicho B2B", () => {
+    const vault = new PiiVault();
+    const saida = inspecionarSaida({
+      amostras: ["Vamos ganhar o processo, pode confiar."],
+      vault,
+    });
+
+    expect(saida.violacoes.map((v) => v.regra)).not.toContain("garantia-exito-nao-autorizada");
   });
 });
 

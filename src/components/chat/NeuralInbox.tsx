@@ -47,7 +47,7 @@ import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { rotear } from "@/lib/inbox/swarm";
 import { calcularReceitaRecuperadaMadrugada } from "@/lib/inbox/revenueRescue";
 import { processarAudioCliente, processarImagemCliente } from "@/lib/inbox/multimodal";
-import type { MediaTypeImagem } from "@/lib/server/visionAdmin";
+import type { MediaTypeAnalise } from "@/lib/server/visionAdmin";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
@@ -296,11 +296,13 @@ export function NeuralInbox() {
   const contagensMidia = useMemo(() => {
     let audios = 0;
     let imagens = 0;
+    let documentos = 0;
     for (const mensagem of mensagens) {
       if (mensagem.tipoConteudo === "audio-transcrito") audios += 1;
       else if (mensagem.tipoConteudo === "imagem-analisada") imagens += 1;
+      else if (mensagem.tipoConteudo === "documento-analisado") documentos += 1;
     }
-    return { audios, imagens };
+    return { audios, imagens, documentos };
   }, [mensagens]);
 
   async function handleEnviarResposta() {
@@ -349,7 +351,7 @@ export function NeuralInbox() {
     }
   }
 
-  /** Módulo Multimodal de Elite: analisa uma imagem real via Claude e registra a descrição como mensagem do cliente. */
+  /** Módulo Multimodal de Elite: analisa uma imagem ou documento (PDF) real via Claude e registra a descrição como mensagem do cliente. */
   async function handleSimularImagem(arquivo: File) {
     if (!selecionada) return;
     setProcessando(true);
@@ -361,10 +363,10 @@ export function NeuralInbox() {
         canal: selecionada.canal,
         workspaceId: selecionada.workspaceId,
         base64,
-        mediaType: arquivo.type as MediaTypeImagem,
+        mediaType: arquivo.type as MediaTypeAnalise,
       });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível analisar a imagem.");
+      setErro(e instanceof Error ? e.message : "Não foi possível analisar a imagem/documento.");
     } finally {
       setProcessando(false);
     }
@@ -700,7 +702,7 @@ export function NeuralInbox() {
                       Lead Qualificado de Alto Padrão
                     </span>
                   )}
-                  {(contagensMidia.audios > 0 || contagensMidia.imagens > 0) && (
+                  {(contagensMidia.audios > 0 || contagensMidia.imagens > 0 || contagensMidia.documentos > 0) && (
                     <div className="mt-1 flex flex-wrap gap-1.5">
                       {contagensMidia.audios > 0 && (
                         <span className="mono inline-flex items-center gap-1 rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-700">
@@ -712,6 +714,12 @@ export function NeuralInbox() {
                         <span className="mono inline-flex items-center gap-1 rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-700">
                           {contagensMidia.imagens} imagem{contagensMidia.imagens === 1 ? "" : "ns"} analisada
                           {contagensMidia.imagens === 1 ? "" : "s"}
+                        </span>
+                      )}
+                      {contagensMidia.documentos > 0 && (
+                        <span className="mono inline-flex items-center gap-1 rounded-full bg-mist-50 px-2 py-0.5 text-[11px] font-medium text-ink-700">
+                          {contagensMidia.documentos} documento{contagensMidia.documentos === 1 ? "" : "s"} analisado
+                          {contagensMidia.documentos === 1 ? "" : "s"}
                         </span>
                       )}
                     </div>
@@ -868,7 +876,11 @@ export function NeuralInbox() {
                                 doCliente ? "bg-signal-100 text-signal-700" : "bg-white/20 text-white"
                               )}
                             >
-                              {mensagem.tipoConteudo === "audio-transcrito" ? "Áudio transcrito" : "Imagem analisada"}
+                              {mensagem.tipoConteudo === "audio-transcrito"
+                                ? "Áudio transcrito"
+                                : mensagem.tipoConteudo === "documento-analisado"
+                                  ? "Documento analisado"
+                                  : "Imagem analisada"}
                             </span>
                           )}
                           {mensagem.texto}
@@ -960,10 +972,10 @@ export function NeuralInbox() {
                       />
                     </label>
                     <label className="flex items-center gap-1.5 text-[11px] font-medium text-ink-500">
-                      Simular imagem
+                      Simular imagem/documento
                       <input
                         type="file"
-                        accept="image/jpeg,image/png,image/webp,image/gif"
+                        accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
                         disabled={processando}
                         onChange={(e) => {
                           const arquivo = e.target.files?.[0];

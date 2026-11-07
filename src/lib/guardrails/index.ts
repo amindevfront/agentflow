@@ -29,6 +29,7 @@ import {
   avaliarFundamentacao,
   detectarAlucinacaoMedica,
   detectarCicloNo,
+  detectarGarantiaExitoNaoAutorizada,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
@@ -46,6 +47,7 @@ export {
   validarCnpj,
   validarCpf,
   validarLuhn,
+  validarNifPt,
   validarNin,
   validarSsn,
   ROTULO_POR_KIND,
@@ -56,6 +58,7 @@ export {
   avaliarFundamentacao,
   detectarAlucinacaoMedica,
   detectarCicloNo,
+  detectarGarantiaExitoNaoAutorizada,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
@@ -63,6 +66,7 @@ export {
   tokenizar,
 } from "./consistency";
 export {
+  POLITICA_ADVOCACIA_CONTABILIDADE,
   POLITICA_CLINICA_ALTO_PADRAO,
   POLITICA_IMOBILIARIO_ALTO_PADRAO,
   POLITICA_NO_CRITICO,
@@ -461,6 +465,21 @@ export function inspecionarSaida(entrada: InspecaoSaidaInput): OutboundInspectio
       for (const descricao of alucinacao.descricoes) {
         violacoes.push({
           regra: "diagnostico-ou-resultado-nao-autorizado",
+          severidade: "critica",
+          mensagem: `Tentativa de ${descricao}.`,
+        });
+      }
+    }
+
+    // 8. Guardrail Ético-Profissional — Proteção de Êxito (Módulo Vertical
+    // 3: Advocacia, Contabilidade & Serviços B2B) — ver
+    // `detectarGarantiaExitoNaoAutorizada` (`./consistency`). Mesmo racional
+    // dos itens 6 e 7: sempre `critica`, bloqueio + SAC Shield.
+    if (politica.bloquearGarantiaExitoNaoAutorizada) {
+      const exito = detectarGarantiaExitoNaoAutorizada(escolhida);
+      for (const descricao of exito.descricoes) {
+        violacoes.push({
+          regra: "garantia-exito-nao-autorizada",
           severidade: "critica",
           mensagem: `Tentativa de ${descricao}.`,
         });

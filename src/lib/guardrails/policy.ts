@@ -51,6 +51,7 @@ export const POLITICA_PADRAO: GuardrailPolicy = {
   maxCaracteresPayload: 200_000,
   bloquearPromessaComercialNaoAutorizada: false,
   bloquearDiagnosticoOuResultadoClinico: false,
+  bloquearGarantiaExitoNaoAutorizada: false,
   acaoPorSeveridade: {
     info: "permitido",
     baixa: "mascarado",
@@ -139,12 +140,32 @@ export const POLITICA_CLINICA_ALTO_PADRAO: GuardrailPolicy = {
   bloquearDiagnosticoOuResultadoClinico: true,
 };
 
+/**
+ * Política do Módulo Vertical 3 — Advocacia, Contabilidade & Serviços B2B.
+ *
+ * Estende `POLITICA_NO_CRITICO` com o Guardrail Ético-Profissional: nenhuma
+ * garantia de resultado de processo/causa, prazo judicial prometido ou
+ * honorário fixado sem análise técnica sai sem transbordo para um
+ * profissional qualificado — qualquer tentativa é severidade `critica`, que
+ * `acaoPorSeveridade` já resolve em `bloqueado`. Reaproveita
+ * `bloquearPromessaComercialNaoAutorizada` (mesmo mecanismo dos Verticais 1
+ * e 2): "honorário fixado sem análise técnica" é estruturalmente o mesmo
+ * risco que "valor de tabela/desconto sem validação da diretoria".
+ */
+export const POLITICA_ADVOCACIA_CONTABILIDADE: GuardrailPolicy = {
+  ...POLITICA_NO_CRITICO,
+  id: "advocacia-contabilidade",
+  bloquearPromessaComercialNaoAutorizada: true,
+  bloquearGarantiaExitoNaoAutorizada: true,
+};
+
 export const POLITICAS_PREDEFINIDAS: Record<string, GuardrailPolicy> = {
   padrao: POLITICA_PADRAO,
   "no-critico": POLITICA_NO_CRITICO,
   sandbox: POLITICA_SANDBOX,
   "imobiliario-alto-padrao": POLITICA_IMOBILIARIO_ALTO_PADRAO,
   "clinica-alto-padrao": POLITICA_CLINICA_ALTO_PADRAO,
+  "advocacia-contabilidade": POLITICA_ADVOCACIA_CONTABILIDADE,
 };
 
 const LIMITES_NUMERICOS: Array<{ campo: keyof GuardrailPolicy; min: number; max: number }> = [

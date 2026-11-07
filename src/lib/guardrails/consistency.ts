@@ -446,8 +446,8 @@ const PADROES_PROMESSA_COMERCIAL: Array<{ padrao: RegExp; descricao: string }> =
     descricao: "condição de parcelamento/financiamento prometida sem validação da diretoria",
   },
   {
-    padrao: /\b(?:valor|pre[çc]o)\s+(?:fechado|final)\b|\bfecha(?:mos)?\s+por\b|\bsai\s+por\s+(?:r\$|apenas\s+)?\d|\btabela\s*:\s*r\$/i,
-    descricao: "valor de tabela aberto como oferta fechada sem validação da diretoria",
+    padrao: /\b(?:valor|pre[çc]o|honor[áa]rios?)\s+(?:fechados?|fina(?:l|is))\b|\bfecha(?:mos)?\s+por\b|\bsai\s+por\s+(?:r\$|apenas\s+)?\d|\btabela\s*:\s*r\$/i,
+    descricao: "valor/honorário fechado como oferta sem validação prévia",
   },
 ];
 
@@ -512,6 +512,53 @@ export interface DeteccaoAlucinacaoMedica {
 export function detectarAlucinacaoMedica(texto: string): DeteccaoAlucinacaoMedica {
   const descricoes: string[] = [];
   for (const { padrao, descricao } of PADROES_ALUCINACAO_MEDICA) {
+    if (padrao.test(texto)) descricoes.push(descricao);
+  }
+  return { suspeito: descricoes.length > 0, descricoes };
+}
+
+/**
+ * Guardrail Ético-Profissional — Proteção de Êxito (Módulo Vertical 3:
+ * Advocacia, Contabilidade & Serviços B2B).
+ *
+ * Mesma filosofia dos detectores anteriores: casamento é tratado como
+ * `critica` por `inspecionarSaida` (ver `./index`), sem escala de peso — a
+ * regra de negócio (Código de Ética da OAB, art. 48: proibição de captação
+ * de causa mediante garantia de resultado) é "nenhuma tolerância", não
+ * "depende do quanto". Cobre dois sinais, cada um suficiente isoladamente:
+ *
+ *  1. garantia de resultado de processo/causa ("vamos ganhar o processo",
+ *     "você vai ganhar a causa", "certeza de vitória", "100% de chance de
+ *     ganhar", "garantimos a vitória");
+ *  2. promessa de prazo judicial ("o processo sai em", "garantimos que a
+ *     sentença sai em", "prazo certo de ... para a decisão").
+ *
+ * "Honorário fixado sem análise técnica" é coberto por
+ * `detectarPromessaComercialNaoAutorizada` (mesmo mecanismo dos Verticais 1
+ * e 2, já estendido para reconhecer "honorário fechado/final") — a política
+ * B2B liga os dois detectores, não duplica o de preço aqui.
+ */
+const PADROES_GARANTIA_EXITO: Array<{ padrao: RegExp; descricao: string }> = [
+  {
+    padrao:
+      /\bvamos\s+ganhar\s+(?:o\s+processo|a\s+causa)\b|\bvoc[eê]\s+vai\s+ganhar\s+(?:o\s+processo|a\s+causa)\b|\bcerteza\s+de\s+vit[óo]ria\b|\b100\s*%\s+de\s+chance\s+de\s+ganhar\b|\bgarantimos\s+(?:a\s+)?vit[óo]ria\b|\bresultado\s+garantido\b/i,
+    descricao: "garantia de resultado de processo/causa sem análise técnica prévia",
+  },
+  {
+    padrao:
+      /\bo\s+processo\s+sai\s+em\b|\bgarantimos\s+que\s+(?:a\s+)?senten[çc]a\s+sai\s+em\b|\bprazo\s+certo\s+de\b.{0,20}\bpara\s+a\s+(?:senten[çc]a|decis[ãa]o)\b/i,
+    descricao: "promessa de prazo judicial sem análise técnica prévia",
+  },
+];
+
+export interface DeteccaoGarantiaExito {
+  suspeito: boolean;
+  descricoes: string[];
+}
+
+export function detectarGarantiaExitoNaoAutorizada(texto: string): DeteccaoGarantiaExito {
+  const descricoes: string[] = [];
+  for (const { padrao, descricao } of PADROES_GARANTIA_EXITO) {
     if (padrao.test(texto)) descricoes.push(descricao);
   }
   return { suspeito: descricoes.length > 0, descricoes };

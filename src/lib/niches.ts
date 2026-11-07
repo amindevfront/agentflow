@@ -84,6 +84,16 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
       "Lembrete 24h/2h antes do horário marcado",
     ],
   },
+  "advocacia-contabilidade": {
+    key: "advocacia-contabilidade",
+    label: "Advocacia, Contabilidade & Serviços B2B",
+    descricao: "Triagem de leads corporativos, qualificação rigorosa do caso e agendamento de reunião de diagnóstico com os sócios.",
+    playbooksSugeridos: [
+      "Triagem B2B e qualificação de leads corporativos",
+      "Agendamento de reunião de diagnóstico",
+      "Recebimento seguro de documentos (contratos, balanços)",
+    ],
+  },
   outros: {
     key: "outros",
     label: "Outros",
@@ -100,5 +110,6 @@ export const NICHE_ORDER: NicheKey[] = [
   "logistica-portuaria",
   "servicos-luxo",
   "ecommerce",
+  "advocacia-contabilidade",
   "outros",
 ];

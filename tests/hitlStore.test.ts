@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
-import type { HandoffTicket, ResumoExecutivoClinico, ResumoExecutivoHandoff } from "@/types";
+import type { HandoffTicket, ResumoExecutivoB2B, ResumoExecutivoClinico, ResumoExecutivoHandoff } from "@/types";
 import {
   SLA_MINUTOS,
   construirTicketAdmin,
@@ -70,6 +70,15 @@ describe("derivarMotivo (servidor) — paridade com o cliente", () => {
         "bloqueado"
       )
     ).toBe("diagnostico-nao-autorizado");
+  });
+
+  it("mapeia o Guardrail Ético-Profissional (garantia-exito-nao-autorizada) para exito-nao-autorizado", () => {
+    expect(
+      derivarMotivo(
+        [{ regra: "garantia-exito-nao-autorizada", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("exito-nao-autorizado");
   });
 });
 
@@ -184,6 +193,38 @@ describe("construirTicketAdmin", () => {
       agora: AGORA,
     });
     expect(semResumo.resumoExecutivoClinico).toBeUndefined();
+  });
+
+  it("carrega resumoExecutivoB2B quando informado (Handoff com Resumo Executivo B2B) e o omite quando ausente", () => {
+    const resumoExecutivoB2B: ResumoExecutivoB2B = {
+      nome: "Ricardo",
+      perfilLead: "Pessoa jurídica",
+      porteCaso: "Startup",
+      objetivoMapeado: "due diligence",
+    };
+
+    const comResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "conv-widget-4",
+      flowNome: "Contato via Web Widget",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      conversationId: "conv-widget-4",
+      motivoForcado: "confirmacao-reuniao-diagnostico-b2b",
+      resumoExecutivoB2B,
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivoB2B).toEqual(resumoExecutivoB2B);
+
+    const semResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivoB2B).toBeUndefined();
   });
 });
 

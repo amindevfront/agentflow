@@ -28,6 +28,10 @@ import type {
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import {
+  construirResumoExecutivoB2B,
+  detectarGatilhoConfirmacaoReuniaoDiagnostico,
+} from "./advocaciaContabilidadeB2B";
 import { construirResumoExecutivoClinico, detectarGatilhoConfirmacaoAgendamento } from "./clinicaAltoPadrao";
 import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
@@ -304,6 +308,7 @@ export async function registrarMensagemWidgetAdmin(
         motivoForcado: "frustracao-critica",
         workspaceId: entrada.workspaceId,
         criadoPor: "sistema",
+        clienteId: entrada.visitorId,
       });
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
@@ -350,6 +355,7 @@ export async function registrarMensagemWidgetAdmin(
         resumoExecutivo,
         workspaceId: entrada.workspaceId,
         criadoPor: "sistema",
+        clienteId: entrada.visitorId,
       });
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
@@ -388,10 +394,49 @@ export async function registrarMensagemWidgetAdmin(
         resumoExecutivoClinico,
         workspaceId: entrada.workspaceId,
         criadoPor: "sistema",
+        clienteId: entrada.visitorId,
       });
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
       console.error("[inbox/widget] falha ao abrir handoff de confirmação de agendamento clínico:", erro);
+    }
+  }
+
+  // Módulo Vertical 3 (Advocacia, Contabilidade & Serviços B2B): o lead
+  // confirmou a reunião de diagnóstico.
+  if (setorWorkspace === "advocacia-contabilidade" && detectarGatilhoConfirmacaoReuniaoDiagnostico(textoMascarado)) {
+    try {
+      const resumoExecutivoB2B = construirResumoExecutivoB2B({
+        nomeLead: conversa.participante.nome,
+        mensagensClienteRecentes: [...mensagensClienteRecentes, textoMascarado],
+      });
+      const ticket = await abrirTransbordoAdmin({
+        solicitacao: {
+          traceId: `widget_${messageId}`,
+          politicaId: "padrao",
+          severidade: "media",
+          veredito: "transbordo",
+          violacoes: [
+            {
+              regra: "confirmacao-reuniao-diagnostico-b2b",
+              severidade: "media",
+              mensagem: "Lead confirmou reunião de diagnóstico — handoff com resumo executivo B2B para a equipe de sócios.",
+            },
+          ],
+          payloadMascarado: textoMascarado,
+        },
+        flowId: conversa.id,
+        flowNome: conversa.assunto,
+        conversationId: conversa.id,
+        motivoForcado: "confirmacao-reuniao-diagnostico-b2b",
+        resumoExecutivoB2B,
+        workspaceId: entrada.workspaceId,
+        criadoPor: "sistema",
+        clienteId: entrada.visitorId,
+      });
+      await refConversa.update({ slaTicketId: ticket.id });
+    } catch (erro) {
+      console.error("[inbox/widget] falha ao abrir handoff de confirmação de reunião de diagnóstico B2B:", erro);
     }
   }
 

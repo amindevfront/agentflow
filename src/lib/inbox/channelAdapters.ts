@@ -20,6 +20,7 @@
 // `./twilioSignature`, importado apenas por rotas de API (server-only).
 
 import type { Canal } from "@/types";
+import { inferirIdiomaPorTelefone, inferirJurisdicaoPorTelefone, type Idioma, type Jurisdicao } from "@/lib/jurisdiction";
 
 export interface MensagemCanalNormalizada {
   canal: Canal;
@@ -33,6 +34,15 @@ export interface MensagemCanalNormalizada {
   texto: string;
   /** Id da mensagem no provedor de origem — usado para idempotência/depuração. */
   idExterno?: string;
+  /**
+   * Expansão Global (EUA/Portugal) — jurisdição/idioma inferidos do DDI de
+   * `identificadorRemetente` (ver `@/lib/jurisdiction`), ANTES do
+   * mascaramento: é a única janela em que o telefone em claro existe neste
+   * pipeline. `undefined` quando o canal não tem um telefone real (ex.:
+   * widget, cujo identificador é um `visitorId` de sessão, não um DDI).
+   */
+  jurisdicao?: Jurisdicao;
+  idiomaProvavel?: Idioma;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +80,8 @@ export function normalizarMensagemTwilioSms(campos: CamposWebhookTwilio): Mensag
     identificadorRemetente: remetente,
     texto,
     idExterno: campos.MessageSid,
+    jurisdicao: inferirJurisdicaoPorTelefone(remetente),
+    idiomaProvavel: inferirIdiomaPorTelefone(remetente),
   };
 }
 

@@ -7,7 +7,15 @@
 // cálculo: ele reconhece o próprio custo-hora e confere a conta.
 
 import { useEffect, useState } from "react";
-import type { ComposicaoCustoClt, ComposicaoCustoPayroll, Moeda, RegimeEncargos, RoiConfig } from "@/types";
+import type {
+  ComposicaoCusto1099Us,
+  ComposicaoCustoClt,
+  ComposicaoCustoPayroll,
+  ComposicaoCustoSegurancaSocialPt,
+  Moeda,
+  RegimeEncargos,
+  RoiConfig,
+} from "@/types";
 import {
   PRECOS_REFERENCIA,
   ROI_CONFIG_PADRAO,
@@ -22,6 +30,8 @@ import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
   { valor: "clt-br", label: "CLT (Brasil)" },
   { valor: "payroll-us-uk", label: "Payroll Tax (EUA/UK)" },
+  { valor: "1099-us", label: "Contractor 1099 (EUA)" },
+  { valor: "seguranca-social-pt", label: "Segurança Social (Portugal)" },
 ];
 
 const MODELOS = Object.keys(PRECOS_REFERENCIA);
@@ -59,6 +69,29 @@ export function RoiConfigPanel() {
     setConfig((atual) => ({
       ...atual,
       composicaoPayroll: { ...atual.composicaoPayroll, [campo]: Number.isFinite(percentual) ? percentual : 0 },
+    }));
+  }
+
+  /** Mesma conversão de `atualizarPercentualClt`, para o overhead opcional de contractor 1099. */
+  function atualizarPercentual1099(campo: keyof ComposicaoCusto1099Us, bruto: string) {
+    const percentual = Number(bruto.replace(",", ".")) / 100;
+    setSalvo(false);
+    setConfig((atual) => ({
+      ...atual,
+      composicao1099: { ...atual.composicao1099, [campo]: Number.isFinite(percentual) ? percentual : 0 },
+    }));
+  }
+
+  /** Mesma conversão de `atualizarPercentualClt`, para a TSU patronal portuguesa. */
+  function atualizarPercentualSegurancaSocialPt(campo: keyof ComposicaoCustoSegurancaSocialPt, bruto: string) {
+    const percentual = Number(bruto.replace(",", ".")) / 100;
+    setSalvo(false);
+    setConfig((atual) => ({
+      ...atual,
+      composicaoSegurancaSocialPt: {
+        ...atual.composicaoSegurancaSocialPt,
+        [campo]: Number.isFinite(percentual) ? percentual : 0,
+      },
     }));
   }
 
@@ -172,6 +205,15 @@ export function RoiConfigPanel() {
           helpText="Aplicado quando a moeda de exibição é libra (£)."
         />
         <Field
+          label="Câmbio EUR → BRL"
+          type="number"
+          min={0}
+          step="0.01"
+          value={String(config.cambioEurBrl)}
+          onChange={(e) => atualizarNumero("cambioEurBrl", e.target.value)}
+          helpText="Aplicado quando a moeda de exibição é euro (€) — mercado Portugal."
+        />
+        <Field
           label="Custo mensal da plataforma (R$)"
           type="number"
           min={0}
@@ -197,6 +239,7 @@ export function RoiConfigPanel() {
             <option value="BRL">Real (R$)</option>
             <option value="USD">Dólar (US$)</option>
             <option value="GBP">Libra (£)</option>
+            <option value="EUR">Euro (€)</option>
           </select>
           <span className="text-xs text-ink-400">
             O cálculo é sempre em BRL; a conversão ocorre apenas na exibição. Este é o seletor regional/moeda único
@@ -372,6 +415,50 @@ export function RoiConfigPanel() {
       <p className="mono text-xs text-ink-400">
         Salário base residual: {(percentualSalarioBasePayroll * 100).toFixed(1)}% do custo-hora.
       </p>
+
+      <div>
+        <h4 className="text-sm font-semibold text-ink-950">Composição Contractor 1099 (EUA)</h4>
+        <p className="mt-0.5 text-xs text-ink-400">
+          Contractor 1099 recolhe o próprio self-employment tax — a empresa não carrega FICA/FUTA/workers&apos;
+          comp sobre esse custo-hora. Overhead opcional de gestão/compliance, zero por padrão.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Field
+          label="Overhead de gestão (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicao1099.percentualOverheadGestaoContratante)}
+          onChange={(e) => atualizarPercentual1099("percentualOverheadGestaoContratante", e.target.value)}
+          helpText="Gestão de contrato/risco de reclassificação, se o workspace tiver esse custo."
+        />
+      </div>
+
+      <div>
+        <h4 className="text-sm font-semibold text-ink-950">Composição Segurança Social (Portugal — TSU)</h4>
+        <p className="mt-0.5 text-xs text-ink-400">
+          Taxa Social Única, alíquota patronal do regime geral. Estimativa de referência pública — ajuste ao
+          enquadramento real do workspace.
+        </p>
+      </div>
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+        <Field
+          label="TSU patronal (%)"
+          type="number"
+          min={0}
+          max={100}
+          step="0.1"
+          value={percentualParaCampo(config.composicaoSegurancaSocialPt.percentualSegurancaSocialPatronal)}
+          onChange={(e) =>
+            atualizarPercentualSegurancaSocialPt("percentualSegurancaSocialPatronal", e.target.value)
+          }
+          helpText="23,75% é a alíquota pública do regime geral (base legal, não tabela fiscal fechada)."
+        />
+      </div>
 
       <div className="flex items-center gap-3">
         <Button size="sm" loading={salvando} onClick={salvar}>

@@ -16,10 +16,17 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 
-const ROTULO_MOEDA: Record<Moeda, string> = { BRL: "Real (R$)", USD: "Dólar (US$)", GBP: "Libra (£)" };
+const ROTULO_MOEDA: Record<Moeda, string> = {
+  BRL: "Real (R$)",
+  USD: "Dólar (US$)",
+  GBP: "Libra (£)",
+  EUR: "Euro (€)",
+};
 const ROTULO_REGIME: Record<RegimeEncargos, string> = {
   "clt-br": "CLT (Brasil)",
   "payroll-us-uk": "Payroll Tax (EUA/UK)",
+  "1099-us": "Contractor 1099 (EUA)",
+  "seguranca-social-pt": "Segurança Social (Portugal)",
 };
 
 export default function SettingsPage() {

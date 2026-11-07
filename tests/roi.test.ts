@@ -300,10 +300,11 @@ describe("normalizarRoiConfig", () => {
     expect(normalizada.minutosManuaisPorExecucao).toBe(10_080);
   });
 
-  it("aceita apenas moedas conhecidas, incluindo GBP (dual-region Tax Shield)", () => {
+  it("aceita apenas moedas conhecidas, incluindo GBP e EUR (Expansão Global)", () => {
     expect(normalizarRoiConfig({ moedaExibicao: "JPY" as never }).moedaExibicao).toBe("BRL");
     expect(normalizarRoiConfig({ moedaExibicao: "USD" }).moedaExibicao).toBe("USD");
     expect(normalizarRoiConfig({ moedaExibicao: "GBP" }).moedaExibicao).toBe("GBP");
+    expect(normalizarRoiConfig({ moedaExibicao: "EUR" }).moedaExibicao).toBe("EUR");
   });
 
   it("normaliza o câmbio GBP → BRL como qualquer outro número positivo", () => {
@@ -312,10 +313,36 @@ describe("normalizarRoiConfig", () => {
     expect(normalizarRoiConfig({ cambioGbpBrl: 7.1 }).cambioGbpBrl).toBe(7.1);
   });
 
-  it("aceita apenas os dois regimes de encargos conhecidos, com fallback para CLT", () => {
+  it("normaliza o câmbio EUR → BRL como qualquer outro número positivo", () => {
+    expect(normalizarRoiConfig({ cambioEurBrl: Number.NaN }).cambioEurBrl).toBe(ROI_CONFIG_PADRAO.cambioEurBrl);
+    expect(normalizarRoiConfig({ cambioEurBrl: -3 }).cambioEurBrl).toBe(ROI_CONFIG_PADRAO.cambioEurBrl);
+    expect(normalizarRoiConfig({ cambioEurBrl: 6.1 }).cambioEurBrl).toBe(6.1);
+  });
+
+  it("aceita os quatro regimes de encargos conhecidos, com fallback para CLT", () => {
     expect(normalizarRoiConfig({ regimeEncargos: "bogus" as never }).regimeEncargos).toBe("clt-br");
     expect(normalizarRoiConfig({ regimeEncargos: "payroll-us-uk" }).regimeEncargos).toBe("payroll-us-uk");
+    expect(normalizarRoiConfig({ regimeEncargos: "1099-us" }).regimeEncargos).toBe("1099-us");
+    expect(normalizarRoiConfig({ regimeEncargos: "seguranca-social-pt" }).regimeEncargos).toBe(
+      "seguranca-social-pt"
+    );
     expect(normalizarRoiConfig({}).regimeEncargos).toBe("clt-br");
+  });
+
+  it("normaliza o overhead do composicao1099 e a TSU do composicaoSegurancaSocialPt para números positivos", () => {
+    expect(
+      normalizarRoiConfig({ composicao1099: { percentualOverheadGestaoContratante: Number.NaN } })
+        .composicao1099.percentualOverheadGestaoContratante
+    ).toBe(ROI_CONFIG_PADRAO.composicao1099.percentualOverheadGestaoContratante);
+    expect(
+      normalizarRoiConfig({ composicao1099: { percentualOverheadGestaoContratante: 0.1 } }).composicao1099
+        .percentualOverheadGestaoContratante
+    ).toBe(0.1);
+    expect(
+      normalizarRoiConfig({
+        composicaoSegurancaSocialPt: { percentualSegurancaSocialPatronal: -1 },
+      }).composicaoSegurancaSocialPt.percentualSegurancaSocialPatronal
+    ).toBe(ROI_CONFIG_PADRAO.composicaoSegurancaSocialPt.percentualSegurancaSocialPatronal);
   });
 
   it("normaliza percentuais inválidos da composição Payroll para o padrão", () => {
@@ -363,6 +390,11 @@ describe("formatarMoeda", () => {
     expect(formatarMoeda(690, "GBP", 6.9)).toBe("£100.00");
   });
 
+  it("converte para EUR usando o câmbio informado (Expansão Global — Portugal)", () => {
+    // pt-PT separa o símbolo com um espaço fino não separável (U+00A0), não um espaço comum.
+    expect(formatarMoeda(590, "EUR", 5.9)).toBe("100,00 €");
+  });
+
   it("nunca propaga NaN/Infinity para a interface, em nenhuma moeda", () => {
     expect(formatarMoeda(Number.NaN, "USD", 5)).toBe("$0.00");
     expect(formatarMoeda(100, "GBP", 0)).not.toContain("NaN");
@@ -370,15 +402,16 @@ describe("formatarMoeda", () => {
 });
 
 describe("cambioParaMoeda", () => {
-  const configCambio = { cambioUsdBrl: 5, cambioGbpBrl: 6.9 };
+  const configCambio = { cambioUsdBrl: 5, cambioGbpBrl: 6.9, cambioEurBrl: 5.9 };
 
   it("BRL nunca precisa de conversão", () => {
     expect(cambioParaMoeda(configCambio, "BRL")).toBe(1);
   });
 
-  it("devolve o câmbio correspondente para USD e GBP", () => {
+  it("devolve o câmbio correspondente para USD, GBP e EUR", () => {
     expect(cambioParaMoeda(configCambio, "USD")).toBe(5);
     expect(cambioParaMoeda(configCambio, "GBP")).toBe(6.9);
+    expect(cambioParaMoeda(configCambio, "EUR")).toBe(5.9);
   });
 });
 
@@ -459,6 +492,60 @@ describe("Tax Shield — decomposição dual-region (CLT vs. Payroll EUA/UK)", (
     expect(snapshot.encargosTotaisBrl).toBe(0);
     expect(snapshot.salarioBaseEvitadoPayrollBrl).toBe(0);
     expect(snapshot.encargosTotaisPayrollBrl).toBe(0);
+  });
+});
+
+describe("Tax Shield — Expansão Global (1099 EUA e Segurança Social Portugal)", () => {
+  function snapshotComUmaExecucao() {
+    return calcularRoi({
+      execucoes: [execucao({ id: "r1", status: "concluido", metrica: { tokensEntrada: 0, tokensSaida: 0 } })],
+      config: CONFIG,
+      periodo: PERIODO,
+      referencia: REFERENCIA,
+    });
+  }
+
+  it("as QUATRO decomposições são SEMPRE calculadas, independente de `regimeEncargos`", () => {
+    const comClt = calcularRoi({
+      execucoes: [execucao({ id: "r1", status: "concluido", metrica: { tokensEntrada: 0, tokensSaida: 0 } })],
+      config: { ...CONFIG, regimeEncargos: "clt-br" },
+      periodo: PERIODO,
+      referencia: REFERENCIA,
+    });
+    const comSegurancaSocialPt = calcularRoi({
+      execucoes: [execucao({ id: "r1", status: "concluido", metrica: { tokensEntrada: 0, tokensSaida: 0 } })],
+      config: { ...CONFIG, regimeEncargos: "seguranca-social-pt" },
+      periodo: PERIODO,
+      referencia: REFERENCIA,
+    });
+
+    expect(comSegurancaSocialPt.salarioBaseEvitado1099Brl).toBe(comClt.salarioBaseEvitado1099Brl);
+    expect(comSegurancaSocialPt.salarioBaseEvitadoSegurancaSocialPtBrl).toBe(
+      comClt.salarioBaseEvitadoSegurancaSocialPtBrl
+    );
+    expect(comClt.salarioBaseEvitadoSegurancaSocialPtBrl).toBeGreaterThan(0);
+  });
+
+  it("1099 EUA: sem overhead configurado (padrão), 100% do custo evitado é salário base", () => {
+    const snapshot = snapshotComUmaExecucao();
+    expect(snapshot.encargosTotais1099Brl).toBe(0);
+    expect(snapshot.salarioBaseEvitado1099Brl).toBeCloseTo(snapshot.custoHumanoEvitadoBrl, 1);
+  });
+
+  it("Segurança Social Portugal (TSU): salário base + encargo totaliza o custo evitado", () => {
+    const snapshot = snapshotComUmaExecucao();
+    expect(snapshot.salarioBaseEvitadoSegurancaSocialPtBrl + snapshot.encargosTotaisSegurancaSocialPtBrl).toBeCloseTo(
+      snapshot.custoHumanoEvitadoBrl,
+      1
+    );
+    // 23,75% é a alíquota patronal padrão (COMPOSICAO_SEGURANCA_SOCIAL_PT_PADRAO).
+    expect(snapshot.encargosSegurancaSocialPatronalBrl).toBeCloseTo(snapshot.custoHumanoEvitadoBrl * 0.2375, 1);
+  });
+
+  it("sem execuções, as duas novas decomposições são zero (nada inventado)", () => {
+    const snapshot = calcularRoi({ execucoes: [], config: CONFIG, periodo: PERIODO, referencia: REFERENCIA });
+    expect(snapshot.salarioBaseEvitado1099Brl).toBe(0);
+    expect(snapshot.salarioBaseEvitadoSegurancaSocialPtBrl).toBe(0);
   });
 });
 
