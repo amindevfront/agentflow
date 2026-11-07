@@ -48,6 +48,7 @@ const OPCOES_PERIODO: Array<{ valor: JanelaPeriodo; label: string }> = [
 const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
   { valor: "BRL", label: "R$" },
   { valor: "USD", label: "US$" },
+  { valor: "GBP", label: "£" },
   { valor: "EUR", label: "€" },
 ];
 

@@ -319,6 +319,27 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
                 </div>
               )}
 
+              {selecionado.ghostCoach && (
+                <div className="rounded-[var(--radius-sm)] border border-signal-100 bg-signal-50 p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide text-signal-700">
+                      Ghost Coach · sugestão silenciosa
+                    </h4>
+                    <span className="mono text-[11px] text-ink-400">
+                      {selecionado.ghostCoach.baseadoEmHistoricoEpisodico ? "com histórico do lead" : "sem histórico"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[11px] font-medium text-ink-500">Rascunho de resposta</p>
+                  <p className="mt-0.5 text-xs text-ink-900">{selecionado.ghostCoach.respostaSugerida}</p>
+                  <p className="mt-2 text-[11px] font-medium text-ink-500">Argumento para a objeção mais provável</p>
+                  <p className="mt-0.5 text-xs text-ink-900">{selecionado.ghostCoach.argumentoObjecao}</p>
+                  <p className="mt-2 text-[11px] text-ink-400">
+                    Rascunho da IA para o operador revisar, editar ou ignorar — nunca enviado ao cliente
+                    automaticamente. Já mascarado pelo Shield-Layer.
+                  </p>
+                </div>
+              )}
+
               {selecionado.status === "resolvido" || selecionado.status === "cancelado" ? (
                 <div className="rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
                   <p className="text-xs font-medium text-ink-700">
