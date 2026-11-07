@@ -86,7 +86,7 @@ export default function OnboardingPage() {
     setSyncWarning(null);
     setStep("saving");
 
-    const { ref, workspace } = prepareWorkspace(nomeWorkspace.trim(), setor);
+    const { ref, workspace } = prepareWorkspace(nomeWorkspace.trim(), setor, user.uid);
     const appUser: AppUser = {
       uid: user.uid,
       nome: user.displayName ?? user.email?.split("@")[0] ?? "Usuário",

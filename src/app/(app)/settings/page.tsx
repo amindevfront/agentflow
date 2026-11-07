@@ -91,20 +91,31 @@ export default function SettingsPage() {
     <div className="flex flex-col gap-4">
       <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
         <h2 className="text-sm font-semibold text-ink-950">Workspace</h2>
-        <form onSubmit={handleSaveWorkspace} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            <Field
-              label="Nome do workspace"
-              value={workspaceName}
-              onChange={(e) => setWorkspaceName(e.target.value)}
-              errorText={nameError ?? undefined}
-            />
-          </div>
-          <Button type="submit" size="sm" loading={saving}>
-            Salvar
-          </Button>
-        </form>
-        {saved && <p className="mt-2 text-xs text-state-done">Salvo.</p>}
+        {appUser?.papel === "admin" ? (
+          <>
+            <form onSubmit={handleSaveWorkspace} className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
+              <div className="flex-1">
+                <Field
+                  label="Nome do workspace"
+                  value={workspaceName}
+                  onChange={(e) => setWorkspaceName(e.target.value)}
+                  errorText={nameError ?? undefined}
+                />
+              </div>
+              <Button type="submit" size="sm" loading={saving}>
+                Salvar
+              </Button>
+            </form>
+            {saved && <p className="mt-2 text-xs text-state-done">Salvo.</p>}
+          </>
+        ) : (
+          // Renomear o workspace é uma decisão administrativa (mesma
+          // checagem de `isAdminOf` que `firestore.rules` já exige nesta
+          // escrita) — exibir aqui como texto, não como formulário editável,
+          // evita um "Salvar" que parece funcionar mas é sempre rejeitado
+          // pelo banco para quem está em `operacoes`.
+          <p className="mt-3 text-sm text-ink-700">{workspaceName || "—"}</p>
+        )}
         {setorLabel && <p className="mono mt-2 text-xs text-ink-400">Setor: {setorLabel}</p>}
       </section>
 

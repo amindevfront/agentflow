@@ -15,6 +15,7 @@
 
 import { useState } from "react";
 import { auth } from "@/lib/firebase";
+import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
 import type { RunCostMetrics } from "@/types";
 
@@ -36,6 +37,7 @@ interface RespostaExecucao {
 const PAYLOAD_INICIAL = '{\n  "mensagem": "Novo pedido recebido"\n}';
 
 export function RealExecutionPanel({ flowId, flowNome }: RealExecutionPanelProps) {
+  const { appUser } = useWorkspace();
   const [payload, setPayload] = useState(PAYLOAD_INICIAL);
   const [executando, setExecutando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -128,7 +130,9 @@ export function RealExecutionPanel({ flowId, flowNome }: RealExecutionPanelProps
             <p className="mono mt-1 text-ink-500">
               {resultado.metrica.tokensEntrada} tokens de entrada · {resultado.metrica.tokensSaida} de
               saída
-              {typeof resultado.metrica.custoModeloUsd === "number"
+              {/* Custo em US$ é dado de faturamento (Dual-Layer Workspace View):
+                  só admin vê o valor financeiro real de uma execução. */}
+              {appUser?.papel === "admin" && typeof resultado.metrica.custoModeloUsd === "number"
                 ? ` · US$ ${resultado.metrica.custoModeloUsd.toFixed(4)}`
                 : ""}
             </p>

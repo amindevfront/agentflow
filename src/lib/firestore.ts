@@ -59,12 +59,13 @@ function requireDb() {
  * — sem esse desacoplamento, uma gravação lenta resultaria em dois ids
  * diferentes (o otimista e o que o Firestore de fato persistiu).
  */
-export function prepareWorkspace(nome: string, setor: NicheKey) {
+export function prepareWorkspace(nome: string, setor: NicheKey, donoUid: string) {
   const database = requireDb();
   const ref = doc(collection(database, "workspaces"));
   const workspace: Workspace = {
     id: ref.id,
     nome: sanitizeText(nome, 80),
+    donoUid,
     setor,
     criadoEm: new Date().toISOString(),
     playbooksSugeridos: NICHE_PRESETS[setor].playbooksSugeridos,

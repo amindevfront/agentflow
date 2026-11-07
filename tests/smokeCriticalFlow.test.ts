@@ -100,7 +100,7 @@ describe("smoke: fluxo crítico Registro -> Onboarding -> Workspace -> Conector"
       await import("@/lib/firestore");
 
     const setor: NicheKey = "logistica-portuaria";
-    const { ref, workspace } = prepareWorkspace("  <b>Porto</b> Horizonte  ", setor);
+    const { ref, workspace } = prepareWorkspace("  <b>Porto</b> Horizonte  ", setor, uid);
 
     // A sanitização (ver src/lib/sanitize.ts) já deve ter agido dentro de prepareWorkspace.
     expect(workspace.nome).toBe("Porto Horizonte");

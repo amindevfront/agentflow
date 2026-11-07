@@ -29,11 +29,11 @@ import { selarEPersistirEntrada } from "@/lib/server/auditChainStore";
 import { selarDetalhesAuditoria } from "@/lib/crypto/envelope";
 import { chaveAuditoria, diagnosticoCripto } from "@/lib/server/env";
 import { diagnosticoAdmin } from "@/lib/server/firebaseAdmin";
+import { lerWorkspaceIdDoUsuarioAdmin } from "@/lib/server/orchestratorAdmin";
 import {
   ErroApi,
   comGuarda,
   corpoJson,
-  exigirIdentificador,
   exigirTexto,
   respostaJson,
 } from "@/lib/server/http";
@@ -62,6 +62,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "procedimento.posatendimento.registrado",
   "relatorio.prontidao.gerado",
   "relatorio.lgpd.gerado",
+  "connecthub.webhook.despachado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);
@@ -111,7 +112,18 @@ export const POST = comGuarda(
       throw new ErroApi(400, `Resultado inválido: ${resultado}.`, "campo_invalido");
     }
 
-    const workspaceId = exigirIdentificador(bruto.workspaceId, "corpo.workspaceId");
+    // `workspaceId` NUNCA vem do corpo da requisição: esta rota grava via
+    // Admin SDK, que ignora `firestore.rules` (que negam toda escrita de
+    // cliente em `auditLogs`/`auditChainHead`) — se o workspace viesse do
+    // cliente, qualquer usuário autenticado de QUALQUER workspace poderia
+    // forjar entradas na trilha de auditoria imutável de outro tenant só
+    // declarando o id. Resolvido a partir do próprio usuário autenticado,
+    // mesmo padrão já usado por `/api/inbox/episodic-memory`.
+    const workspaceId = await lerWorkspaceIdDoUsuarioAdmin(usuario.uid);
+    if (!workspaceId) {
+      throw new ErroApi(403, "Usuário sem workspace associado.", "workspace_nao_encontrado");
+    }
+
     const recurso = exigirTexto(bruto.recurso, "corpo.recurso", { max: 256 });
 
     const traceId =

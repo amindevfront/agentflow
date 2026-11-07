@@ -13,6 +13,7 @@ const APP_USER: AppUser = {
 const WORKSPACE: Workspace = {
   id: "ws-1",
   nome: "Workspace de teste",
+  donoUid: "uid-1",
   setor: "outros",
   criadoEm: "2026-10-24T00:00:00.000Z",
   playbooksSugeridos: [],

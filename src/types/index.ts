@@ -9,9 +9,11 @@ export * from "./governance";
 export * from "./roi";
 export * from "./inbox";
 export * from "./sacShield";
+export * from "./connectors";
 
 import type { RunCostMetrics } from "./roi";
 import type { GuardrailPolicy } from "./guardrails";
+import type { ConnectHubConfig } from "./connectors";
 
 export type UserRole = "operacoes" | "admin";
 
@@ -22,6 +24,14 @@ export interface AppUser {
   avatarUrl?: string | null;
   papel: UserRole;
   workspaceId: string;
+  /**
+   * Presente apenas na gravação que aceita um convite (ver
+   * `src/app/(auth)/invite/[token]/page.tsx`). `firestore.rules` usa este
+   * campo para confirmar que `papel`/`workspaceId` vieram de um convite
+   * pendente real — nunca escolhidos livremente pelo próprio usuário — e o
+   * documento final não precisa retê-lo depois.
+   */
+  conviteAceitoId?: string;
 }
 
 /**
@@ -38,6 +48,7 @@ export type NicheKey =
   | "ecommerce"
   | "salao-beleza"
   | "clinica-medica-exames"
+  | "advocacia-contabilidade"
   | "outros";
 
 /**
@@ -65,6 +76,14 @@ export type PainPointKey =
 export interface Workspace {
   id: string;
   nome: string;
+  /**
+   * uid de quem criou este workspace no onboarding self-serve — ver
+   * `prepareWorkspace`. `firestore.rules` usa este campo para confirmar que
+   * só o próprio criador pode se autodeclarar `admin` deste workspace;
+   * qualquer outro acesso de administrador passa por convite, nunca por
+   * auto-atribuição de papel.
+   */
+  donoUid: string;
   setor?: NicheKey;
   criadoEm?: string;
   /** Nomes de fluxo sugeridos para o nicho escolhido (ver NICHE_PRESETS). */
@@ -81,6 +100,13 @@ export interface Workspace {
   guardrailOverrides?: Partial<GuardrailPolicy>;
   /** Presença indica que o quiz já foi respondido — controla a reexibição do modal. */
   quizRespondidoEm?: string;
+
+  /**
+   * AgentFlow Connect Hub — webhook de saída configurado para o workspace.
+   * `null`/ausente: Connect Hub desativado, nenhum evento é despachado (ver
+   * `@/lib/server/connectors`).
+   */
+  connectHub?: ConnectHubConfig | null;
 
   // --- Portal do Cliente (`/portal/[slug]`) ---
   /**

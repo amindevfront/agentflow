@@ -44,6 +44,10 @@ export default function InvitePage() {
       email: invite.email,
       papel: invite.papel,
       workspaceId: invite.workspaceId,
+      // `firestore.rules` exige este campo para confirmar, lendo o próprio
+      // convite, que `papel`/`workspaceId` não foram escolhidos livremente
+      // por quem está criando o próprio documento `users/{uid}`.
+      conviteAceitoId: invite.id,
     });
     await markInviteAccepted(invite.id);
     router.push("/flows");

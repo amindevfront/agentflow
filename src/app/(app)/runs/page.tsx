@@ -19,7 +19,7 @@ const FILTERS: Array<{ value: RunStatus | "todos"; label: string }> = [
 ];
 
 export default function RunsPage() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, appUser } = useWorkspace();
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [filter, setFilter] = useState<RunStatus | "todos">("todos");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -42,10 +42,13 @@ export default function RunsPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Painel financeiro no topo das Execuções: é a tela que a operação
-          mantém aberta, e o número de ROI só influencia decisão se estiver
-          onde a decisão é tomada. */}
-      <BusinessROIWidget />
+      {/* Dual-Layer Workspace View: KPI de ROI/faturamento é visão de
+          Dono/Admin, não de operações (que fica só com Inbox, Fluxos,
+          Execuções e Ghost Coach) — mesma regra já aplicada em
+          `SettingsPage` (roiConfig) e `RealExecutionPanel` (custo em US$).
+          Sem este guard, qualquer `operacoes` via `/runs` via dados de caixa
+          que o próprio modelo de acesso do produto reserva ao admin. */}
+      {appUser?.papel === "admin" && <BusinessROIWidget />}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
         <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">

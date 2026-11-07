@@ -65,7 +65,11 @@ service cloud.firestore {
       // autenticado pode criar um novo workspace (self-serve signup); isso só
       // cria o registro em si, nada sensível é exposto por essa operação, e
       // a leitura/atualização subsequentes continuam exigindo pertencimento.
-      allow create: if isSignedIn();
+      // `donoUid` tem de ser o próprio criador — é nele que a regra de
+      // `users/{uid}` abaixo se apoia para confirmar uma autodeclaração de
+      // admin legítima (dono do próprio workspace novo), nunca de um
+      // workspace de outro tenant.
+      allow create: if isSignedIn() && request.resource.data.donoUid == request.auth.uid;
       // Configuração do workspace (nome, roiConfig) é operação administrativa:
       // os parâmetros de ROI determinam os números financeiros reportados.
       allow update: if isAdminOf(workspaceId);
@@ -80,7 +84,60 @@ service cloud.firestore {
       // sem isso, qualquer usuário autenticado conseguiria enumerar nome,
       // e-mail e papel de usuários de outros workspaces.
       allow read: if isSignedIn() && (request.auth.uid == uid || belongsToWorkspace(resource.data.workspaceId));
-      allow write: if isSignedIn() && request.auth.uid == uid;
+
+      // `papel`/`workspaceId` NUNCA são uma escolha livre de quem escreve o
+      // próprio documento — sem esta checagem, qualquer usuário autenticado
+      // se autodeclararia `admin` de QUALQUER workspace só por conhecer (ou
+      // adivinhar) o id, o que destrói o isolamento entre tenants por
+      // completo, inclusive o cofre, a trilha de auditoria e o SAC Shield de
+      // terceiros. Dois caminhos legítimos, nenhum outro:
+      //
+      //  1. Onboarding self-serve: o usuário acabou de criar o PRÓPRIO
+      //     workspace (`donoUid`, ver `prepareWorkspace`) e se declara admin
+      //     dele. `workspaces/{workspaceId}` pode ainda não existir no
+      //     momento desta escrita — a ordem deliberada do onboarding grava
+      //     `users/{uid}` antes de `workspaces/{workspaceId}` para que o
+      //     retry seja seguro (ver `src/app/onboarding/page.tsx`), então
+      //     aceitar "ainda não existe" é necessário, não uma folga
+      //     acidental. Limite honesto: dois usuários colidindo no mesmo id
+      //     de workspace recém-gerado (aleatório, 20+ caracteres) antes de
+      //     qualquer um persistir o documento do workspace é a única janela
+      //     que isto não cobre — não é uma colisão alcançável de fora.
+      //  2. Convite aceito: `papel`/`workspaceId` têm de ser EXATAMENTE os
+      //     do convite pendente referenciado por `conviteAceitoId`, e o
+      //     e-mail do convite tem de casar com o e-mail autenticado deste
+      //     token — ninguém aceita um convite endereçado a outra pessoa.
+      allow create: if isSignedIn() && request.auth.uid == uid
+                    && (
+                         (
+                           request.resource.data.papel == 'admin'
+                           && (
+                                !exists(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId))
+                                || get(/databases/$(database)/documents/workspaces/$(request.resource.data.workspaceId)).data.donoUid == request.auth.uid
+                              )
+                         )
+                         || (
+                           request.resource.data.conviteAceitoId is string
+                           && get(/databases/$(database)/documents/invites/$(request.resource.data.conviteAceitoId)).data.status == 'pendente'
+                           && get(/databases/$(database)/documents/invites/$(request.resource.data.conviteAceitoId)).data.workspaceId == request.resource.data.workspaceId
+                           && get(/databases/$(database)/documents/invites/$(request.resource.data.conviteAceitoId)).data.papel == request.resource.data.papel
+                           && get(/databases/$(database)/documents/invites/$(request.resource.data.conviteAceitoId)).data.email == request.auth.token.email.lower()
+                         )
+                       );
+
+      // O próprio usuário ajusta nome/avatar livremente, mas `papel` e
+      // `workspaceId` são imutáveis depois de criados: não existe fluxo
+      // legítimo de autopromoção ou troca de tenant por reescrita direta do
+      // próprio documento — mudar o papel de alguém hoje só acontece por um
+      // novo convite, nunca por edição in-place.
+      allow update: if isSignedIn() && request.auth.uid == uid
+                    && request.resource.data.papel == resource.data.papel
+                    && request.resource.data.workspaceId == resource.data.workspaceId;
+
+      // Nada no produto apaga este documento hoje; negar por padrão evita
+      // que alguém o apague e o recrie como atalho para contornar as
+      // checagens de `create` acima.
+      allow delete: if false;
     }
 
     match /invites/{inviteId} {
@@ -88,8 +145,28 @@ service cloud.firestore {
       // por isso não exige autenticação prévia — o id do convite funciona como token.
       allow get: if true;
       allow list: if belongsToWorkspace(resource.data.workspaceId);
-      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
-      allow update: if isSignedIn();
+      // Só administradores enviam convites — inclusive escolher `papel` é
+      // decisão administrativa (a UI de `/team` já é exclusiva de admin;
+      // esta checagem torna isso verdade também no banco, não só na tela,
+      // e é o que impede um convite de admin forjado por um `operacoes`).
+      allow create: if isAdminOf(request.resource.data.workspaceId)
+                    && request.resource.data.status == 'pendente';
+      // Única transição legítima depois de criado é pendente -> aceito, feita
+      // por quem está completando o cadastro — ainda não pertence ao
+      // workspace nesse momento, por isso não dá para exigir
+      // `belongsToWorkspace` aqui. Todo o resto é imutável: nem o workspace,
+      // nem o papel, nem o e-mail do convite mudam depois de criado — sem
+      // isso, qualquer usuário autenticado poderia reescrever um convite de
+      // outro tenant para apontar para si mesmo com `papel: 'admin'`.
+      allow update: if isSignedIn()
+                    && resource.data.status == 'pendente'
+                    && request.resource.data.status == 'aceito'
+                    && request.resource.data.workspaceId == resource.data.workspaceId
+                    && request.resource.data.papel == resource.data.papel
+                    && request.resource.data.email == resource.data.email
+                    && request.resource.data.criadoPor == resource.data.criadoPor
+                    && request.resource.data.criadoEm == resource.data.criadoEm;
+      allow delete: if false;
     }
 
     match /flows/{flowId} {

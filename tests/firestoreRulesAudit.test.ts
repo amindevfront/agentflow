@@ -130,10 +130,53 @@ describe("firestore.rules — auditoria estrutural de multi-tenancy", () => {
     expect(TEXTO_REGRAS).not.toMatch(/allow\s+(read|write|read,\s*write)\s*:\s*if\s+true\s*;/);
   });
 
-  it("workspaces/{workspaceId}: create é a única operação que não depende de isAdminOf (onboarding, documentado)", () => {
+  it("workspaces/{workspaceId}: create é a única operação que não depende de isAdminOf (onboarding, documentado), mas exige donoUid == auth.uid", () => {
     const corpo = corpoDoMatch(TEXTO_REGRAS, "/workspaces/{workspaceId}");
-    expect(corpo).toMatch(/allow create:\s*if isSignedIn\(\);/);
+    expect(corpo).toMatch(/allow create:\s*if isSignedIn\(\)\s*&&\s*request\.resource\.data\.donoUid == request\.auth\.uid;/);
     expect(corpo).toMatch(/allow update:\s*if isAdminOf\(workspaceId\);/);
     expect(corpo).toMatch(/allow delete:\s*if false;/);
+  });
+
+  it("users/{uid}: papel/workspaceId nunca são escolha livre de quem escreve o próprio documento", () => {
+    const corpo = corpoDoMatch(TEXTO_REGRAS, "/users/{uid}");
+
+    // Regressão que isto existe para pegar: um `allow write` genérico
+    // bastando `request.auth.uid == uid` permite autopromoção a admin de
+    // QUALQUER workspace só por escrever o próprio documento — por isso a
+    // escrita tem de estar dividida em `create`/`update`, nunca um `write`
+    // único cobrindo os dois.
+    expect(corpo).not.toMatch(/allow write:\s*if isSignedIn\(\)\s*&&\s*request\.auth\.uid == uid;/);
+
+    // Criação só por onboarding self-serve (dono do próprio workspace, novo
+    // ou ainda inexistente) ou por convite pendente que corresponda
+    // exatamente a papel/workspaceId/e-mail.
+    expect(corpo).toMatch(/allow create:[\s\S]*?request\.resource\.data\.papel == 'admin'/);
+    expect(corpo).toMatch(/donoUid == request\.auth\.uid/);
+    expect(corpo).toMatch(/conviteAceitoId/);
+    expect(corpo).toMatch(/invites\/\$\(request\.resource\.data\.conviteAceitoId\)/);
+
+    // Depois de criado, papel e workspaceId são imutáveis — nenhuma
+    // atualização legítima os reescreve.
+    expect(corpo).toMatch(
+      /allow update:[\s\S]*?request\.resource\.data\.papel == resource\.data\.papel[\s\S]*?request\.resource\.data\.workspaceId == resource\.data\.workspaceId/
+    );
+    expect(corpo).toMatch(/allow delete:\s*if false;/);
+  });
+
+  it("invites/{inviteId}: só admin cria (inclusive escolher papel), e a única transição permitida é pendente -> aceito", () => {
+    const corpo = corpoDoMatch(TEXTO_REGRAS, "/invites/{inviteId}");
+
+    // Regressão que isto existe para pegar: `allow create` bastando
+    // `belongsToWorkspace` deixa qualquer `operacoes` forjar um convite de
+    // admin; `allow update` bastando `isSignedIn()` deixa qualquer usuário
+    // autenticado reescrever o papel/workspace de um convite de OUTRO
+    // tenant.
+    expect(corpo).not.toMatch(/allow create:\s*if belongsToWorkspace\(/);
+    expect(corpo).toMatch(/allow create:[\s\S]*?isAdminOf\(request\.resource\.data\.workspaceId\)/);
+
+    expect(corpo).not.toMatch(/allow update:\s*if isSignedIn\(\);/);
+    expect(corpo).toMatch(/allow update:[\s\S]*?resource\.data\.status == 'pendente'/);
+    expect(corpo).toMatch(/allow update:[\s\S]*?request\.resource\.data\.papel == resource\.data\.papel/);
+    expect(corpo).toMatch(/allow update:[\s\S]*?request\.resource\.data\.workspaceId == resource\.data\.workspaceId/);
   });
 });
