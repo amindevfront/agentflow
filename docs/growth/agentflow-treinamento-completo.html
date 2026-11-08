@@ -1,0 +1,378 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>AgentFlow — Treinamento Completo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  @page { size: A4; margin: 20mm 16mm 18mm 16mm; }
+
+  :root{
+    --ink-950:#0A0F1A; --ink-700:#2B3443; --ink-500:#5B6577; --ink-300:#9AA3B2;
+    --ink-100:#E4E9EE; --mist:#F5F7F9; --white:#FFFFFF;
+    --signal-700:#0B3FCB; --signal-600:#1450F0; --signal-500:#2C6BFF; --signal-100:#E4ECFF; --signal-50:#F2F6FB;
+    --run-ink:#FFB020; --run-bg:#FFF3DC;
+    --done-ink:#1AA16B; --done-bg:#E1F5EB;
+    --error-ink:#E5484D; --error-bg:#FBE7E7;
+    --idle-ink:#7A8AA0; --idle-bg:#EDF1F4;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Archivo',Arial,sans-serif; color:var(--ink-700); font-size:10.6pt; line-height:1.5;
+    background:var(--white);
+  }
+  .mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+  h1,h2,h3,h4{font-family:'Archivo',Arial,sans-serif;color:var(--ink-950);margin:0;}
+  p{margin:0 0 8px;}
+  section{page-break-before:always;}
+  section:first-child{page-break-before:avoid;}
+  .no-break{page-break-inside:avoid;}
+
+  /* ---------- Cover ---------- */
+  .cover{
+    page-break-before:avoid;
+    height:252mm; display:flex; flex-direction:column; justify-content:space-between;
+  }
+  .cover .kicker{font-family:'IBM Plex Mono';font-size:10pt;letter-spacing:.14em;text-transform:uppercase;color:var(--signal-600);}
+  .cover h1{font-size:40pt;font-weight:800;line-height:1.06;margin-top:10mm;max-width:140mm;}
+  .cover .sub{font-size:13pt;color:var(--ink-500);max-width:130mm;margin-top:6mm;}
+  .cover .bar{height:4px;width:28mm;background:var(--signal-600);margin-top:10mm;border-radius:2px;}
+  .toc{background:var(--mist);border-radius:10px;padding:14mm 12mm;margin-top:auto;}
+  .toc .kicker{margin-bottom:6mm;display:block;}
+  .toc ol{margin:0;padding:0;list-style:none;counter-reset:toc;}
+  .toc li{counter-increment:toc;display:flex;gap:4mm;align-items:baseline;padding:2.6mm 0;border-bottom:1px solid var(--ink-100);font-size:11pt;color:var(--ink-700);}
+  .toc li:last-child{border-bottom:none;}
+  .toc li::before{content:counter(toc, decimal-leading-zero);font-family:'IBM Plex Mono';color:var(--signal-600);font-weight:600;font-size:10pt;}
+  .cover .footer-note{font-family:'IBM Plex Mono';font-size:8.5pt;color:var(--ink-300);margin-top:6mm;}
+
+  /* ---------- Section header band ---------- */
+  .band{display:flex;align-items:baseline;gap:4mm;margin-bottom:10mm;border-bottom:2px solid var(--ink-950);padding-bottom:4mm;}
+  .band .num{font-family:'IBM Plex Mono';font-size:22pt;font-weight:600;color:var(--signal-600);}
+  .band h2{font-size:19pt;font-weight:700;}
+  .band .tag{margin-left:auto;font-family:'IBM Plex Mono';font-size:8.5pt;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-300);}
+
+  .lede{font-size:11.5pt;color:var(--ink-700);max-width:165mm;margin-bottom:8mm;}
+  .lede b{color:var(--ink-950);}
+
+  /* ---------- Pillar / feature cards ---------- */
+  .cards3{display:flex;gap:5mm;margin-bottom:6mm;}
+  .pillar{flex:1;border:1px solid var(--ink-100);border-radius:10px;padding:6mm;background:var(--white);}
+  .pillar .pill-tag{display:inline-block;font-family:'IBM Plex Mono';font-size:8pt;letter-spacing:.06em;text-transform:uppercase;padding:2px 7px;border-radius:5px;margin-bottom:3mm;}
+  .pillar h3{font-size:12.5pt;margin-bottom:2mm;}
+  .pillar p{font-size:9.6pt;color:var(--ink-500);margin:0;}
+  .pt-pain{background:var(--error-bg);color:var(--error-ink);}
+  .pt-chronic{background:var(--run-bg);color:var(--run-ink);}
+  .pt-gov{background:var(--signal-100);color:var(--signal-700);}
+
+  /* ---------- Niche table ---------- */
+  .geo-block{margin-bottom:7mm;}
+  .geo-head{display:flex;align-items:center;gap:3mm;margin-bottom:3mm;}
+  .flag{font-family:'IBM Plex Mono';font-size:8.5pt;font-weight:600;letter-spacing:.06em;text-transform:uppercase;padding:2px 8px;border-radius:5px;background:var(--ink-950);color:var(--white);}
+  .geo-head h4{font-size:11.5pt;}
+  table.niches{width:100%;border-collapse:collapse;font-size:9.3pt;margin-bottom:2mm;}
+  table.niches th{text-align:left;font-family:'IBM Plex Mono';font-size:7.6pt;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-300);font-weight:500;padding:3px 4px;border-bottom:1px solid var(--ink-100);}
+  table.niches td{padding:4px 4px;border-bottom:1px solid var(--ink-100);vertical-align:top;color:var(--ink-700);}
+  table.niches td.name{font-weight:600;color:var(--ink-950);white-space:nowrap;}
+  table.niches td.status{font-family:'IBM Plex Mono';font-size:8pt;white-space:nowrap;}
+  .st-full{color:var(--done-ink);}
+  .st-partial{color:var(--run-ink);}
+
+  /* ---------- Flow steps ---------- */
+  .flowsteps{display:flex;flex-direction:column;gap:4mm;}
+  .step{display:flex;gap:4mm;border:1px solid var(--ink-100);border-radius:10px;padding:5mm;}
+  .step .idx{font-family:'IBM Plex Mono';font-size:14pt;font-weight:700;color:var(--signal-600);min-width:10mm;}
+  .step h4{font-size:11.5pt;margin-bottom:1.5mm;}
+  .step p{font-size:9.6pt;color:var(--ink-500);margin:0;}
+  .step .where{display:inline-block;margin-top:2mm;font-family:'IBM Plex Mono';font-size:8pt;background:var(--mist);color:var(--ink-700);padding:2px 6px;border-radius:5px;}
+
+  /* ---------- Nav / buttons walkthrough ---------- */
+  .navgrid{display:flex;flex-wrap:wrap;gap:4mm;}
+  .navitem{width:calc(50% - 2mm);border:1px solid var(--ink-100);border-radius:10px;padding:5mm;}
+  .navitem h4{font-size:11pt;margin-bottom:1.5mm;display:flex;align-items:center;gap:2mm;}
+  .navitem .lock{font-family:'IBM Plex Mono';font-size:7.3pt;background:var(--idle-bg);color:var(--idle-ink);padding:1px 5px;border-radius:4px;}
+  .navitem p{font-size:9.3pt;color:var(--ink-500);margin:0 0 2mm;}
+  .navitem ul{margin:0;padding-left:4mm;font-size:9pt;color:var(--ink-700);}
+  .navitem li{margin-bottom:1mm;}
+
+  /* ---------- Pricing table ---------- */
+  table.pricing{width:100%;border-collapse:collapse;font-size:9.6pt;margin-bottom:5mm;}
+  table.pricing th{background:var(--ink-950);color:var(--white);text-align:left;padding:5px 6px;font-size:8.3pt;letter-spacing:.04em;text-transform:uppercase;font-weight:500;}
+  table.pricing td{padding:5px 6px;border-bottom:1px solid var(--ink-100);}
+  table.pricing tr:nth-child(even) td{background:var(--mist);}
+  table.pricing td.tier{font-weight:600;color:var(--ink-950);white-space:nowrap;}
+  table.pricing td.val{font-family:'IBM Plex Mono';font-weight:500;white-space:nowrap;color:var(--signal-700);}
+
+  .callout{border-left:3px solid var(--signal-600);background:var(--signal-50);border-radius:0 8px 8px 0;padding:4mm 5mm;font-size:9.6pt;color:var(--ink-700);margin-bottom:5mm;}
+  .callout b{color:var(--ink-950);}
+
+  /* ---------- Geo attack map ---------- */
+  .geo-card{border:1px solid var(--ink-100);border-radius:10px;padding:5mm 6mm;margin-bottom:4mm;}
+  .geo-card .geotitle{display:flex;align-items:baseline;gap:3mm;margin-bottom:2mm;}
+  .geo-card .geotitle h4{font-size:12pt;}
+  .geo-card .geotitle span{font-family:'IBM Plex Mono';font-size:8pt;color:var(--ink-300);}
+  .geo-card table{width:100%;font-size:9.2pt;border-collapse:collapse;}
+  .geo-card table td{padding:2px 0;vertical-align:top;}
+  .geo-card table td.k{width:30mm;font-family:'IBM Plex Mono';font-size:7.8pt;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-300);padding-right:3mm;}
+
+  /* ---------- Checklist ---------- */
+  ol.steps{margin:0;padding:0;counter-reset:ck;list-style:none;}
+  ol.steps li{counter-increment:ck;display:flex;gap:4mm;margin-bottom:4mm;}
+  ol.steps li::before{
+    content:counter(ck);flex:none;width:7mm;height:7mm;border-radius:50%;background:var(--signal-600);color:#fff;
+    font-family:'IBM Plex Mono';font-size:9pt;font-weight:600;display:flex;align-items:center;justify-content:center;
+  }
+  ol.steps .txt b{color:var(--ink-950);display:block;font-size:10.5pt;margin-bottom:1mm;}
+  ol.steps .txt p{font-size:9.4pt;color:var(--ink-500);margin:0;}
+
+  /* ---------- Status legend / honest limitations ---------- */
+  .statuslist{display:flex;flex-direction:column;gap:3mm;}
+  .statusrow{display:flex;gap:4mm;align-items:flex-start;border:1px solid var(--ink-100);border-radius:8px;padding:4mm;}
+  .statusrow .dot{flex:none;width:3mm;height:3mm;border-radius:50%;margin-top:1.5mm;}
+  .dot-done{background:var(--done-ink);}
+  .dot-run{background:var(--run-ink);}
+  .statusrow b{color:var(--ink-950);font-size:10pt;display:block;margin-bottom:1mm;}
+  .statusrow p{font-size:9.3pt;color:var(--ink-500);margin:0;}
+
+  footer.pagefoot{position:running(footer);}
+  .pf{display:flex;justify-content:space-between;font-family:'IBM Plex Mono';font-size:7.6pt;color:var(--ink-300);margin-top:10mm;border-top:1px solid var(--ink-100);padding-top:3mm;}
+</style>
+</head>
+<body>
+
+<!-- ============ CAPA ============ -->
+<section class="cover">
+  <div>
+    <span class="kicker">Material interno · Growth &amp; Produto</span>
+    <h1>AgentFlow<br>Treinamento Completo</h1>
+    <p class="sub">Tudo que foi construído até aqui: nichos atendidos, como a implementação funciona na prática, quais botões usar no dia a dia, e os valores oficiais de venda — Itajaí/SC, Brasil, Europa e EUA.</p>
+    <div class="bar"></div>
+  </div>
+  <div class="toc">
+    <span class="kicker">Sumário</span>
+    <ol>
+      <li>O que é o AgentFlow, em 60 segundos</li>
+      <li>Os nichos (gavetas) que já atendemos</li>
+      <li>Como a implementação funciona, passo a passo</li>
+      <li>Quais botões usar no dia a dia</li>
+      <li>Tabela oficial de preços (setup + recorrência)</li>
+      <li>Mapa de ataque: Itajaí/SC → Brasil → Europa → EUA</li>
+      <li>Por onde começar — sua primeira venda</li>
+      <li>O que já está pronto vs. o que falta 1 passo</li>
+    </ol>
+  </div>
+  <span class="footer-note">AgentFlow — documento vivo. Atualizar sempre que uma gaveta nova entrar no registro de módulos.</span>
+</section>
+
+<!-- ============ 1. O QUE É ============ -->
+<section>
+  <div class="band"><span class="num">01</span><h2>O que é o AgentFlow, em 60 segundos</h2><span class="tag">Posicionamento</span></div>
+  <p class="lede">O AgentFlow não é "um chatbot". É o <b>sistema soberano de atendimento e governança comercial</b> de uma empresa — ele qualifica lead e fecha agenda 24 horas por dia, <b>enquanto administra o risco</b> (jurídico, LGPD/GDPR, vazamento de dado pessoal, promessa que a empresa nunca autorizou). É essa combinação — vender mais <i>e</i> nunca deixar a IA inventar um preço, diagnóstico ou prazo — que separa o AgentFlow de qualquer automação genérica de WhatsApp.</p>
+
+  <div class="cards3 no-break">
+    <div class="pillar">
+      <span class="pill-tag pt-pain">Front-office</span>
+      <h3>Nunca perde um lead</h3>
+      <p>Neural Inbox atende e qualifica 24/7 — inclusive às 2h da manhã, fim de semana e feriado. O lead chega pronto pro time humano, com resumo executivo, sem repetir pergunta.</p>
+    </div>
+    <div class="pillar">
+      <span class="pill-tag pt-chronic">Back-office</span>
+      <h3>Elimina o trabalho invisível</h3>
+      <p>Lê contrato e aponta cláusula de risco, atualiza planilha operacional a partir da própria conversa, e cobra fatura vencida de forma humanizada — sem ninguém digitar duas vezes a mesma coisa.</p>
+    </div>
+    <div class="pillar">
+      <span class="pill-tag pt-gov">Governança</span>
+      <h3>Blindagem contra alucinação</h3>
+      <p>Nenhuma resposta de IA sai sem passar pelo guardrail certo: preço, desconto, diagnóstico ou garantia de resultado são bloqueados por desenho — nunca por sorte. Tudo auditável.</p>
+    </div>
+  </div>
+
+  <div class="callout"><b>A frase que vende:</b> "Eu não vendo chatbot. Eu vendo uma operação que nunca dorme e nunca te expõe a um risco que você não autorizou."</div>
+</section>
+
+<!-- ============ 2. NICHOS ============ -->
+<section>
+  <div class="band"><span class="num">02</span><h2>Os nichos (gavetas) que já atendemos</h2><span class="tag">14 módulos registrados</span></div>
+  <p class="lede">Cada nicho é uma <b>gaveta</b> independente: guardrail certo, calculadora de ROI certa, painel certo — plugada no mesmo motor, sem reescrever nada do núcleo. Um workspace pode ligar mais de uma gaveta ao mesmo tempo (ex.: uma clínica também liga o Document AI Vault).</p>
+
+  <div class="geo-block no-break">
+    <div class="geo-head"><span class="flag">Brasil</span><h4>Verticais nacionais — foco inicial Itajaí/Balneário Camboriú</h4></div>
+    <table class="niches">
+      <tr><th>Nicho</th><th>Dor que resolve</th><th>Status</th></tr>
+      <tr><td class="name">Construtora &amp; Imobiliária de Alto Padrão</td><td>Lead noturno de imóvel de alto ticket, risco de distrato, promessa de preço não autorizada.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">Clínicas de Saúde &amp; Estética Avançada</td><td>Triagem 24/7 sem diagnóstico/promessa de resultado; agendamento e no-show.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">Clínica Médica &amp; Laboratório de Exames</td><td>Confirmação de consulta/exame e redução de no-show.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">Logística Portuária</td><td>Rastreio de carga, desvio de SLA, exposição cambial/demurrage.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">E-commerce</td><td>Radar de risco de chargeback &amp; devolução.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">Advocacia, Contabilidade &amp; Serviços B2B</td><td>Filtra curioso, barra garantia de êxito/honorário sem análise técnica.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">Salão de Beleza &amp; Barbearia / Serviços de Luxo</td><td>Já mapeados no onboarding (presets e playbooks sugeridos).</td><td class="status st-partial">◐ preset — módulo dedicado é o próximo passo</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-block no-break">
+    <div class="geo-head"><span class="flag">EUA</span><h4>Flórida — Miami / Orlando</h4></div>
+    <table class="niches">
+      <tr><th>Nicho</th><th>Dor que resolve</th><th>Status</th></tr>
+      <tr><td class="name">US Luxury Real Estate</td><td>Triagem de comprador com capacidade financeira validada (proof of funds / pre-approval) antes de agendar showing.</td><td class="status st-full">● gaveta completa (EN)</td></tr>
+      <tr><td class="name">US Construction &amp; Remodeling</td><td>Qualificação de lead em USD, urgência, estimativa preliminar automática (não vinculante).</td><td class="status st-full">● gaveta completa (EN)</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-block no-break">
+    <div class="geo-head"><span class="flag">Portugal</span><h4>Europa — conformidade GDPR</h4></div>
+    <table class="niches">
+      <tr><th>Nicho</th><th>Dor que resolve</th><th>Status</th></tr>
+      <tr><td class="name">Clínicas &amp; Centros de Saúde (PT)</td><td>Agendamento multicanal e redução de faltas, com jurisdição GDPR marcada (não LGPD).</td><td class="status st-full">● gaveta completa (PT-PT)</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-block no-break">
+    <div class="geo-head"><span class="flag">Back-office</span><h4>Transversais — qualquer geografia/nicho acima</h4></div>
+    <table class="niches">
+      <tr><th>Nicho</th><th>Dor que resolve</th><th>Status</th></tr>
+      <tr><td class="name">Document AI Vault</td><td>Aponta cláusula crítica de contrato (rescisão, multa, renovação automática) e gera resumo executivo.</td><td class="status st-full">● lógica completa</td></tr>
+      <tr><td class="name">Sheet Reconciliation</td><td>Atualiza planilha/tabela operacional sozinha, a partir da conversa com o cliente na Neural Inbox.</td><td class="status st-full">● gaveta completa</td></tr>
+      <tr><td class="name">AR Recovery Engine</td><td>Monitora fatura/documento vencido, sugere cobrança humanizada, escala pra humano quando esgota tentativa.</td><td class="status st-full">● gaveta completa</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 3. COMO FUNCIONA A IMPLEMENTAÇÃO ============ -->
+<section>
+  <div class="band"><span class="num">03</span><h2>Como a implementação funciona, passo a passo</h2><span class="tag">Da venda ao cliente ativo</span></div>
+  <p class="lede">Nenhuma implementação exige "código" do cliente. O fluxo abaixo é o mesmo para qualquer nicho — só muda qual gaveta liga no final.</p>
+
+  <div class="flowsteps">
+    <div class="step no-break">
+      <span class="idx">1</span>
+      <div><h4>Onboarding &amp; triagem de nicho</h4><p>Cliente cria a conta, nomeia o workspace e escolhe o nicho na triagem — isso já define o guardrail, os playbooks sugeridos e (quando existe) a gaveta completa.</p><span class="where">tela: /onboarding</span></div>
+    </div>
+    <div class="step no-break">
+      <span class="idx">2</span>
+      <div><h4>Neural Inbox entra no ar</h4><p>Todo contato (WhatsApp, webchat, widget do site) passa a ser mascarado, qualificado e roteado automaticamente — com o painel certo da gaveta aparecendo sozinho na tela (ex.: triagem de carga, lembrete de consulta, estimativa de reforma).</p><span class="where">tela: /inbox</span></div>
+    </div>
+    <div class="step no-break">
+      <span class="idx">3</span>
+      <div><h4>Fluxos &amp; Execuções (automação de processo)</h4><p>Para rotinas além do chat — ex.: disparo de cobrança, checagem de prazo — o cliente cria um Fluxo com gatilho/webhook; cada rodada aparece em Execuções, já sob guardrail.</p><span class="where">telas: /flows e /runs</span></div>
+    </div>
+    <div class="step no-break">
+      <span class="idx">4</span>
+      <div><h4>Governança (visão do dono/admin)</h4><p>ROI em tempo real, auditoria imutável, fila de transbordo humano (HITL), cofre de credenciais e simulador de contingência — tudo num só lugar, acesso restrito a administrador.</p><span class="where">tela: /governance</span></div>
+    </div>
+    <div class="step no-break">
+      <span class="idx">5</span>
+      <div><h4>Portal do Cliente (opcional)</h4><p>Página pública de agendamento/contato, com link único, horário de funcionamento e tabela de serviços — o cliente final nunca precisa instalar nada.</p><span class="where">tela: /portal/[slug]</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 4. QUAIS BOTÕES USAR ============ -->
+<section>
+  <div class="band"><span class="num">04</span><h2>Quais botões usar no dia a dia</h2><span class="tag">Menu lateral do app</span></div>
+  <p class="lede">O menu lateral tem 7 itens. Três são restritos a administrador (🔒) — é assim que se protege faturamento, credencial e trilha de auditoria de um operador comum.</p>
+
+  <div class="navgrid">
+    <div class="navitem no-break"><h4>Fluxos</h4><p>Onde se cria/edita automação ligada a um gatilho (webhook, agenda).</p><ul><li>Usar quando: processo repetitivo fora do chat.</li></ul></div>
+    <div class="navitem no-break"><h4>Inbox <span class="mono" style="font-size:7.5pt;color:var(--ink-300);">(Neural Inbox)</span></h4><p>Central de atendimento — é aqui que o front-office acontece de verdade.</p><ul><li>Usar sempre: é a tela principal do dia a dia do time.</li></ul></div>
+    <div class="navitem no-break"><h4>Execuções</h4><p>Histórico de toda rodada de Fluxo — status, custo, tempo.</p><ul><li>Usar quando: checar se uma automação rodou/falhou.</li></ul></div>
+    <div class="navitem no-break"><h4>Conectores <span class="lock">🔒 admin</span></h4><p>Webhooks de saída (Connect Hub) para CRM/ERP externo.</p><ul><li>Usar quando: integrar com HubSpot, Salesforce, Sienge, RD Station, etc.</li></ul></div>
+    <div class="navitem no-break"><h4>Equipe <span class="lock">🔒 admin</span></h4><p>Convite de operador, papel (admin/operações).</p><ul><li>Usar quando: onboarding de um novo atendente.</li></ul></div>
+    <div class="navitem no-break"><h4>Configurações</h4><p>Nome do workspace e preferências gerais.</p><ul><li>Usar quando: ajuste básico de conta.</li></ul></div>
+  </div>
+
+  <div class="callout" style="margin-top:4mm;"><b>Governança 🔒 admin</b> — a tela mais importante pra fechar e renovar contrato. Abas: <b>ROI</b> (horas economizadas, custo evitado), <b>Oportunidade &amp; Pipeline</b> (quanto negócio isso gerou), <b>Guardrails</b> (o que foi bloqueado e por quê), <b>Auditoria</b> (trilha imutável), <b>Fila HITL</b> (transbordo humano pendente), <b>Cofre de Credenciais</b>, <b>LGPD/AI Act</b> e <b>Simulador de Contingência</b>. É literalmente a tela que você abre numa reunião de renovação pra mostrar dinheiro.</div>
+</section>
+
+<!-- ============ 5. PREÇOS ============ -->
+<section>
+  <div class="band"><span class="num">05</span><h2>Tabela oficial de preços</h2><span class="tag">Setup + Recorrência (MRR)</span></div>
+  <p class="lede">Preço <b>nunca</b> aparece no primeiro contato com o prospect (ver Kit de Cold Outreach) — só depois do piloto de 48h provar valor com o dado real do cliente.</p>
+
+  <table class="pricing no-break">
+    <tr><th>Camada de Setup</th><th>Escopo</th><th>Valor (BRL)</th></tr>
+    <tr><td class="tier">Simples / Local</td><td>1 gaveta, sem conector externo</td><td class="val">R$ 1.500 – 3.500</td></tr>
+    <tr><td class="tier">Profissional</td><td>Radares de nicho + Connect Hub</td><td class="val">R$ 4.000 – 9.000</td></tr>
+    <tr><td class="tier">Enterprise</td><td>Multi-workspace, SAC Shield completo</td><td class="val">R$ 10.000 – 30.000+</td></tr>
+  </table>
+
+  <table class="pricing no-break">
+    <tr><th>Camada de Recorrência (MRR)</th><th>Escopo</th><th>Valor (BRL/mês)</th></tr>
+    <tr><td class="tier">Essencial</td><td>1 gaveta ativa, Neural Inbox</td><td class="val">R$ 497 – 997</td></tr>
+    <tr><td class="tier">Profissional</td><td>Radares de nicho + Connect Hub</td><td class="val">R$ 1.497 – 2.997</td></tr>
+    <tr><td class="tier">Enterprise</td><td>Selo de conformidade + auditoria imutável</td><td class="val">R$ 4.997+</td></tr>
+  </table>
+
+  <div class="callout"><b>Referência internacional (EUA/Portugal):</b> ticket de piloto equivalente a <b>US$ 2.500 – 5.000+</b> — cobrado em USD/EUR pela moeda nativa da gaveta, convertida pelo próprio motor de ROI (BusinessROIWidget já reporta em BRL, USD, GBP ou EUR). Nunca cite valor fixo "na cara" — ancore sempre no ROI que o piloto mostrou primeiro.</div>
+</section>
+
+<!-- ============ 6. MAPA DE ATAQUE ============ -->
+<section>
+  <div class="band"><span class="num">06</span><h2>Mapa de ataque geográfico</h2><span class="tag">Onde bater em cada mercado</span></div>
+
+  <div class="geo-card no-break">
+    <div class="geotitle"><h4>Itajaí / Balneário Camboriú / Itapema</h4><span>hiperlocal</span></div>
+    <table>
+      <tr><td class="k">Alvo</td><td>Imobiliário de luxo + clínicas estéticas de altíssimo padrão, faturamento alto, atendimento humano caro e lento.</td></tr>
+      <tr><td class="k">Dor</td><td>Operacional/custo — "quanto dinheiro você queima em atendimento ineficiente, hoje."</td></tr>
+      <tr><td class="k">Gaveta</td><td>Construtora &amp; Imobiliária de Alto Padrão / Clínicas de Alto Padrão.</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-card no-break">
+    <div class="geotitle"><h4>Brasil — Nacional</h4><span>escala</span></div>
+    <table>
+      <tr><td class="k">Alvo</td><td>Empresas reguladas, qualquer porte, que já sofreram susto de compliance (LGPD, banimento de WhatsApp).</td></tr>
+      <tr><td class="k">Dor</td><td>Compliance — "um print de promessa errada de um atendente vira processo."</td></tr>
+      <tr><td class="k">Gaveta</td><td>Advocacia/Contabilidade, Logística, E-commerce + Document AI Vault/AR Recovery como upsell de back-office.</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-card no-break">
+    <div class="geotitle"><h4>Europa — Portugal</h4><span>GDPR-first</span></div>
+    <table>
+      <tr><td class="k">Alvo</td><td>Clínicas e centros de saúde que precisam de conformidade GDPR documentada, não só "boa intenção".</td></tr>
+      <tr><td class="k">Dor</td><td>Conformidade + redução de faltas (no-show) na agenda.</td></tr>
+      <tr><td class="k">Gaveta</td><td>Clínicas &amp; Centros de Saúde (PT) — jurisdição `eu-gdpr` já marcada no sistema.</td></tr>
+    </table>
+  </div>
+
+  <div class="geo-card no-break">
+    <div class="geotitle"><h4>EUA — Flórida (Miami/Orlando)</h4><span>infraestrutura soberana</span></div>
+    <table>
+      <tr><td class="k">Alvo</td><td>Luxury real estate agents e contractors de reforma/construção de alto ticket.</td></tr>
+      <tr><td class="k">Dor</td><td>Integração/vendor lock-in — encaixa em qualquer stack (HubSpot, Salesforce) via webhook assinado, sem fricção.</td></tr>
+      <tr><td class="k">Gaveta</td><td>US Luxury Real Estate / US Construction &amp; Remodeling — guardrail e textos já em inglês nativo.</td></tr>
+    </table>
+  </div>
+</section>
+
+<!-- ============ 7. POR ONDE COMEÇAR ============ -->
+<section>
+  <div class="band"><span class="num">07</span><h2>Por onde começar — sua primeira venda</h2><span class="tag">Playbook prático</span></div>
+
+  <ol class="steps">
+    <li><div class="txt"><b>Escolha 1 nicho de prova, não 14.</b><p>Comece pelo mais perto de você (Itajaí: imobiliário de luxo ou clínica estética) — você conhece a dor de cor, isso vende sozinho na conversa.</p></div></li>
+    <li><div class="txt"><b>Dispare o Kit de Cold Outreach.</b><p>Use os templates de "dor implacável" (front-office) ou "dor crônica" (back-office) — nunca abra com preço.</p></div></li>
+    <li><div class="txt"><b>Feche com a Oferta Irrecusável.</b><p>Peça 1 contrato real, 1 print de planilha ou 1 conversa de WhatsApp do prospect — devolva o piloto rodando em 48h, sem instalação nem cartão.</p></div></li>
+    <li><div class="txt"><b>Onboarding real.</b><p>Crie o workspace, escolha o nicho certo na triagem — isso já liga o guardrail e o playbook corretos.</p></div></li>
+    <li><div class="txt"><b>Mostre o número em 30 dias.</b><p>Volte na aba de Governança → ROI/Oportunidade &amp; Pipeline e mostre horas economizadas e pipeline gerado, com dado real do próprio cliente — nunca uma estimativa genérica de slide.</p></div></li>
+    <li><div class="txt"><b>Converta pro plano recorrente.</b><p>Só aí entra a tabela de preços — ancorada no número que o próprio piloto do cliente gerou, não num "valor de tabela" solto.</p></div></li>
+  </ol>
+</section>
+
+<!-- ============ 8. STATUS HONESTO ============ -->
+<section>
+  <div class="band"><span class="num">08</span><h2>O que já está pronto vs. o que falta 1 passo</h2><span class="tag">Transparência de produto</span></div>
+  <p class="lede">Isto evita prometer ao cliente algo que ainda precisa de 1 ajuste manual — Artigo IV do produto: nunca inventar capacidade que não existe ainda.</p>
+
+  <div class="statuslist">
+    <div class="statusrow no-break"><span class="dot dot-done"></span><div><b>Pronto e ao vivo:</b><p>Neural Inbox, guardrails de todas as 12 gavetas completas, ROI multi-moeda (BRL/USD/GBP/EUR), Fluxos/Execuções, Governança completa, Portal do Cliente, Sheet Reconciliation (já aparece sozinho no Inbox conforme o nicho).</p></div></div>
+    <div class="statusrow no-break"><span class="dot dot-run"></span><div><b>Lógica pronta, falta 1 linha de integração visual:</b><p>Document AI Vault e AR Recovery Engine já têm todo o motor funcionando e testado — só ainda não têm um botão fixo no menu. Hoje eles são mostrados manualmente (ou plugados numa página existente); colocar um atalho visível é o próximo passo rápido, não uma reconstrução.</p></div></div>
+    <div class="statusrow no-break"><span class="dot dot-run"></span><div><b>Ativação multi-gaveta ainda é manual:</b><p>Ligar uma gaveta extra junto do nicho principal (ex.: clínica que também quer o Document AI Vault) hoje é feito direto na configuração do banco de dados — ainda não existe um botão de "ativar módulo" dentro de Configurações. É o toggle mais valioso a construir a seguir.</p></div></div>
+  </div>
+</section>
+
+</body>
+</html>
