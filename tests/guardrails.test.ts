@@ -412,6 +412,41 @@ describe("promessa comercial não autorizada (Proteção de Caixa — Módulo Ve
       ).suspeito
     ).toBe(false);
   });
+
+  // Expansão Enterprise Global (EUA/Flórida): o mesmo guardrail, reusado
+  // pelas gavetas `us-real-estate-luxury`/`us-construction-remodeling`
+  // (`@/modules/registry`), precisa acionar sobre a saída REAL do modelo
+  // nesses workspaces — em inglês, não em português.
+  it("detects percentage discount promised, in English", () => {
+    expect(detectarPromessaComercialNaoAutorizada("I can give you a 15% discount on that unit.").suspeito).toBe(
+      true
+    );
+    expect(detectarPromessaComercialNaoAutorizada("We have a discount of 10% for cash buyers.").suspeito).toBe(
+      true
+    );
+  });
+
+  it("detects financing/payment plan promised, in English", () => {
+    expect(detectarPromessaComercialNaoAutorizada("We can get that financed over 60 months.").suspeito).toBe(true);
+    expect(detectarPromessaComercialNaoAutorizada("No down payment needed for this project.").suspeito).toBe(true);
+  });
+
+  it("detects a closed price/quote offered, in English", () => {
+    expect(detectarPromessaComercialNaoAutorizada("That's the final price, we can close at that.").suspeito).toBe(
+      true
+    );
+    expect(detectarPromessaComercialNaoAutorizada("Quoted price: $45,000 for the full remodel.").suspeito).toBe(
+      true
+    );
+  });
+
+  it("does not flag legitimate qualification talk, in English", () => {
+    expect(
+      detectarPromessaComercialNaoAutorizada(
+        "Got it — I'll connect you with our agent who can go over the available times."
+      ).suspeito
+    ).toBe(false);
+  });
 });
 
 describe("alucinação médica (Guardrail Clínico/Ético — Módulo Vertical 2)", () => {

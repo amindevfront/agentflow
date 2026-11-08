@@ -37,6 +37,11 @@ import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
 import { construirResumoExecutivoHandoff, detectarGatilhoAgendamentoVisita } from "./imobiliarioAltoPadrao";
+import { buildExecutiveHandoffSummary as buildUsRealEstateHandoffSummary, detectShowingRequest } from "./usRealEstateLuxury";
+import {
+  buildExecutiveHandoffSummary as buildUsConstructionHandoffSummary,
+  detectEstimateVisitRequest,
+} from "./usConstructionRemodeling";
 
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
@@ -364,9 +369,13 @@ export async function registrarMensagemWidgetAdmin(
   }
 
   // Módulo Vertical 2 (Clínicas de Saúde, Estética Avançada &
-  // Especialistas de Alto Padrão): o paciente confirmou o agendamento da
-  // avaliação/consulta.
-  if (setorWorkspace === "clinica-alto-padrao" && detectarGatilhoConfirmacaoAgendamento(textoMascarado)) {
+  // Especialistas de Alto Padrão) — e sua gaveta internacional
+  // `portugal-clinics-health` (mesmo idioma, português): o paciente
+  // confirmou o agendamento da avaliação/consulta.
+  if (
+    (setorWorkspace === "clinica-alto-padrao" || setorWorkspace === "portugal-clinics-health") &&
+    detectarGatilhoConfirmacaoAgendamento(textoMascarado)
+  ) {
     try {
       const resumoExecutivoClinico = construirResumoExecutivoClinico({
         nomePaciente: conversa.participante.nome,
@@ -437,6 +446,88 @@ export async function registrarMensagemWidgetAdmin(
       await refConversa.update({ slaTicketId: ticket.id });
     } catch (erro) {
       console.error("[inbox/widget] falha ao abrir handoff de confirmação de reunião de diagnóstico B2B:", erro);
+    }
+  }
+
+  // Gaveta internacional `us-real-estate-luxury` (Miami/Orlando, EUA):
+  // mesmo gatilho positivo do Vertical 1 (BR) — lead pediu showing presencial
+  // — reaproveitando o MESMO `motivoForcado`/campo `resumoExecutivo`
+  // (`ResumoExecutivoHandoff`, ver `@/lib/server/usRealEstateLuxury`): o
+  // risco e a UI de governança são estruturalmente idênticos, só o idioma
+  // dos detectores muda.
+  if (setorWorkspace === "us-real-estate-luxury" && detectShowingRequest(textoMascarado)) {
+    try {
+      const resumoExecutivo = buildUsRealEstateHandoffSummary({
+        clientName: conversa.participante.nome,
+        recentClientMessages: [...mensagensClienteRecentes, textoMascarado],
+      });
+      const ticket = await abrirTransbordoAdmin({
+        solicitacao: {
+          traceId: `widget_${messageId}`,
+          politicaId: "padrao",
+          severidade: "media",
+          veredito: "transbordo",
+          violacoes: [
+            {
+              regra: "agendamento-visita-presencial",
+              severidade: "media",
+              mensagem: "Lead requested an in-person showing — handoff with executive summary for the agent.",
+            },
+          ],
+          payloadMascarado: textoMascarado,
+        },
+        flowId: conversa.id,
+        flowNome: conversa.assunto,
+        conversationId: conversa.id,
+        motivoForcado: "agendamento-visita-presencial",
+        resumoExecutivo,
+        workspaceId: entrada.workspaceId,
+        criadoPor: "sistema",
+        clienteId: entrada.visitorId,
+      });
+      await refConversa.update({ slaTicketId: ticket.id });
+    } catch (erro) {
+      console.error("[inbox/widget] failed to open US real estate showing handoff:", erro);
+    }
+  }
+
+  // Gaveta internacional `us-construction-remodeling` (EUA/Flórida): o
+  // cliente pediu para agendar a visita presencial de estimativa — mesmo
+  // `motivoForcado` reaproveitado (uma visita de estimativa É uma visita
+  // presencial), ver `@/lib/server/usConstructionRemodeling`.
+  if (setorWorkspace === "us-construction-remodeling" && detectEstimateVisitRequest(textoMascarado)) {
+    try {
+      const resumoExecutivo = buildUsConstructionHandoffSummary({
+        clientName: conversa.participante.nome,
+        recentClientMessages: [...mensagensClienteRecentes, textoMascarado],
+      });
+      const ticket = await abrirTransbordoAdmin({
+        solicitacao: {
+          traceId: `widget_${messageId}`,
+          politicaId: "padrao",
+          severidade: "media",
+          veredito: "transbordo",
+          violacoes: [
+            {
+              regra: "agendamento-visita-presencial",
+              severidade: "media",
+              mensagem: "Client requested an on-site estimate visit — handoff with executive summary for the estimator.",
+            },
+          ],
+          payloadMascarado: textoMascarado,
+        },
+        flowId: conversa.id,
+        flowNome: conversa.assunto,
+        conversationId: conversa.id,
+        motivoForcado: "agendamento-visita-presencial",
+        resumoExecutivo,
+        workspaceId: entrada.workspaceId,
+        criadoPor: "sistema",
+        clienteId: entrada.visitorId,
+      });
+      await refConversa.update({ slaTicketId: ticket.id });
+    } catch (erro) {
+      console.error("[inbox/widget] failed to open US construction estimate-visit handoff:", erro);
     }
   }
 

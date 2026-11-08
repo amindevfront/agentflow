@@ -213,7 +213,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
               valor={formatarPercentual(snapshot.taxaZeroTouch)}
               detalhe={`${snapshot.execucoesComIntervencao} de ${snapshot.execucoesConcluidas + snapshot.execucoesFalhas} exigiram toque humano`}
               tom={tomAutonomia(snapshot.taxaZeroTouch)}
-              dica="Execuções terminais concluídas sem transbordo e sem intervenção registrada, divididas pelo total de execuções terminais (concluídas + falhas). Execuções em andamento não entram no cálculo."
+              dica="Fração do Time de Agentes Digitais que resolveu o caso de ponta a ponta sem precisar de Supervisão HITL — execuções terminais concluídas sem transbordo e sem intervenção registrada, divididas pelo total de execuções terminais (concluídas + falhas). Execuções em andamento não entram no cálculo."
             />
           </div>
 
@@ -231,7 +231,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
                   rotulo="Custo por execução"
                   valor={moedaDoValor(snapshot.custoPorExecucaoBrl)}
                   detalhe="IA + revisão + plataforma"
-                  dica="Custo total da automação dividido pelas execuções terminais do período."
+                  dica="Custo total de operar o Time de Agentes Digitais (IA + Supervisão HITL + plataforma) dividido pelas execuções terminais do período."
                 />
                 <MetricCard
                   rotulo="Taxa de sucesso"

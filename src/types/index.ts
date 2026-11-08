@@ -10,6 +10,7 @@ export * from "./roi";
 export * from "./inbox";
 export * from "./sacShield";
 export * from "./connectors";
+export * from "./backOffice";
 
 import type { RunCostMetrics } from "./roi";
 import type { GuardrailPolicy } from "./guardrails";
@@ -39,6 +40,15 @@ export interface AppUser {
  * (ver `src/lib/niches.ts`). Determina os playbooks sugeridos exibidos
  * no estado vazio de Fluxos — nunca renomeia navegação ou componentes
  * do design system (ver .claude/rules/design-system-compliance.md).
+ *
+ * Desde a Expansão Full-Scope Enterprise Operations, este tipo é também a
+ * CHAVE GERAL do Registro de Módulos (`@/modules/registry`) — cobre tanto
+ * verticais de INDÚSTRIA/front-office (ex.: `construtora-imobiliaria`,
+ * entram via `Workspace.setor`) quanto gavetas FUNCIONAIS de back-office
+ * (ex.: `document-ai-vault`, entram via `Workspace.modulosAtivos` — nunca
+ * via `setor`, já que não são um "ramo de negócio"). `obterModulosAtivos`
+ * (`@/modules/registry`) é o único ponto que precisa saber dessa distinção;
+ * em todo o resto do código, um `NicheKey` continua só "o id de uma gaveta".
  */
 export type NicheKey =
   | "construtora-imobiliaria"
@@ -49,6 +59,24 @@ export type NicheKey =
   | "salao-beleza"
   | "clinica-medica-exames"
   | "advocacia-contabilidade"
+  // --- Expansão Enterprise Global (EUA/Flórida e Portugal) ---
+  // Empreiteiras/reformas de alto padrão nos EUA (Flórida) — qualificação de
+  // leads em USD, follow-up agressivo e estimativa preliminar automatizada.
+  | "us-construction-remodeling"
+  // Imobiliárias de luxo em Miami/Orlando — triagem de compradores com
+  // capacidade financeira validada (proof of funds / pre-approval).
+  | "us-real-estate-luxury"
+  // Clínicas e centros de saúde em Portugal/Europa — GDPR, agendamento
+  // multicanal e redução de faltas. Ver `@/lib/jurisdiction` (`eu-gdpr`).
+  | "portugal-clinics-health"
+  // --- Full-Scope Enterprise Operations (gavetas de back-office, não um nicho de indústria) ---
+  // Gestão inteligente de documentos/contratos: extração de cláusulas
+  // críticas, PII Shield e resumo executivo — ver `@/lib/documentAiVault`.
+  | "document-ai-vault"
+  // Conciliação de planilhas via IA, integrada à Neural Inbox — ver `@/lib/sheetReconciliation`.
+  | "sheet-reconciliation"
+  // Motor autônomo de cobrança/follow-up de papelada vencida, via HITL — ver `@/lib/server/arRecoveryEngine`.
+  | "ar-recovery-engine"
   | "outros";
 
 /**
@@ -100,6 +128,17 @@ export interface Workspace {
   guardrailOverrides?: Partial<GuardrailPolicy>;
   /** Presença indica que o quiz já foi respondido — controla a reexibição do modal. */
   quizRespondidoEm?: string;
+
+  /**
+   * Registro de Módulos por Workspace (Gavetas) — quais Módulos Verticais
+   * (ver `@/modules/registry`) estão ativos neste tenant. `undefined`/vazio:
+   * comportamento herdado, só a gaveta de `setor` (se houver) é considerada
+   * ativa — nenhum workspace já existente muda de comportamento por este
+   * campo existir. Presente: substitui `setor` como fonte de módulos ativos,
+   * permitindo mais de uma gaveta ligada ao mesmo tempo (ex.: um workspace
+   * que atende tanto Imobiliário quanto Advocacia) sem alterar o core.
+   */
+  modulosAtivos?: NicheKey[];
 
   /**
    * AgentFlow Connect Hub — webhook de saída configurado para o workspace.

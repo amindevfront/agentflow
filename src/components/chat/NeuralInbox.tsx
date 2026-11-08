@@ -53,12 +53,10 @@ import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, 
 import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { obterIdsModulosAtivos } from "@/modules/registry";
+import { obterInboxExtras } from "@/modules/registry.client";
+import type { InboxModuleContext } from "@/modules/types";
 import { BusinessROIWidget } from "@/components/BusinessROIWidget";
-import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
-import { AppointmentRemindersPanel } from "@/components/niche/AppointmentRemindersPanel";
-import { CargoTriagePanel } from "@/components/niche/CargoTriagePanel";
-import { ChargebackRiskPanel } from "@/components/niche/ChargebackRiskPanel";
-import { DistratoRiskPanel } from "@/components/niche/DistratoRiskPanel";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -474,6 +472,29 @@ export function NeuralInbox() {
     setResposta((atual) => (atual.trim().length > 0 ? `${atual}\n${texto}` : texto));
   }
 
+  // Gavetas (Módulos Verticais) ativas deste workspace e os componentes de
+  // UI que elas injetam na Neural Inbox — substitui o antigo `if` por
+  // `workspace?.setor` que vivia hardcoded aqui (ver `@/modules/registry`).
+  const idsModulosAtivos = useMemo(() => obterIdsModulosAtivos(workspace), [workspace]);
+  const inboxExtrasDasGavetas = useMemo(() => obterInboxExtras(idsModulosAtivos), [idsModulosAtivos]);
+  const contextoModulo: InboxModuleContext = useMemo(() => {
+    // Mais recente primeiro — mesma ordem que os extratores multi-mensagem
+    // das gavetas internacionais esperam (`@/lib/server/usRealEstateLuxury`,
+    // `@/lib/server/usConstructionRemodeling`); limitado a 5 para não
+    // recalcular sobre o histórico inteiro de conversas longas.
+    const mensagensClienteRecentes = [...mensagens]
+      .reverse()
+      .filter((m) => m.remetente === "cliente")
+      .slice(0, 5)
+      .map((m) => m.texto);
+    return {
+      conversaSelecionada: selecionada ? { id: selecionada.id, nome: selecionada.participante.nome } : null,
+      inserirNaResposta,
+      ultimaMensagemCliente: mensagensClienteRecentes[0],
+      mensagensClienteRecentes,
+    };
+  }, [selecionada, mensagens]);
+
   async function handleCriarConversa() {
     if (novoNomeCliente.trim().length === 0 || novoContatoCliente.trim().length === 0) return;
     setProcessando(true);
@@ -526,7 +547,7 @@ export function NeuralInbox() {
             receitaMadrugada.totalConversas > 0 ? `${custoEvitadoMadrugadaFormatado} evitados` : "fora do expediente"
           }`}
           tom={receitaMadrugada.totalConversas > 0 ? "marca" : "neutro"}
-          dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem atendimento automatizado, teria esperado o próximo dia útil ou sido perdida. O valor evitado usa a mesma fórmula do painel de ROI (minutos manuais × custo-hora configurados), nunca um valor de negócio estimado."
+          dica="Conversas resolvidas cujo primeiro contato ocorreu fora do horário comercial (padrão: 8h–18h, seg. a sex.) — demanda que, sem o Time de Agentes Digitais de prontidão 24/7, teria esperado o próximo dia útil ou sido perdida. O valor evitado usa a mesma fórmula do painel de ROI (minutos manuais × custo-hora configurados), nunca um valor de negócio estimado."
           acao={
             receitaMadrugada.totalConversas > 0 ? <PulseBadge label={custoEvitadoMadrugadaFormatado} /> : undefined
           }
@@ -539,28 +560,13 @@ export function NeuralInbox() {
           atendimento diário (ver Dual-Layer Workspace View, `@/components/layout/navAcesso`). */}
       <BusinessROIWidget compacto />
 
-      {/* Refinamento funcional por nicho (Onboarding Cognitivo): cada módulo
-          só aparece no setor a que se aplica — nenhum workspace vê os três. */}
-      {workspace?.setor === "construtora-imobiliaria" && (
-        <>
-          <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
-            <NicheAttachmentsPanel onInsert={inserirNaResposta} />
-          </section>
-          <DistratoRiskPanel />
-        </>
-      )}
-      {(workspace?.setor === "clinica-alto-padrao" || workspace?.setor === "clinica-medica-exames") && (
-        <AppointmentRemindersPanel
-          conversaSelecionada={selecionada ? { id: selecionada.id, nome: selecionada.participante.nome } : null}
-        />
-      )}
-      {workspace?.setor === "logistica-portuaria" && (
-        <CargoTriagePanel
-          textoParaExtrairCodigo={[...mensagens].reverse().find((m) => m.remetente === "cliente")?.texto}
-          onInsertResposta={inserirNaResposta}
-        />
-      )}
-      {workspace?.setor === "ecommerce" && <ChargebackRiskPanel />}
+      {/* Refinamento funcional por Módulo Vertical (Gaveta): cada gaveta
+          injeta sua própria UI aqui via `@/modules/registry` — nenhum `if`
+          por nicho nesta tela. Workspaces sem `setor`/`modulosAtivos`
+          correspondentes a uma gaveta registrada não veem nada extra. */}
+      {inboxExtrasDasGavetas.map((InboxExtras, indice) => (
+        <InboxExtras key={indice} {...contextoModulo} />
+      ))}
 
       {erro && <p className="text-xs text-state-error">{erro}</p>}
 

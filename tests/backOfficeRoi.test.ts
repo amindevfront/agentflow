@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+import { MINUTOS_ECONOMIZADOS_POR_ORIGEM, construirFlowRunGanhoOperacional } from "@/lib/server/backOfficeRoi";
+
+const AGORA = new Date("2026-03-15T12:00:00.000Z");
+
+describe("MINUTOS_ECONOMIZADOS_POR_ORIGEM", () => {
+  it("define um valor positivo e conservador para cada gaveta de back-office", () => {
+    for (const minutos of Object.values(MINUTOS_ECONOMIZADOS_POR_ORIGEM)) {
+      expect(minutos).toBeGreaterThan(0);
+      expect(minutos).toBeLessThan(60);
+    }
+  });
+});
+
+describe("construirFlowRunGanhoOperacional", () => {
+  it("monta um FlowRun concluído, zero-touch, com os minutos da tabela de referência (não do chamador)", () => {
+    const run = construirFlowRunGanhoOperacional({
+      workspaceId: "ws-1",
+      origem: "document-ai-vault",
+      descricao: "Análise de contrato X",
+      agora: AGORA,
+    });
+
+    expect(run.workspaceId).toBe("ws-1");
+    expect(run.status).toBe("concluido");
+    expect(run.steps).toHaveLength(1);
+    expect(run.steps[0].status).toBe("concluido");
+    expect(run.metrica?.minutosManuaisEvitados).toBe(MINUTOS_ECONOMIZADOS_POR_ORIGEM["document-ai-vault"]);
+    expect(run.metrica?.intervencaoHumana).toBe(false);
+    expect(run.metrica?.tokensEntrada).toBe(0);
+    expect(run.metrica?.tokensSaida).toBe(0);
+  });
+
+  it("nunca deixa o chamador inflar o próprio ganho operacional — minutos vêm sempre da tabela do servidor", () => {
+    const run = construirFlowRunGanhoOperacional({
+      workspaceId: "ws-1",
+      origem: "sheet-reconciliation",
+      descricao: "Registro reconciliado",
+      agora: AGORA,
+    });
+    expect(run.metrica?.minutosManuaisEvitados).toBe(MINUTOS_ECONOMIZADOS_POR_ORIGEM["sheet-reconciliation"]);
+  });
+
+  it("gera um id/flowId distinto por chamada, mesmo para a mesma origem", () => {
+    const run1 = construirFlowRunGanhoOperacional({ workspaceId: "ws-1", origem: "ar-recovery-engine", descricao: "a", agora: AGORA });
+    const run2 = construirFlowRunGanhoOperacional({ workspaceId: "ws-1", origem: "ar-recovery-engine", descricao: "b", agora: AGORA });
+    expect(run1.id).not.toBe(run2.id);
+  });
+});

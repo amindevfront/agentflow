@@ -122,6 +122,66 @@ export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
       "resultado). Quando perguntado sobre prazo, resultado ou honorário, explique que depende da análise " +
       "técnica do caso e direcione para a reunião de diagnóstico.",
   },
+  // --- Expansão Enterprise Global (EUA/Flórida) ---
+  //
+  // Escritas em INGLÊS, deliberadamente: o lead real deste mercado se
+  // comunica em inglês, e o detector de guardrail que sustenta `restricao`
+  // (`detectarPromessaComercialNaoAutorizada`) já tem o equivalente em
+  // inglês dos mesmos três sinais (ver `@/lib/guardrails/consistency`) — a
+  // instrução no prompt e o guardrail que a reforça precisam falar a mesma
+  // língua do lead para ambos funcionarem de verdade em produção.
+  "us-real-estate-luxury": {
+    foco:
+      "buyer qualification for luxury real estate listings in Miami/Orlando — validating financial capacity " +
+      "(proof of funds, mortgage pre-approval, cash buyer) before booking a showing",
+    acaoPrincipal:
+      "qualify the buyer with the structured protocol below and schedule an in-person showing once financial " +
+      "capacity is confirmed",
+    tomAtendimento: "polished, consultative, and responsive — never pushy or robotic",
+    protocoloQualificacao:
+      "Conduct the qualification conversationally (never like a form) until you gather: (1) proof of financial " +
+      "capacity — proof of funds, mortgage pre-approval, or cash-buyer status; (2) approximate budget range " +
+      "(e.g. \"between $800k and $1.2M\") — never ask for or repeat an exact dollar figure; (3) property type " +
+      "or neighborhood of interest. If the lead asks to schedule a showing, confirm interest and let them know " +
+      "an agent will follow up with available times — never repeat questions already answered.",
+    restricao:
+      "Never quote an exact closing price, a percentage discount, or financing/payment terms — these require " +
+      "prior approval from leadership. When asked about price, respond with an approximate range and direct " +
+      "the final negotiation to the human agent.",
+  },
+  "us-construction-remodeling": {
+    foco:
+      "high-value lead qualification for remodeling/construction projects in Florida — project scope, budget " +
+      "in USD, and urgency, at any hour",
+    acaoPrincipal:
+      "qualify the project with the structured protocol below and schedule an in-person estimate visit — " +
+      "never quote a final/binding price before that visit",
+    tomAtendimento: "direct, responsive, and professional — prioritize urgent requests",
+    protocoloQualificacao:
+      "Conduct the qualification conversationally until you gather: (1) project type (kitchen remodel, " +
+      "bathroom remodel, roofing, addition, full renovation, deck/patio); (2) approximate square footage, when " +
+      "the client knows it; (3) urgency (ASAP, this month, no rush). If the client asks for pricing, explain " +
+      "that a preliminary, non-binding range can be shared, and a final quote requires an on-site visit. If " +
+      "the client confirms the estimate visit, let them know the estimator will follow up with available times.",
+    restricao:
+      "Never quote a final/closed price, a percentage discount, or financing/payment terms without prior " +
+      "approval from leadership — only a preliminary, clearly non-binding range after project type and square " +
+      "footage are known. When asked about final pricing, explain it depends on the on-site visit.",
+  },
+  // Português: Portugal também fala português — mesmo idioma do Vertical 2
+  // (BR), perfil próprio só pela diferença de regime legal (GDPR) e escopo
+  // (clínicas/centros de saúde em geral, não necessariamente "alto padrão").
+  "portugal-clinics-health": {
+    foco: "agendamento multicanal de consultas/exames e redução de faltas, em conformidade com o RGPD (GDPR)",
+    acaoPrincipal:
+      "confirmar a presença no horário agendado e reduzir faltas com lembretes claros — nunca diagnosticar ou " +
+      "garantir resultado de procedimento",
+    tomAtendimento: "profissional, claro e acolhedor",
+    restricao:
+      "Nunca forneça diagnóstico médico nem garanta resultado de procedimento — essas decisões exigem avaliação " +
+      "presencial com o especialista. Dados pessoais de saúde seguem o RGPD (UE): minimização, finalidade " +
+      "explícita e direito de apagamento do titular.",
+  },
 };
 
 /**

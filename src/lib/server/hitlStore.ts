@@ -25,6 +25,7 @@ import type {
   HandoffTicket,
   ResumoExecutivoB2B,
   ResumoExecutivoClinico,
+  ResumoExecutivoCobranca,
   ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
@@ -90,6 +91,7 @@ async function notificarConnectHub(ticket: HandoffTicket): Promise<void> {
         resumoExecutivo: ticket.resumoExecutivo ?? null,
         resumoExecutivoClinico: ticket.resumoExecutivoClinico ?? null,
         resumoExecutivoB2B: ticket.resumoExecutivoB2B ?? null,
+        resumoExecutivoCobranca: ticket.resumoExecutivoCobranca ?? null,
         criadoEm: ticket.criadoEm,
         slaExpiraEm: ticket.slaExpiraEm,
       },
@@ -170,6 +172,8 @@ export interface ConstruirTicketAdminInput {
   resumoExecutivoClinico?: ResumoExecutivoClinico;
   /** Handoff com Resumo Executivo B2B — espelha `ConstruirTicketInput` do lado cliente. */
   resumoExecutivoB2B?: ResumoExecutivoB2B;
+  /** Handoff com Resumo Executivo de Cobrança (AR Recovery Engine) — ver `@/lib/server/arRecoveryEngine`. */
+  resumoExecutivoCobranca?: ResumoExecutivoCobranca;
   /**
    * Identidade do cliente já correlacionada entre canais (ver "No Invention"
    * em `@/lib/server/episodicMemory`) — usada SOMENTE para o Ghost Coach
@@ -221,6 +225,7 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     ...(entrada.resumoExecutivo ? { resumoExecutivo: entrada.resumoExecutivo } : {}),
     ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
     ...(entrada.resumoExecutivoB2B ? { resumoExecutivoB2B: entrada.resumoExecutivoB2B } : {}),
+    ...(entrada.resumoExecutivoCobranca ? { resumoExecutivoCobranca: entrada.resumoExecutivoCobranca } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

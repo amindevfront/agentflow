@@ -19,11 +19,13 @@ import { HealthScorePanel } from "@/components/governance/HealthScorePanel";
 import { LgpdReadinessPanel } from "@/components/governance/LgpdReadinessPanel";
 import { OpexTaxShieldPanel } from "@/components/governance/OpexTaxShieldPanel";
 import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
+import { RoiOpportunityPanel } from "@/components/governance/RoiOpportunityPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { drenarFilaAuditoria } from "@/lib/auditLog";
 
 type Aba =
+  | "oportunidade"
   | "transbordo"
   | "guardrails"
   | "compliance"
@@ -36,6 +38,7 @@ type Aba =
   | "lgpd";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
+  { valor: "oportunidade", label: "Oportunidade & Pipeline" },
   { valor: "transbordo", label: "Transbordo" },
   { valor: "guardrails", label: "Guardrails" },
   { valor: "compliance", label: "Compliance" },
@@ -49,7 +52,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
 ];
 
 export default function GovernancePage() {
-  const [aba, setAba] = useState<Aba>("transbordo");
+  const [aba, setAba] = useState<Aba>("oportunidade");
 
   useEffect(() => {
     // Eventos de auditoria que ficaram presos na fila local (queda de rede,
@@ -75,6 +78,7 @@ export default function GovernancePage() {
         />
       </nav>
 
+      {aba === "oportunidade" && <RoiOpportunityPanel />}
       {aba === "transbordo" && <HandoffQueuePanel />}
       {aba === "guardrails" && <GuardrailInspectorPanel />}
       {aba === "compliance" && <CompliancePreventivoPanel />}

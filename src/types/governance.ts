@@ -63,7 +63,17 @@ export type HandoffReason =
    * diagnóstico — ticket carrega `resumoExecutivoB2B` para a equipe de
    * sócios não repetir perguntas já respondidas.
    */
-  | "confirmacao-reuniao-diagnostico-b2b";
+  | "confirmacao-reuniao-diagnostico-b2b"
+  /**
+   * AR Recovery Engine (Gaveta de Back-office): o agente autônomo de
+   * cobrança (`@/lib/server/arRecoveryEngine`) esgotou as tentativas
+   * automáticas de follow-up humanizado sem resolução — diferente dos
+   * motivos de agendamento acima (gatilho positivo), este é um
+   * ESCALONAMENTO: algo precisa de decisão humana (disputa do devedor,
+   * inadimplência persistente, exceção a avaliar). Ticket carrega
+   * `resumoExecutivoCobranca`.
+   */
+  | "cobranca-documento-pendente";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 
@@ -123,6 +133,22 @@ export interface ResumoExecutivoB2B {
   /** Porte aproximado do caso/empresa, em categoria (ex.: "pequena empresa", "startup") — nunca valor exato. */
   porteCaso?: string | null;
   objetivoMapeado?: string | null;
+}
+
+/**
+ * Handoff com Resumo Executivo de Cobrança (Gaveta de Back-office: AR
+ * Recovery Engine) — card pronto para o operador de cobrança assumir o
+ * caso sem precisar reconstruir o histórico de tentativas. Mesmo princípio
+ * dos outros `ResumoExecutivo*` (campo ausente fica `null`/ausente, nunca
+ * inventado — Artigo IV) — ver `@/lib/server/arRecoveryEngine`.
+ */
+export interface ResumoExecutivoCobranca {
+  devedorNome?: string | null;
+  referenciaDocumento?: string | null;
+  diasAtraso?: number | null;
+  tentativasAnteriores?: number | null;
+  /** Faixa por extenso, nunca o valor exato em claro — mesmo princípio de `ResumoExecutivoHandoff.faixaOrcamento`. */
+  faixaValor?: string | null;
 }
 
 /**
@@ -197,6 +223,8 @@ export interface HandoffTicket {
   resumoExecutivoClinico?: ResumoExecutivoClinico;
   /** Presente apenas em tickets de `motivo: "confirmacao-reuniao-diagnostico-b2b"` — ver `ResumoExecutivoB2B`. */
   resumoExecutivoB2B?: ResumoExecutivoB2B;
+  /** Presente apenas em tickets de `motivo: "cobranca-documento-pendente"` — ver `ResumoExecutivoCobranca`. */
+  resumoExecutivoCobranca?: ResumoExecutivoCobranca;
   /** Presente apenas em tickets originados da Neural Inbox (`conversationId` definido) — ver `SugestaoGhostCoach`. */
   ghostCoach?: SugestaoGhostCoach;
 }

@@ -140,7 +140,7 @@ export function SimuladorContingenciaPanel() {
               valor={moedaDoValor(simulacao.custoInerciaProjetadoBrl)}
               detalhe={`em ${horizonte} meses, se a operação voltasse a ser 100% humana`}
               tom="erro"
-              dica="Custo humano evitado no mês de referência, projetado linearmente pelo horizonte escolhido — o que a empresa voltaria a pagar se desistisse da automação. Nenhuma curva de crescimento é assumida."
+              dica="Custo humano evitado no mês de referência, projetado linearmente pelo horizonte escolhido — o que a empresa voltaria a pagar se desligasse o Time de Agentes Digitais e voltasse à folha 100% humana. Nenhuma curva de crescimento é assumida."
             />
             <MetricCard
               rotulo="Ganho líquido de caixa projetado"
@@ -165,8 +165,8 @@ export function SimuladorContingenciaPanel() {
                 {formatarHoras(simulacao.horasInerciaProjetadas)} de trabalho repetitivo, no horizonte de {horizonte}{" "}
                 meses, não precisariam ser cobertas por operadores humanos em jornada extenuante ou hora extra —
                 redução direta de exposição a litígios trabalhistas e ao desgaste operacional que costuma precedê-los.
-                Estimativa derivada das horas efetivamente automatizadas no período (ver detalhamento em OpEx &amp; Tax
-                Shield); não substitui orientação jurídica.
+                Estimativa derivada das horas efetivamente absorvidas pelo Time de Agentes Digitais no período (ver
+                detalhamento em OpEx &amp; Tax Shield); não substitui orientação jurídica.
               </p>
             </div>
           </div>

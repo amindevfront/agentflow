@@ -28,6 +28,8 @@
 import type { Conversation, HandoffTicket, NicheKey, RoiPeriodo } from "@/types";
 import { foraDoExpediente, type JanelaExpediente } from "@/lib/inbox/revenueRescue";
 import { periodoMesAtual } from "@/lib/roi";
+import { NICHE_ORDER } from "@/lib/niches";
+import { construirTabelaPipelinePadrao } from "@/modules/registry";
 import { MOTIVOS_AGENDAMENTO_VALIDADO } from "./hitlStore";
 import { firestoreAdmin } from "./firebaseAdmin";
 
@@ -51,18 +53,22 @@ export const JANELA_MADRUGADA: JanelaExpediente = {
  * próprio ticket médio real (mesmo espírito de `ROI_CONFIG_PADRAO` em
  * `@/lib/roi`). Nichos sem protocolo de confirmação de agendamento
  * implementado ficam em 0 — nenhum valor é inventado para eles.
+ *
+ * Derivado do Registro de Módulos Verticais (`@/modules/registry`): o valor
+ * de cada gaveta é definido uma única vez em `VerticalModuleDefinition.valorMedioPipelineBrl`
+ * e esta tabela só o projeta no formato `Record<NicheKey, number>` que os
+ * consumidores abaixo já esperavam antes desta gaveta existir — mesmos
+ * valores de sempre, fonte única agora.
+ *
+ * Escopo deliberado: as gavetas de back-office (`document-ai-vault`,
+ * `sheet-reconciliation`, `ar-recovery-engine`) NÃO entram aqui — `NICHE_ORDER`
+ * (fonte desta tabela) só lista nichos de INDÚSTRIA, e `obterMetricasPipelineVerticalAdmin`
+ * abaixo só lê `Workspace.setor` (nunca `modulosAtivos`). Isso é correto, não
+ * uma lacuna: back-office não gera OPORTUNIDADE DE VENDA (este painel), gera
+ * HORAS ECONOMIZADAS — métrica que já flui para `@/lib/roi`/`BusinessROIWidget`
+ * via `@/lib/server/backOfficeRoi` (um `FlowRun` concluído por operação).
  */
-export const VALOR_MEDIO_PIPELINE_PADRAO_BRL: Record<NicheKey, number> = {
-  "construtora-imobiliaria": 15_000, // Comissão média estimada por visita confirmada a um imóvel de alto padrão.
-  "clinica-alto-padrao": 3_500, // Ticket médio estimado de um procedimento estético/médico de alto padrão.
-  "advocacia-contabilidade": 8_000, // Valor médio estimado de um engajamento profissional B2B.
-  "logistica-portuaria": 0,
-  "servicos-luxo": 0,
-  ecommerce: 0,
-  "salao-beleza": 0,
-  "clinica-medica-exames": 0,
-  outros: 0,
-};
+export const VALOR_MEDIO_PIPELINE_PADRAO_BRL: Record<NicheKey, number> = construirTabelaPipelinePadrao(NICHE_ORDER);
 
 function dentroDoPeriodo(iso: string | undefined, periodo: RoiPeriodo): boolean {
   if (!iso) return false;

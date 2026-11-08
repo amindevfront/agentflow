@@ -90,6 +90,7 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "confirmacao-agendamento-clinico": "Confirmação de agendamento clínico",
   "exito-nao-autorizado": "Garantia de êxito não autorizada (Guardrail Ético-Profissional)",
   "confirmacao-reuniao-diagnostico-b2b": "Confirmação de reunião de diagnóstico B2B",
+  "cobranca-documento-pendente": "Cobrança/documento pendente escalado (AR Recovery Engine)",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {

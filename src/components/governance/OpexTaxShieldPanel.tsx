@@ -3,16 +3,21 @@
 // OpEx & Tax Shield Calculator.
 //
 // Responde a uma pergunta específica do empresário, diferente das três que o
-// `BusinessROIWidget` já responde: "se eu tivesse contratado CLT para fazer
-// este volume de atendimento, quanto do custo-hora seria salário e quanto
-// seria encargo patronal (INSS, FGTS, 13º, férias, provisão de rescisão) —
-// e quanto disso eu NÃO preciso desembolsar porque a automação fez o
-// trabalho?".
+// `BusinessROIWidget` já responde: "se eu tivesse contratado uma folha humana
+// para fazer este volume de atendimento, quanto do custo-hora seria salário e
+// quanto seria encargo patronal (INSS, FGTS, 13º, férias, provisão de
+// rescisão; ou FICA/FUTA/SUTA; ou TSU; ou overhead de contractor 1099) — e
+// quanto disso eu NÃO preciso desembolsar porque o Time de Agentes Digitais,
+// sob Supervisão HITL, fez o trabalho?".
 //
 // Todo o cálculo vive em `calcularRoi` (`@/lib/roi`), que já decompõe
-// `custoHumanoEvitadoBrl` nos componentes CLT via `composicaoClt`. Este
-// componente é apenas apresentação — mesma separação de responsabilidade do
-// `BusinessROIWidget`, com a mesma fonte de dados em tempo real (Firestore).
+// `custoHumanoEvitadoBrl` nos quatro regimes (CLT, Payroll US/UK, Contractor
+// 1099, Segurança Social PT) em paralelo, sempre. Este componente é apenas
+// apresentação — mesma separação de responsabilidade do `BusinessROIWidget`,
+// com a mesma fonte de dados em tempo real (Firestore). `APRESENTACAO_REGIME`
+// abaixo é o único lugar que decide qual rótulo/linha vai com qual regime —
+// nenhum ramo de regime fica de fora do seletor nem herda o rótulo errado de
+// outro (ver nota de correção abaixo).
 
 import { useEffect, useMemo, useState } from "react";
 import type {
@@ -47,11 +52,14 @@ const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
   { valor: "BRL", label: "R$" },
   { valor: "USD", label: "US$" },
   { valor: "GBP", label: "£" },
+  { valor: "EUR", label: "€" },
 ];
 
 const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
   { valor: "clt-br", label: "CLT (Brasil)" },
-  { valor: "payroll-us-uk", label: "Payroll (EUA/UK)" },
+  { valor: "payroll-us-uk", label: "Payroll Tax (EUA/UK)" },
+  { valor: "1099-us", label: "Contractor 1099 (EUA)" },
+  { valor: "seguranca-social-pt", label: "Segurança Social (Portugal)" },
 ];
 
 interface LinhaEncargo {
@@ -59,6 +67,127 @@ interface LinhaEncargo {
   valorBrl: number;
   percentual: number;
 }
+
+/**
+ * Centraliza rótulo e decomposição por regime — um só lugar para os quatro,
+ * em vez de uma ternária `ehClt` que (antes desta correção) tratava
+ * "qualquer regime que não é CLT" como Payroll. Isso fazia um workspace
+ * configurado para `1099-us` ou `seguranca-social-pt` (ambos calculados de
+ * verdade em `calcularRoi`, só nunca selecionáveis aqui) exibir rótulos
+ * errados — FICA patronal/FUTA/SUTA para um contractor americano, ou para
+ * Portugal, que não têm nenhum desses encargos.
+ */
+interface ApresentacaoRegime {
+  /** Usado no subtítulo do cabeçalho: "...o que o custo humano evitado representaria se fosse {tipoFolha}". */
+  tipoFolha: string;
+  rotuloSalario: string;
+  rotuloEncargos: string;
+  /** Usado no título do detalhamento: "Detalhamento dos encargos {rotuloDetalhamento} poupados". */
+  rotuloDetalhamento: string;
+  notaSalario: string;
+  notaEncargos: string;
+  notaReferencia: string;
+  salarioBaseEvitado: (snapshot: RoiSnapshot) => number;
+  encargosTotais: (snapshot: RoiSnapshot) => number;
+  linhas: (snapshot: RoiSnapshot, config: RoiConfig) => LinhaEncargo[];
+}
+
+const APRESENTACAO_REGIME: Record<RegimeEncargos, ApresentacaoRegime> = {
+  "clt-br": {
+    tipoFolha: "uma folha CLT",
+    rotuloSalario: "Equivalente salarial CLT evitado",
+    rotuloEncargos: "Encargos patronais evitados (CLT)",
+    rotuloDetalhamento: "patronais (CLT)",
+    notaSalario:
+      "Fração do custo humano evitado correspondente apenas ao salário base — sem INSS, FGTS, 13º, férias ou rescisão.",
+    notaEncargos: "Soma de INSS patronal, FGTS, 13º salário, férias e provisão de rescisão — ver detalhamento abaixo.",
+    notaReferencia: "Estimativa de referência do regime geral (CLT, fora do Simples Nacional)",
+    salarioBaseEvitado: (s) => s.salarioBaseEvitadoBrl,
+    encargosTotais: (s) => s.encargosTotaisBrl,
+    linhas: (s, c) => [
+      { rotulo: "INSS patronal", valorBrl: s.encargosInssBrl, percentual: c.composicaoClt.percentualInssPatronal },
+      { rotulo: "FGTS", valorBrl: s.encargosFgtsBrl, percentual: c.composicaoClt.percentualFgts },
+      {
+        rotulo: "13º salário",
+        valorBrl: s.encargosDecimoTerceiroBrl,
+        percentual: c.composicaoClt.percentualDecimoTerceiro,
+      },
+      { rotulo: "Férias + 1/3", valorBrl: s.encargosFeriasBrl, percentual: c.composicaoClt.percentualFerias },
+      {
+        rotulo: "Provisão de rescisão",
+        valorBrl: s.encargosProvisaoRescisaoBrl,
+        percentual: c.composicaoClt.percentualProvisaoRescisao,
+      },
+    ],
+  },
+  "payroll-us-uk": {
+    tipoFolha: "uma folha W2/Payroll",
+    rotuloSalario: "Equivalente salarial (W2) evitado",
+    rotuloEncargos: "Payroll Tax & BPO evitados",
+    rotuloDetalhamento: "Payroll/BPO",
+    notaSalario:
+      "Fração do custo humano evitado correspondente apenas ao salário base W2 — sem FICA, FUTA/SUTA, workers' comp, benefícios ou overhead de BPO.",
+    notaEncargos: "Soma de FICA patronal, FUTA/SUTA, workers' comp, benefícios e overhead de BPO — ver detalhamento abaixo.",
+    notaReferencia: "Estimativa de referência para empregado W2 ou BPO terceirizado nos EUA/Reino Unido",
+    salarioBaseEvitado: (s) => s.salarioBaseEvitadoPayrollBrl,
+    encargosTotais: (s) => s.encargosTotaisPayrollBrl,
+    linhas: (s, c) => [
+      { rotulo: "FICA patronal", valorBrl: s.encargosFicaBrl, percentual: c.composicaoPayroll.percentualFicaPatronal },
+      { rotulo: "FUTA/SUTA", valorBrl: s.encargosFutaSutaBrl, percentual: c.composicaoPayroll.percentualFutaSuta },
+      {
+        rotulo: "Workers' comp",
+        valorBrl: s.encargosWorkersCompBrl,
+        percentual: c.composicaoPayroll.percentualWorkersComp,
+      },
+      { rotulo: "Benefícios", valorBrl: s.encargosBeneficiosBrl, percentual: c.composicaoPayroll.percentualBeneficios },
+      {
+        rotulo: "Overhead de BPO",
+        valorBrl: s.encargosBpoOverheadBrl,
+        percentual: c.composicaoPayroll.percentualBpoOverhead,
+      },
+    ],
+  },
+  "1099-us": {
+    tipoFolha: "um contractor 1099",
+    rotuloSalario: "Valor evitado ao contractor 1099",
+    rotuloEncargos: "Overhead de gestão evitado (1099)",
+    rotuloDetalhamento: "do contractor 1099",
+    notaSalario:
+      "Fração do custo humano evitado correspondente ao valor pago ao contractor — sem encargo patronal, que não se aplica a este regime (o contractor recolhe o próprio self-employment tax).",
+    notaEncargos:
+      "Overhead opcional de gestão/compliance do contratante sobre o contractor 1099 — zero por padrão, configurável nos Parâmetros.",
+    notaReferencia:
+      "Contractor 1099 (EUA): a empresa não carrega FICA/FUTA/workers' comp sobre este custo-hora — residual quase inteiro é o valor pago ao contractor",
+    salarioBaseEvitado: (s) => s.salarioBaseEvitado1099Brl,
+    encargosTotais: (s) => s.encargosTotais1099Brl,
+    linhas: (s, c) => [
+      {
+        rotulo: "Overhead de gestão de contratante",
+        valorBrl: s.encargosOverheadGestaoContratanteBrl,
+        percentual: c.composicao1099.percentualOverheadGestaoContratante,
+      },
+    ],
+  },
+  "seguranca-social-pt": {
+    tipoFolha: "uma folha portuguesa (Segurança Social)",
+    rotuloSalario: "Equivalente salarial evitado (Portugal)",
+    rotuloEncargos: "TSU patronal evitada",
+    rotuloDetalhamento: "da Segurança Social (TSU)",
+    notaSalario: "Fração do custo humano evitado correspondente apenas ao salário base — sem a TSU patronal.",
+    notaEncargos:
+      "TSU (Taxa Social Única) — alíquota patronal do regime geral português — ver detalhamento abaixo.",
+    notaReferencia: "Estimativa de referência pública da TSU do regime geral em Portugal (23,75%)",
+    salarioBaseEvitado: (s) => s.salarioBaseEvitadoSegurancaSocialPtBrl,
+    encargosTotais: (s) => s.encargosTotaisSegurancaSocialPtBrl,
+    linhas: (s, c) => [
+      {
+        rotulo: "TSU patronal",
+        valorBrl: s.encargosSegurancaSocialPatronalBrl,
+        percentual: c.composicaoSegurancaSocialPt.percentualSegurancaSocialPatronal,
+      },
+    ],
+  },
+};
 
 export function OpexTaxShieldPanel() {
   const { workspaceId } = useWorkspace();
@@ -68,9 +197,10 @@ export function OpexTaxShieldPanel() {
   const [campanhas, setCampanhas] = useState<Campaign[]>([]);
   const [config, setConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
   const [moeda, setMoeda] = useState<Moeda>(ROI_CONFIG_PADRAO.moedaExibicao);
-  // Lente do Tax Shield: puramente de visualização — as duas decomposições
-  // (CLT e Payroll) já vêm calculadas no snapshot, então alternar aqui nunca
-  // recalcula nem descarta histórico (ver nota em `RoiSnapshot`).
+  // Lente do Tax Shield: puramente de visualização — as quatro decomposições
+  // (CLT, Payroll, 1099, Segurança Social PT) já vêm calculadas no snapshot,
+  // então alternar aqui nunca recalcula nem descarta histórico (ver nota em
+  // `RoiSnapshot`).
   const [regime, setRegime] = useState<RegimeEncargos>(ROI_CONFIG_PADRAO.regimeEncargos);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -124,64 +254,10 @@ export function OpexTaxShieldPanel() {
   const semDados =
     snapshot.execucoesTotais === 0 && snapshot.conversasTotais === 0 && snapshot.campanhasExecutadas === 0;
 
-  const ehClt = regime === "clt-br";
-
-  const salarioBaseEvitado = ehClt ? snapshot.salarioBaseEvitadoBrl : snapshot.salarioBaseEvitadoPayrollBrl;
-  const encargosTotais = ehClt ? snapshot.encargosTotaisBrl : snapshot.encargosTotaisPayrollBrl;
-  const rotuloSalario = ehClt ? "Equivalente salarial CLT evitado" : "Equivalente salarial (W2) evitado";
-  const rotuloEncargos = ehClt ? "Encargos patronais evitados (CLT)" : "Payroll Tax & BPO evitados";
-
-  const linhasEncargo: LinhaEncargo[] = ehClt
-    ? [
-        {
-          rotulo: "INSS patronal",
-          valorBrl: snapshot.encargosInssBrl,
-          percentual: config.composicaoClt.percentualInssPatronal,
-        },
-        { rotulo: "FGTS", valorBrl: snapshot.encargosFgtsBrl, percentual: config.composicaoClt.percentualFgts },
-        {
-          rotulo: "13º salário",
-          valorBrl: snapshot.encargosDecimoTerceiroBrl,
-          percentual: config.composicaoClt.percentualDecimoTerceiro,
-        },
-        {
-          rotulo: "Férias + 1/3",
-          valorBrl: snapshot.encargosFeriasBrl,
-          percentual: config.composicaoClt.percentualFerias,
-        },
-        {
-          rotulo: "Provisão de rescisão",
-          valorBrl: snapshot.encargosProvisaoRescisaoBrl,
-          percentual: config.composicaoClt.percentualProvisaoRescisao,
-        },
-      ]
-    : [
-        {
-          rotulo: "FICA patronal",
-          valorBrl: snapshot.encargosFicaBrl,
-          percentual: config.composicaoPayroll.percentualFicaPatronal,
-        },
-        {
-          rotulo: "FUTA/SUTA",
-          valorBrl: snapshot.encargosFutaSutaBrl,
-          percentual: config.composicaoPayroll.percentualFutaSuta,
-        },
-        {
-          rotulo: "Workers' comp",
-          valorBrl: snapshot.encargosWorkersCompBrl,
-          percentual: config.composicaoPayroll.percentualWorkersComp,
-        },
-        {
-          rotulo: "Benefícios",
-          valorBrl: snapshot.encargosBeneficiosBrl,
-          percentual: config.composicaoPayroll.percentualBeneficios,
-        },
-        {
-          rotulo: "Overhead de BPO",
-          valorBrl: snapshot.encargosBpoOverheadBrl,
-          percentual: config.composicaoPayroll.percentualBpoOverhead,
-        },
-      ];
+  const apresentacao = APRESENTACAO_REGIME[regime];
+  const salarioBaseEvitado = apresentacao.salarioBaseEvitado(snapshot);
+  const encargosTotais = apresentacao.encargosTotais(snapshot);
+  const linhasEncargo: LinhaEncargo[] = apresentacao.linhas(snapshot, config);
 
   return (
     <section
@@ -193,7 +269,7 @@ export function OpexTaxShieldPanel() {
           <h2 className="text-sm font-semibold text-ink-950">OpEx &amp; Tax Shield</h2>
           <p className="mt-0.5 text-xs text-ink-400">
             {snapshot.periodo.rotulo} · o que o custo humano evitado representaria se fosse{" "}
-            {ehClt ? "uma folha CLT" : "uma folha W2/Payroll"}
+            {apresentacao.tipoFolha}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -225,35 +301,27 @@ export function OpexTaxShieldPanel() {
         <>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              rotulo={rotuloSalario}
+              rotulo={apresentacao.rotuloSalario}
               valor={moedaDoValor(salarioBaseEvitado)}
               detalhe="salário base, sem encargos"
               tom="neutro"
-              dica={
-                ehClt
-                  ? "Fração do custo humano evitado correspondente apenas ao salário base — sem INSS, FGTS, 13º, férias ou rescisão."
-                  : "Fração do custo humano evitado correspondente apenas ao salário base W2 — sem FICA, FUTA/SUTA, workers' comp, benefícios ou overhead de BPO."
-              }
+              dica={apresentacao.notaSalario}
             />
             <MetricCard
-              rotulo={rotuloEncargos}
+              rotulo={apresentacao.rotuloEncargos}
               valor={moedaDoValor(encargosTotais)}
               detalhe={`${formatarPercentual(
                 snapshot.custoHumanoEvitadoBrl > 0 ? encargosTotais / snapshot.custoHumanoEvitadoBrl : 0
               )} do custo humano evitado`}
               tom="marca"
-              dica={
-                ehClt
-                  ? "Soma de INSS patronal, FGTS, 13º salário, férias e provisão de rescisão — ver detalhamento abaixo."
-                  : "Soma de FICA patronal, FUTA/SUTA, workers' comp, benefícios e overhead de BPO — ver detalhamento abaixo."
-              }
+              dica={apresentacao.notaEncargos}
             />
             <MetricCard
               rotulo="Dinheiro líquido retido no caixa"
               valor={moedaDoValor(snapshot.economiaLiquidaBrl)}
               detalhe={`após custo de IA, revisão humana e plataforma`}
               tom={snapshot.economiaLiquidaBrl >= 0 ? "positivo" : "erro"}
-              dica="Custo humano evitado menos o custo total de operar a automação (IA + revisão humana + rateio de plataforma) — o mesmo número do painel de ROI."
+              dica="Custo humano evitado menos o custo total de operar o Time de Agentes Digitais (IA + revisão humana sob Supervisão HITL + rateio de plataforma) — o mesmo número do painel de ROI."
             />
             <MetricCard
               rotulo="Custo-hora de referência"
@@ -265,7 +333,7 @@ export function OpexTaxShieldPanel() {
 
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
-              Detalhamento dos encargos {ehClt ? "patronais (CLT)" : "Payroll/BPO"} poupados
+              Detalhamento dos encargos {apresentacao.rotuloDetalhamento} poupados
             </p>
             <ul className="flex flex-col gap-1.5">
               {linhasEncargo.map((linha) => (
@@ -284,11 +352,8 @@ export function OpexTaxShieldPanel() {
           </div>
 
           <p className="text-[11px] text-ink-400">
-            {ehClt
-              ? "Estimativa de referência do regime geral (CLT, fora do Simples Nacional)"
-              : "Estimativa de referência para empregado W2 ou BPO terceirizado nos EUA/Reino Unido"}{" "}
-            — ajuste os percentuais na aba Parâmetros para refletir o regime tributário real do seu negócio. Não
-            substitui orientação contábil ou jurídica.
+            {apresentacao.notaReferencia} — ajuste os percentuais na aba Parâmetros para refletir o regime tributário
+            real do seu negócio. Não substitui orientação contábil ou jurídica.
           </p>
         </>
       )}

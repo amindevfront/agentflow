@@ -113,7 +113,16 @@ export type GuardrailRuleId =
    * diagnóstico — gatilho de transbordo positivo, mesmo desenho de
    * `agendamento-visita-presencial`/`confirmacao-agendamento-clinico`.
    */
-  | "confirmacao-reuniao-diagnostico-b2b";
+  | "confirmacao-reuniao-diagnostico-b2b"
+  /**
+   * AR Recovery Engine (Gaveta de Back-office): tentativas automáticas de
+   * cobrança esgotadas sem resolução — gatilho de escalonamento (não é uma
+   * violação de guardrail em si, mesmo desenho de
+   * `agendamento-visita-presencial`/`confirmacao-agendamento-clinico`, que
+   * também reaproveitam a fila de HITL para um sinal positivo/operacional,
+   * não um bloqueio). Ver `@/lib/server/arRecoveryEngine`.
+   */
+  | "cobranca-documento-pendente";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;

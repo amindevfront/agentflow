@@ -428,6 +428,34 @@ service cloud.firestore {
       allow create: if belongsToWorkspace(request.resource.data.workspaceId);
     }
 
+    // ---------- Full-Scope Enterprise Operations (gavetas de back-office) ----------
+
+    match /documentosContratos/{documentoId} {
+      // Document AI Vault — mesmo padrão simples de `contratosImobiliarios`.
+      // `textoMascarado` é dado operacional protegido pelo Shield-Layer ANTES
+      // de chegar aqui (ver `@/lib/server/documentAiVault`), nunca PII em
+      // claro — por isso não precisa do mesmo bloqueio de `messageVaults`.
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    match /operationalRecords/{registroId} {
+      // Sheet Reconciliation — mesmo padrão simples de `shipments` (que já é,
+      // na prática, uma tabela operacional reconciliada via chat para o
+      // nicho de Logística; esta coleção generaliza o padrão).
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
+    match /documentosPendentes/{documentoId} {
+      // AR Recovery Engine — mesmo padrão simples de `contratosImobiliarios`.
+      // Escrito tanto pelo operador (cadastro/baixa manual) quanto pelo tick
+      // autônomo via Admin SDK (`/api/ar-recovery/tick`, que ignora estas
+      // regras por desenho, mesmo racional de `flowRuns`/`hitlTickets`).
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
     match /optOuts/{optOutId} {
       // Opt-out é checado por hash, nunca pelo valor em claro — ver
       // `hashDestino()`. Qualquer membro do workspace pode registrar um

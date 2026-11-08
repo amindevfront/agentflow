@@ -391,7 +391,7 @@ export default function PortalClientePage() {
           <h2 className="text-sm font-semibold text-ink-950">Centro de Configuração Rápida</h2>
           <p className="mt-1 text-xs text-ink-500">
             {ehAdmin
-              ? "Esses ajustes entram em vigor imediatamente no atendimento automático."
+              ? "Esses ajustes entram em vigor imediatamente no atendimento do seu Time de Agentes Digitais."
               : "Somente administradores do workspace podem editar — fale com o responsável."}
           </p>
 

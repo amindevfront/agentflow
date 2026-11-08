@@ -79,6 +79,10 @@ describe("firestore.rules — auditoria estrutural de multi-tenancy", () => {
     "/shipments/{shipmentId}",
     "/contratosImobiliarios/{contratoId}",
     "/pedidosEcommerce/{pedidoId}",
+    // Full-Scope Enterprise Operations (gavetas de back-office).
+    "/documentosContratos/{documentoId}",
+    "/operationalRecords/{registroId}",
+    "/documentosPendentes/{documentoId}",
   ];
 
   it.each(COLECOES_ESCOPADAS_POR_WORKSPACE)("%s referencia belongsToWorkspace/isAdminOf e não usa 'if true' puro", (caminho) => {

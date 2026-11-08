@@ -435,6 +435,14 @@ export function detectarPromptInjection(texto: string): DeteccaoInjecao {
  * também bloqueia qualquer valor financeiro explícito. Este detector cobre
  * especificamente o que aquele NÃO cobre: desconto/financiamento sem
  * dígito de moeda, e linguagem de fechamento de negócio.
+ *
+ * Inclui o equivalente em INGLÊS dos três sinais (Expansão Enterprise
+ * Global — EUA/Flórida): sem isto, um workspace americano (`us-real-estate-luxury`,
+ * `us-construction-remodeling`, ambos com `bloquearPromessaComercialNaoAutorizada`
+ * via `POLITICA_IMOBILIARIO_ALTO_PADRAO`) teria o guardrail de Proteção de
+ * Caixa configurado mas NUNCA acionado em produção, porque a saída real do
+ * modelo nesses workspaces é em inglês — um falso negativo silencioso, não
+ * uma simples lacuna de cobertura.
  */
 const PADROES_PROMESSA_COMERCIAL: Array<{ padrao: RegExp; descricao: string }> = [
   {
@@ -448,6 +456,19 @@ const PADROES_PROMESSA_COMERCIAL: Array<{ padrao: RegExp; descricao: string }> =
   {
     padrao: /\b(?:valor|pre[çc]o|honor[áa]rios?)\s+(?:fechados?|fina(?:l|is))\b|\bfecha(?:mos)?\s+por\b|\bsai\s+por\s+(?:r\$|apenas\s+)?\d|\btabela\s*:\s*r\$/i,
     descricao: "valor/honorário fechado como oferta sem validação prévia",
+  },
+  // --- Equivalente em inglês (EUA/Flórida) ---
+  {
+    padrao: /\b\d{1,2}\s*%\s*(?:discount|off)\b|\bdiscount\s+of\s+\d{1,2}\s*%/i,
+    descricao: "percentage discount promised without leadership approval",
+  },
+  {
+    padrao: /\bfinanced?\s+over\s+\d+\s*(?:months?|years?)\b|\bno\s+down\s*payment\b|\b0\s*%?\s*down\b|\bspecial\s+(?:financing|payment)\s+terms?\b/i,
+    descricao: "financing/payment plan promised without leadership approval",
+  },
+  {
+    padrao: /\bfinal\s+(?:price|quote)\b|\bwe\s+can\s+close\s+(?:this\s+)?at\b|\bdeal\s+closes?\s+at\b|\bquoted\s+price\s*:/i,
+    descricao: "closed price/quote offered without prior approval",
   },
 ];
 

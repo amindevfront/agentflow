@@ -13,6 +13,15 @@ export interface NichePreset {
   playbooksSugeridos: string[];
 }
 
+// Continua exaustivo sobre TODO `NicheKey` (inclusive as gavetas de
+// back-office da Expansão Full-Scope Enterprise Operations): dezenas de
+// chamadores já confiam em `NICHE_PRESETS[key]` sempre definido (ver
+// `DynamicNicheQuizModal`, `onboarding/page.tsx`, `RoiOpportunityPanel`) —
+// trocar para `Partial` quebraria todos eles sem necessidade real. As
+// gavetas de back-office não aparecem em `NICHE_ORDER` (a lista exibida na
+// triagem de nicho do onboarding — elas se ativam via
+// `Workspace.modulosAtivos`, não via `setor`), mas ainda precisam de um
+// preset aqui só para o `Record` permanecer exaustivo.
 export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
   "construtora-imobiliaria": {
     key: "construtora-imobiliaria",
@@ -94,6 +103,58 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
       "Recebimento seguro de documentos (contratos, balanços)",
     ],
   },
+  // --- Expansão Enterprise Global (EUA/Flórida e Portugal) ---
+  "us-construction-remodeling": {
+    key: "us-construction-remodeling",
+    label: "Reformas & Construção (EUA)",
+    descricao: "Qualificação de leads de alto valor em USD, follow-up agressivo e estimativa preliminar automatizada.",
+    playbooksSugeridos: [
+      "Qualificação de projeto e orçamento em USD",
+      "Follow-up agressivo por urgência",
+      "Estimativa preliminar automatizada (não vinculante)",
+    ],
+  },
+  "us-real-estate-luxury": {
+    key: "us-real-estate-luxury",
+    label: "Imobiliária de Luxo (Miami/Orlando)",
+    descricao: "Triagem de compradores com capacidade financeira validada (proof of funds/pre-approval) e agendamento de showing.",
+    playbooksSugeridos: [
+      "Triagem financeira do comprador",
+      "Agendamento de showing presencial",
+      "Resumo executivo para o corretor",
+    ],
+  },
+  "portugal-clinics-health": {
+    key: "portugal-clinics-health",
+    label: "Clínicas & Saúde (Portugal)",
+    descricao: "Agendamento multicanal, redução de faltas e conformidade GDPR.",
+    playbooksSugeridos: [
+      "Confirmação de agendamento multicanal",
+      "Lembrete e redução de faltas (no-show)",
+      "Handoff com resumo clínico para a equipe",
+    ],
+  },
+  // --- Full-Scope Enterprise Operations (gavetas de back-office) ---
+  // Não aparecem em `NICHE_ORDER`/na triagem de onboarding — preset só para
+  // o `Record` permanecer exaustivo (ver nota acima).
+  "document-ai-vault": {
+    key: "document-ai-vault",
+    label: "Document AI Vault",
+    descricao: "Extração de cláusulas críticas, PII Shield e resumo executivo automático de contratos.",
+    playbooksSugeridos: ["Análise de contrato recém-carregado", "Alerta de cláusula crítica de alta severidade"],
+  },
+  "sheet-reconciliation": {
+    key: "sheet-reconciliation",
+    label: "Sheet Reconciliation",
+    descricao: "Conciliação de planilhas/tabelas operacionais a partir das conversas da Neural Inbox.",
+    playbooksSugeridos: ["Atualização de registro a partir da conversa", "Reconciliação de status/prazo"],
+  },
+  "ar-recovery-engine": {
+    key: "ar-recovery-engine",
+    label: "AR Recovery Engine",
+    descricao: "Monitor autônomo de documentos/faturas vencidas, com follow-up humanizado via HITL.",
+    playbooksSugeridos: ["Follow-up automático de cobrança", "Escalonamento humano de inadimplência"],
+  },
   outros: {
     key: "outros",
     label: "Outros",
@@ -111,5 +172,8 @@ export const NICHE_ORDER: NicheKey[] = [
   "servicos-luxo",
   "ecommerce",
   "advocacia-contabilidade",
+  "us-construction-remodeling",
+  "us-real-estate-luxury",
+  "portugal-clinics-health",
   "outros",
 ];

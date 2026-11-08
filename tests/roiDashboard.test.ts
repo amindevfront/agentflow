@@ -78,10 +78,15 @@ describe("VALOR_MEDIO_PIPELINE_PADRAO_BRL", () => {
     }
   });
 
-  it("só os três Módulos Verticais com protocolo de agendamento têm valor > 0 — nenhum nicho sem o protocolo recebe valor inventado", () => {
+  it("só os Módulos Verticais com protocolo de agendamento têm valor > 0 — nenhum nicho sem o protocolo recebe valor inventado", () => {
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["construtora-imobiliaria"]).toBeGreaterThan(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["clinica-alto-padrao"]).toBeGreaterThan(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["advocacia-contabilidade"]).toBeGreaterThan(0);
+    // Expansão Enterprise Global (EUA/Flórida e Portugal) — reaproveitam o
+    // mesmo protocolo de confirmação de agendamento (ver `inboxWidgetAdmin.ts`).
+    expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["us-real-estate-luxury"]).toBeGreaterThan(0);
+    expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["us-construction-remodeling"]).toBeGreaterThan(0);
+    expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["portugal-clinics-health"]).toBeGreaterThan(0);
 
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["logistica-portuaria"]).toBe(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["servicos-luxo"]).toBe(0);
