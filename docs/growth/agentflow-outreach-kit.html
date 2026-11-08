@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AgentFlow Outreach Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Sora:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F4F6FA;
+    --paper-raised:#FFFFFF;
+    --ink-950:#0E1420;
+    --ink-700:#2B3443;
+    --ink-500:#5B6577;
+    --ink-300:#9AA3B2;
+    --line:#E2E6EE;
+    --accent:#2E55FF;
+    --accent-ink:#FFFFFF;
+    --accent-soft:#E8EDFF;
+    --tag-pain-bg:#FBE8E9;   --tag-pain-ink:#B3363B;
+    --tag-chronic-bg:#FFF2D9; --tag-chronic-ink:#8A5A00;
+    --tag-offer-bg:#E1F3EA;  --tag-offer-ink:#157A4F;
+    --shadow:0 1px 2px rgba(14,20,32,.04), 0 8px 24px rgba(14,20,32,.06);
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --paper:#0B0E14;
+      --paper-raised:#13171F;
+      --ink-950:#EEF1F6;
+      --ink-700:#C7CDD9;
+      --ink-500:#8B93A3;
+      --ink-300:#5B6577;
+      --line:#232834;
+      --accent:#6E8CFF;
+      --accent-ink:#0B0E14;
+      --accent-soft:#1A2240;
+      --tag-pain-bg:#2B1619;   --tag-pain-ink:#FF9499;
+      --tag-chronic-bg:#2B2210; --tag-chronic-ink:#F2C14E;
+      --tag-offer-bg:#132821;  --tag-offer-ink:#4FD69A;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --paper:#0B0E14;
+    --paper-raised:#13171F;
+    --ink-950:#EEF1F6;
+    --ink-700:#C7CDD9;
+    --ink-500:#8B93A3;
+    --ink-300:#5B6577;
+    --line:#232834;
+    --accent:#6E8CFF;
+    --accent-ink:#0B0E14;
+    --accent-soft:#1A2240;
+    --tag-pain-bg:#2B1619;   --tag-pain-ink:#FF9499;
+    --tag-chronic-bg:#2B2210; --tag-chronic-ink:#F2C14E;
+    --tag-offer-bg:#132821;  --tag-offer-ink:#4FD69A;
+    --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.35);
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink-700);
+    font-family:'Sora',system-ui,-apple-system,Segoe UI,sans-serif;
+    padding:0 16px;
+    padding-block:28px 64px;
+    line-height:1.55;
+  }
+  .wrap{max-width:860px;margin:0 auto;}
+  h1,h2,h3{font-family:'Fraunces',Georgia,serif;color:var(--ink-950);text-wrap:balance;margin:0;}
+  mono,.mono{font-family:'IBM Plex Mono',ui-monospace,monospace;}
+
+  /* ---------- Masthead ---------- */
+  .masthead{display:flex;flex-direction:column;gap:14px;padding-block:8px 32px;border-bottom:1px solid var(--line);margin-bottom:32px;}
+  .kicker{font-family:'IBM Plex Mono';font-size:11.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);}
+  .masthead h1{font-size:clamp(28px,5vw,40px);font-weight:600;}
+  .masthead p{color:var(--ink-500);font-size:15px;max-width:620px;}
+  .nav-pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+  .nav-pills a{
+    font-size:13px;font-weight:500;color:var(--ink-700);text-decoration:none;
+    border:1px solid var(--line);border-radius:999px;padding:7px 14px;background:var(--paper-raised);
+    transition:border-color .15s,color .15s;
+  }
+  .nav-pills a:hover{border-color:var(--accent);color:var(--accent);}
+
+  /* ---------- Angle sections ---------- */
+  .angle{margin-bottom:56px;}
+  .angle-head{display:flex;flex-direction:column;gap:12px;margin-bottom:20px;}
+  .tag{
+    display:inline-flex;align-items:center;gap:6px;width:fit-content;
+    font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+    padding:5px 10px;border-radius:6px;font-weight:500;
+  }
+  .tag-pain{background:var(--tag-pain-bg);color:var(--tag-pain-ink);}
+  .tag-chronic{background:var(--tag-chronic-bg);color:var(--tag-chronic-ink);}
+  .tag-offer{background:var(--tag-offer-bg);color:var(--tag-offer-ink);}
+  .angle-head h2{font-size:clamp(21px,3.4vw,27px);font-weight:600;}
+  blockquote.forum{
+    font-family:'Fraunces';font-style:italic;font-size:16px;color:var(--ink-700);
+    border-left:3px solid var(--accent);padding-left:14px;margin:0;
+  }
+  blockquote.forum cite{display:block;margin-top:4px;font-family:'IBM Plex Mono';font-style:normal;font-size:11.5px;color:var(--ink-300);}
+  p.strategy{
+    font-size:13.5px;color:var(--ink-500);background:var(--accent-soft);border-radius:10px;
+    padding:12px 14px;margin:0;
+  }
+  p.strategy b{color:var(--ink-950);}
+
+  /* ---------- Lang tabs (CSS-only) ---------- */
+  .lang-tabs input{position:absolute;opacity:0;pointer-events:none;}
+  .tab-bar{display:flex;gap:6px;margin-bottom:16px;}
+  .tab-bar label{
+    font-family:'IBM Plex Mono';font-size:12px;letter-spacing:.03em;cursor:pointer;
+    padding:8px 14px;border-radius:8px;border:1px solid var(--line);color:var(--ink-500);
+    transition:all .15s;
+  }
+  .panel{display:none;}
+  #a1-pt:checked ~ .panel.pt, #a1-en:checked ~ .panel.en,
+  #a2-pt:checked ~ .panel.pt, #a2-en:checked ~ .panel.en,
+  #a3-pt:checked ~ .panel.pt, #a3-en:checked ~ .panel.en{display:block;}
+  #a1-pt:checked ~ .tab-bar label[for="a1-pt"], #a1-en:checked ~ .tab-bar label[for="a1-en"],
+  #a2-pt:checked ~ .tab-bar label[for="a2-pt"], #a2-en:checked ~ .tab-bar label[for="a2-en"],
+  #a3-pt:checked ~ .tab-bar label[for="a3-pt"], #a3-en:checked ~ .tab-bar label[for="a3-en"]{
+    background:var(--ink-950);color:var(--paper);border-color:var(--ink-950);
+  }
+
+  /* ---------- Message cards ---------- */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:620px){.grid{grid-template-columns:1fr;}}
+  .card{
+    background:var(--paper-raised);border:1px solid var(--line);border-radius:14px;
+    padding:16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px;min-width:0;
+  }
+  .card-head{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .channel{display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:600;color:var(--ink-950);}
+  .channel svg{width:14px;height:14px;flex:none;}
+  .wc{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--ink-300);}
+  .copy-btn{
+    font-family:'IBM Plex Mono';font-size:11px;border:1px solid var(--line);background:var(--paper);
+    color:var(--ink-700);border-radius:7px;padding:6px 10px;cursor:pointer;transition:all .15s;flex:none;
+  }
+  .copy-btn:hover{border-color:var(--accent);color:var(--accent);}
+  .copy-btn.done{background:var(--tag-offer-bg);color:var(--tag-offer-ink);border-color:transparent;}
+  .body-text{
+    font-size:13.5px;color:var(--ink-700);white-space:pre-wrap;line-height:1.6;
+    max-height:360px;overflow-y:auto;padding-right:2px;
+  }
+  .body-text .subj{font-family:'IBM Plex Mono';font-size:11.5px;color:var(--ink-500);display:block;margin-bottom:8px;}
+  .body-text .sig{color:var(--ink-300);}
+
+  /* ---------- Guide / swap table ---------- */
+  .guide{background:var(--paper-raised);border:1px solid var(--line);border-radius:16px;padding:22px;box-shadow:var(--shadow);}
+  .guide h3{font-size:19px;margin-bottom:12px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px;}
+  table caption{text-align:left;font-family:'IBM Plex Mono';font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-300);margin-bottom:8px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-family:'IBM Plex Mono';font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-500);font-weight:500;}
+  td.ph{font-family:'IBM Plex Mono';color:var(--accent);white-space:nowrap;}
+  .overflow-x{overflow-x:auto;}
+  ul.rules{margin:10px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink-700);}
+  ul.rules li{margin-bottom:6px;}
+  .guide + .guide{margin-top:16px;}
+
+  footer{margin-top:48px;text-align:center;font-size:11.5px;color:var(--ink-300);font-family:'IBM Plex Mono';}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="masthead">
+    <span class="kicker">Growth &amp; Copy Playbook — High-Ticket B2B</span>
+    <h1>Kit de Cold Outreach — AgentFlow</h1>
+    <p>12 mensagens prontas (e-mail + LinkedIn, PT e EN) para prospecção de construtoras, imobiliárias de alto padrão e clínicas no Brasil, na Flórida e em Portugal. Três ângulos, uma régua: dor específica → prova → oferta sem atrito.</p>
+    <div class="nav-pills">
+      <a href="#angle1">① Dor de front-office</a>
+      <a href="#angle2">② Dor de back-office</a>
+      <a href="#angle3">③ A oferta irrecusável</a>
+      <a href="#guide">Guia de uso</a>
+    </div>
+  </div>
+
+  <!-- ============ ANGLE 1 — FRONT-OFFICE ============ -->
+  <section class="angle" id="angle1">
+    <div class="angle-head">
+      <span class="tag tag-pain">Dor implacável · Front-office</span>
+      <h2>O lead que te custou a venda ontem à noite</h2>
+      <blockquote class="forum">"Call came in at 11:40pm. I didn't see it till 8am. They'd already signed with the guy who answered."<cite>— relato típico, r/RealEstate / r/Entrepreneur</cite></blockquote>
+      <p class="strategy"><b>Gatilho:</b> aversão à perda + especificidade temporal. Nunca abra com "automatize seu atendimento" — é genérico e todo mundo já ignora. Ancore num prejuízo que <i>já aconteceu ontem à noite</i>, não num benefício futuro abstrato.</p>
+    </div>
+
+    <div class="lang-tabs">
+      <input type="radio" name="a1" id="a1-pt" checked>
+      <input type="radio" name="a1" id="a1-en">
+      <div class="tab-bar">
+        <label for="a1-pt">PT-BR / PT-PT</label>
+        <label for="a1-en">EN-US (Florida)</label>
+      </div>
+
+      <div class="panel pt">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ E-mail</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text"><span class="subj">Assunto: Quantos leads de madrugada você perdeu esse mês?</span>Oi [Nome],
+
+Reparei que a [Empresa] atende [imóveis de alto padrão / reformas / pacientes] em [cidade] — e queria te perguntar uma coisa direta: quantos contatos chegam depois das 18h, ou no fim de semana, e só são respondidos no dia seguinte?
+
+Pergunto porque é a dor nº1 que todo [corretor / empreiteiro / clínica] de alto ticket me relata: o lead que pesquisa de madrugada decide rápido — e fecha com quem responde primeiro. Normalmente não é você.
+
+O AgentFlow qualifica esse contato à 1h da manhã (orçamento, urgência, interesse real) e entrega pro seu time de manhã com um resumo pronto — sem seu [corretor/atendente] ter que perguntar tudo de novo. E sem IA inventando preço, desconto ou prazo que você não autorizou: isso é bloqueado por desenho, não por sorte.
+
+Topa eu te mostrar isso rodando com um lead REAL seu, sem compromisso? Te explico como é rápido.
+
+<span class="sig">[Seu nome]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text">Oi [Nome], vi que você toca a [Empresa] em [cidade/nicho]. Pergunta rápida de fundador pra fundador: quantos leads bons chegam depois do expediente e só são respondidos no dia seguinte, já frios?
+
+Construí uma coisa que qualifica isso à 1h da manhã e entrega pronto pro seu time — sem IA inventando preço ou prazo que você não autorizou. Quer ver rodando com um lead real seu, sem compromisso?</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel en">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ Email</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text"><span class="subj">Subject: Who's answering your leads at 11pm?</span>Hi [Name],
+
+Quick, direct question from one owner to another: how many calls or messages come in after 6pm, or on weekends, and only get a reply the next morning?
+
+I ask because it's the #1 complaint I hear from [contractors / luxury agents] doing real volume: the lead comparing three companies at midnight signs with whoever answers first. Usually, that's not you.
+
+AgentFlow handles that first reply — qualifies budget and urgency at 1am, and hands your team a ready-to-work summary by morning, so your [agent/rep] never has to ask the same questions twice. No AI inventing a price, discount, or timeline you never approved — that's blocked by design, not by luck.
+
+Want to see it run on one of your actual leads, zero commitment? I'll show you exactly how, below.
+
+<span class="sig">[Your name]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text">Hey [Name] — saw you run [Company] in [market]. Founder to founder: how many good leads come in after hours and go cold overnight?
+
+Built something that qualifies them at 1am and hands your team a ready summary by morning — no AI inventing a price or promise you didn't approve. Want to see it work on one real lead of yours, no strings attached?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ANGLE 2 — BACK-OFFICE ============ -->
+  <section class="angle" id="angle2">
+    <div class="angle-head">
+      <span class="tag tag-chronic">Dor crônica · Back-office</span>
+      <h2>Quem é o dono da sua planilha: você ou o Excel?</h2>
+      <blockquote class="forum">"I spend my Sundays re-entering WhatsApp orders into a spreadsheet so Monday doesn't start on fire. Nobody warns you that scaling means more data entry, not less."<cite>— relato típico, reclamações de back-office / r/agency</cite></blockquote>
+      <p class="strategy"><b>Gatilho:</b> identidade + vergonha produtiva. O empresário não admite "eu digito contrato manualmente" pra um colega, mas admite pra outro fundador numa DM direta. A piada ("você ou o Excel") desarma antes de doer.</p>
+    </div>
+
+    <div class="lang-tabs">
+      <input type="radio" name="a2" id="a2-pt" checked>
+      <input type="radio" name="a2" id="a2-en">
+      <div class="tab-bar">
+        <label for="a2-pt">PT-BR / PT-PT</label>
+        <label for="a2-en">EN-US (Florida)</label>
+      </div>
+
+      <div class="panel pt">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ E-mail</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text"><span class="subj">Assunto: Quem é o dono da sua planilha: você ou o Excel?</span>Oi [Nome],
+
+Pergunta direta: quanto tempo do seu time (ou seu, se for sincero) ainda vai em digitar contrato no sistema, atualizar status de [pedido/obra/agenda] numa planilha, e correr atrás de boleto ou fatura vencida?
+
+Isso nunca aparece num relatório de resultado, mas é exatamente o que trava o crescimento — nenhuma empresa escala recontando dinheiro e repetindo digitação à mão.
+
+O AgentFlow lê o contrato e já aponta cláusula de risco (rescisão unilateral, multa, renovação automática) antes de você assinar; atualiza a planilha operacional sozinho, direto da conversa com o cliente; e cobra fatura vencida com mensagem humanizada, escalando pra um humano só quando precisa de decisão de verdade — nunca prometendo desconto ou perdão que você não autorizou.
+
+Isso é soberania operacional: seu back-office trabalha pra você, não o contrário.
+
+Posso te mostrar com um contrato ou planilha real sua? 48h, sem custo, sem compromisso.
+
+<span class="sig">[Seu nome]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text">[Nome], pergunta de fundador pra fundador: quanto do seu tempo ainda vai em digitar contrato, atualizar planilha e cobrar fatura atrasada?
+
+Automatizei isso — a IA aponta cláusula de risco no contrato, atualiza o registro sozinha a partir da própria conversa com o cliente, e cobra fatura vencida sem nunca prometer desconto que você não autorizou. Quer ver com um documento real seu?</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel en">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ Email</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text"><span class="subj">Subject: Who runs your spreadsheet — you, or Excel?</span>Hi [Name],
+
+Real question: how many hours a week still go into re-typing a contract into your system, updating a [job/order/booking] status in a spreadsheet, or chasing an overdue invoice?
+
+None of that shows up as a line item, but it's exactly what caps growth — nobody scales a business by manually re-entering the same data twice.
+
+AgentFlow reads the contract and flags risk clauses (unilateral termination, auto-renewal, penalty fees) before you sign; updates your operational spreadsheet on its own, straight from the client conversation; and chases overdue invoices with a humanized nudge, escalating to a person only when a real decision is needed — never promising a discount or write-off you didn't approve.
+
+That's operational sovereignty: your back-office works for you, not the other way around.
+
+Want to see it run on one real contract or spreadsheet of yours? 48 hours, no cost, no commitment.
+
+<span class="sig">[Your name]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text">[Name] — founder question: how many hours a week still go into re-typing contracts, updating spreadsheets, or chasing late invoices?
+
+Built something that flags risk clauses in a contract, updates the record on its own from the client conversation, and chases overdue invoices without ever promising a discount you didn't approve. Want to see it on a real document of yours?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ ANGLE 3 — THE OFFER ============ -->
+  <section class="angle" id="angle3">
+    <div class="angle-head">
+      <span class="tag tag-offer">A oferta irrecusável · Piloto de 48h</span>
+      <h2>Sem demo. Com os seus dados, em 48 horas.</h2>
+      <blockquote class="forum">"I've sat through 6 SaaS demos this year. I don't want to see a sandbox — I want to see it work on MY contract, with MY numbers."<cite>— relato típico, r/Entrepreneur</cite></blockquote>
+      <p class="strategy"><b>Gatilho:</b> remoção total de atrito + reciprocidade. Preço não aparece aqui de propósito — isso só se discute depois do piloto provar valor sozinho. Use como 1ª mensagem direta ou como 2º toque depois dos ângulos ① e ②.</p>
+    </div>
+
+    <div class="lang-tabs">
+      <input type="radio" name="a3" id="a3-pt" checked>
+      <input type="radio" name="a3" id="a3-en">
+      <div class="tab-bar">
+        <label for="a3-pt">PT-BR / PT-PT</label>
+        <label for="a3-en">EN-US (Florida)</label>
+      </div>
+
+      <div class="panel pt">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ E-mail</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text"><span class="subj">Assunto: Proposta sem risco: 48h, com seus dados reais</span>Oi [Nome],
+
+Sem rodeio: não quero te agendar uma demo genérica de 40 minutos pra você ver tela.
+
+Proposta: me manda 1 contrato real (ou um print da sua planilha, ou uma conversa de WhatsApp com um lead seu) e em 48h eu te devolvo o AgentFlow configurado rodando EXATAMENTE sobre esse dado — cláusula de risco apontada, registro atualizado, ou lead qualificado como teria sido na prática.
+
+Zero instalação, zero cartão de crédito, zero reunião de "alinhamento". Se não fizer sentido na prática, a conversa acaba aí e eu não te procuro de novo. Se fizer, aí sim falamos de números.
+
+Topa?
+
+<span class="sig">[Seu nome]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copiar</button></div>
+            <div class="body-text">[Nome], sem demo genérica: me manda um contrato, uma planilha ou uma conversa real sua e em 48h te devolvo rodando de verdade — sem instalação, sem cartão, sem reunião de alinhamento.
+
+Se não fizer sentido, a conversa acaba aí. Se fizer, falamos de números. Topa?</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel en">
+        <div class="grid">
+          <div class="card">
+            <div class="card-head"><span class="channel">✉️ Email</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text"><span class="subj">Subject: No-risk offer: 48 hours, your real data</span>Hi [Name],
+
+No generic 40-minute demo pitch here.
+
+Here's the offer: send me one real contract (or a screenshot of your spreadsheet, or one actual client text thread), and in 48 hours I'll hand back AgentFlow configured and running on exactly that data — risk clauses flagged, record updated, or lead qualified the way it would've actually happened.
+
+No install, no credit card, no "alignment call." If it doesn't click in practice, the conversation ends there and I won't follow up again. If it does, we talk numbers.
+
+In?
+
+<span class="sig">[Your name]</span></div>
+          </div>
+          <div class="card">
+            <div class="card-head"><span class="channel">💼 LinkedIn (DM)</span><button class="copy-btn" onclick="copiarCard(this)">copy</button></div>
+            <div class="body-text">[Name] — skip the generic demo. Send me one real contract, spreadsheet, or client thread, and in 48 hours I'll hand it back running for real — no install, no card, no alignment call.
+
+If it doesn't land, we're done talking. If it does, we talk numbers. In?</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GUIDE ============ -->
+  <section class="guide" id="guide">
+    <h3>Guia de uso rápido</h3>
+    <ul class="rules">
+      <li><b>Personalize [Nome]/[Empresa]/[cidade] sempre</b> — placeholder visível é a principal razão de ignorar. Gaste 90 segundos olhando o site/Instagram do prospect antes de enviar.</li>
+      <li><b>Sequência recomendada:</b> ① Dor específica → esperar 3-4 dias → ③ Oferta de 48h (como 2º toque, citando a 1ª mensagem) → se não responder, ② Dor crônica como 3º toque com ângulo diferente.</li>
+      <li><b>Nunca empilhe os três ângulos numa mensagem só.</b> Um gatilho por toque — é isso que faz o texto parecer uma conversa, não um panfleto.</li>
+      <li><b>Preço nunca aparece no outreach.</b> Guarde os números (setup R$ 1.500–30.000 / MRR R$ 497–4.997+ no Brasil; US$ 2.5k–5k+ de ticket no piloto internacional) para depois do piloto provar valor — citar preço cedo demais mata a resposta.</li>
+      <li><b>LinkedIn = metade do tamanho do e-mail.</b> Se não copiou e colou rápido, está longo demais para DM.</li>
+    </ul>
+
+    <div class="overflow-x">
+      <table>
+        <caption>Tabela de substituição por vertical/mercado</caption>
+        <thead><tr><th>Placeholder</th><th>Construtora/Reforma (BR/EUA)</th><th>Imobiliária de luxo (BR/Miami-Orlando)</th><th>Clínica (BR/Portugal)</th></tr></thead>
+        <tbody>
+          <tr><td class="ph">[imóvel/reforma/consulta]</td><td>orçamento de reforma</td><td>imóvel de alto padrão</td><td>consulta/avaliação</td></tr>
+          <tr><td class="ph">[corretor/empreiteiro/clínica]</td><td>empreiteiro</td><td>corretor</td><td>clínica/recepção</td></tr>
+          <tr><td class="ph">[contractors/luxury agents]</td><td>contractors</td><td>luxury agents</td><td>clinic owners</td></tr>
+          <tr><td class="ph">[pedido/obra/agenda]</td><td>status de obra</td><td>status de proposta</td><td>agenda de consultas</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <footer>AgentFlow — Growth Playbook · uso interno do time comercial</footer>
+</div>
+
+<script>
+function copiarCard(botao){
+  try{
+    var card = botao.closest('.card');
+    var texto = card.querySelector('.body-text').innerText;
+    var original = botao.textContent;
+    function marcar(){
+      botao.textContent = (original.indexOf('copy') === 0) ? 'copied!' : 'copiado!';
+      botao.classList.add('done');
+      setTimeout(function(){ botao.textContent = original; botao.classList.remove('done'); }, 1500);
+    }
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(texto).then(marcar).catch(function(){ fallbackCopy(texto, marcar); });
+    } else {
+      fallbackCopy(texto, marcar);
+    }
+  }catch(e){ /* silencioso: cópia é conveniência, nunca deve quebrar a página */ }
+}
+function fallbackCopy(texto, cb){
+  try{
+    var ta = document.createElement('textarea');
+    ta.value = texto;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    cb();
+  }catch(e){ /* sem clipboard disponível — usuário seleciona manualmente */ }
+}
+</script>
+</body>
+</html>
