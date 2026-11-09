@@ -338,17 +338,33 @@ export async function registrarMensagemCliente(entrada: {
   }
 
   // 3. Radar de sentimento sobre o histórico recente de mensagens do cliente.
-  const historicoSnap = await getDocs(
-    query(
-      collection(database, COLECAO_CONVERSAS, entrada.conversationId, SUBCOLECAO_MENSAGENS),
-      where("remetente", "==", "cliente"),
-      orderBy("enviadaEm", "desc"),
-      limit(5)
-    )
-  );
-  const mensagensClienteRecentes = historicoSnap.docs
-    .map((d) => (d.data() as ConversationMessage).texto)
-    .reverse(); // ordem cronológica, mais recente por último
+  //
+  // Resiliente de propósito: esta consulta composta (`where` + `orderBy` em
+  // campos diferentes) depende de um índice do Firestore que pode não existir
+  // ainda em todo ambiente (não há `firestore.indexes.json` neste projeto —
+  // ver nota em `firestore.indexes.json`). Sem este `try/catch`, um índice
+  // ausente derrubava a mensagem INTEIRA do cliente com `FAILED_PRECONDITION`
+  // — inclusive a primeira mensagem de uma conversa recém-criada, como em
+  // "Enviar como lead de teste para a Neural Inbox". Degrada para "sem
+  // histórico recente": o Radar de Sentimento ainda roda sobre a mensagem
+  // atual sozinha, só perde o contexto das últimas — nunca bloqueia o envio.
+  let mensagensClienteRecentes: string[] = [];
+  try {
+    const historicoSnap = await getDocs(
+      query(
+        collection(database, COLECAO_CONVERSAS, entrada.conversationId, SUBCOLECAO_MENSAGENS),
+        where("remetente", "==", "cliente"),
+        orderBy("enviadaEm", "desc"),
+        limit(5)
+      )
+    );
+    mensagensClienteRecentes = historicoSnap.docs
+      .map((d) => (d.data() as ConversationMessage).texto)
+      .reverse(); // ordem cronológica, mais recente por último
+  } catch (erro) {
+    console.error("[inbox] falha ao buscar histórico recente de mensagens do cliente:", erro);
+    mensagensClienteRecentes = [mensagem.texto];
+  }
 
   // Latência: só é um sinal relevante quando a mensagem anterior TAMBÉM foi do
   // cliente — ou seja, ele falou de novo sem receber resposta no meio.

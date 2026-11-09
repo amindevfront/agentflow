@@ -261,13 +261,22 @@ export async function montarDatasetReplayAdmin(workspaceId: string): Promise<Epi
   const episodios: EpisodioReplay[] = [];
   for (const doc of conversasSnap.docs) {
     const conversa = doc.data() as Conversation;
-    const mensagensSnap = await doc.ref
-      .collection(SUBCOLECAO_MENSAGENS)
-      .where("remetente", "==", "cliente")
-      .orderBy("enviadaEm", "desc")
-      .limit(1)
-      .get();
-    const ultimaMensagem = mensagensSnap.docs[0]?.data() as ConversationMessage | undefined;
+    // Resiliente de propósito (mesma consulta composta de `registrarMensagemCliente`
+    // em `@/lib/inbox/firestore.ts`, mesmo risco de índice ausente): uma conversa
+    // sem esse índice não pode derrubar o dataset de replay inteiro — só perde
+    // o episódio dela, igual a uma conversa sem mensagem de cliente.
+    let ultimaMensagem: ConversationMessage | undefined;
+    try {
+      const mensagensSnap = await doc.ref
+        .collection(SUBCOLECAO_MENSAGENS)
+        .where("remetente", "==", "cliente")
+        .orderBy("enviadaEm", "desc")
+        .limit(1)
+        .get();
+      ultimaMensagem = mensagensSnap.docs[0]?.data() as ConversationMessage | undefined;
+    } catch (erro) {
+      console.error("[prompt-simulator] falha ao buscar última mensagem do cliente para replay:", erro);
+    }
     if (!ultimaMensagem) continue;
 
     episodios.push({

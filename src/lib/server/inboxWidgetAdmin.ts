@@ -228,15 +228,25 @@ export async function registrarMensagemWidgetAdmin(
   await refConversa.collection(SUBCOLECAO_MENSAGENS).doc(messageId).set(mensagem);
 
   // Radar de Sentimento — mesmo histórico recente de mensagens do cliente usado no lado autenticado.
-  const historicoSnap = await refConversa
-    .collection(SUBCOLECAO_MENSAGENS)
-    .where("remetente", "==", "cliente")
-    .orderBy("enviadaEm", "desc")
-    .limit(5)
-    .get();
-  const mensagensClienteRecentes = historicoSnap.docs
-    .map((d) => (d.data() as ConversationMessage).texto)
-    .reverse();
+  // Resiliente de propósito (ver nota equivalente em `@/lib/inbox/firestore.ts`,
+  // `registrarMensagemCliente`): esta consulta composta pode falhar por
+  // índice ausente, e esta rota atende o Web Widget embutido em produção —
+  // nunca pode derrubar a mensagem de um cliente real do embed.
+  let mensagensClienteRecentes: string[] = [];
+  try {
+    const historicoSnap = await refConversa
+      .collection(SUBCOLECAO_MENSAGENS)
+      .where("remetente", "==", "cliente")
+      .orderBy("enviadaEm", "desc")
+      .limit(5)
+      .get();
+    mensagensClienteRecentes = historicoSnap.docs
+      .map((d) => (d.data() as ConversationMessage).texto)
+      .reverse();
+  } catch (erro) {
+    console.error("[inbox-widget] falha ao buscar histórico recente de mensagens do cliente:", erro);
+    mensagensClienteRecentes = [textoMascarado];
+  }
 
   const latenciaRespostaSegundos =
     conversa.ultimaMensagemRemetente === "cliente"
