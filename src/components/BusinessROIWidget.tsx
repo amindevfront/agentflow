@@ -199,7 +199,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
               valor={formatarHoras(snapshot.horasEconomizadasLiquidas)}
               detalhe={`${formatarHoras(snapshot.horasEconomizadasBrutas)} brutas − ${formatarHoras(snapshot.horasGastasEmRevisao)} de revisão`}
               tom="marca"
-              dica={`Soma de fluxos concluídos (${snapshot.execucoesConcluidas} × ${config.minutosManuaisPorExecucao} min), conversas resolvidas (${snapshot.conversasResolvidas} × ${config.minutosManuaisPorConversa} min) e envios de campanha (${snapshot.enviosCampanhaRealizados} × ${config.minutosManuaisPorEnvioCampanha} min) — menos as horas efetivamente gastas em transbordo.`}
+              dica={`Soma de fluxos concluídos (${snapshot.execucoesConcluidas} × ${config.minutosManuaisPorExecucao} min), conversas resolvidas (${snapshot.conversasResolvidas} × ${config.minutosManuaisPorConversa} min) e envios de campanha (${snapshot.enviosCampanhaRealizados} × ${config.minutosManuaisPorEnvioCampanha} min) — menos as horas efetivamente gastas com atendimento humano.`}
             />
             <MetricCard
               rotulo="Redução de OpEx"
@@ -213,7 +213,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
               valor={formatarPercentual(snapshot.taxaZeroTouch)}
               detalhe={`${snapshot.execucoesComIntervencao} de ${snapshot.execucoesConcluidas + snapshot.execucoesFalhas} exigiram toque humano`}
               tom={tomAutonomia(snapshot.taxaZeroTouch)}
-              dica="Fração do Time de Agentes Digitais que resolveu o caso de ponta a ponta sem precisar de Supervisão HITL — execuções terminais concluídas sem transbordo e sem intervenção registrada, divididas pelo total de execuções terminais (concluídas + falhas). Execuções em andamento não entram no cálculo."
+              dica="Fração dos atendimentos que a IA resolveu de ponta a ponta sem precisar de um humano assumir — concluídos sem transbordo e sem intervenção registrada, divididos pelo total de execuções terminais (concluídas + falhas). Execuções em andamento não entram no cálculo."
             />
           </div>
 
@@ -231,7 +231,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
                   rotulo="Custo por execução"
                   valor={moedaDoValor(snapshot.custoPorExecucaoBrl)}
                   detalhe="IA + revisão + plataforma"
-                  dica="Custo total de operar o Time de Agentes Digitais (IA + Supervisão HITL + plataforma) dividido pelas execuções terminais do período."
+                  dica="Custo total de operar os agentes de IA (IA + atendimento humano quando necessário + plataforma) dividido pelas execuções terminais do período."
                 />
                 <MetricCard
                   rotulo="Taxa de sucesso"
@@ -258,13 +258,13 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
                 <MetricCard
                   rotulo="Conversas resolvidas"
                   valor={String(snapshot.conversasResolvidas)}
-                  detalhe={`${snapshot.mensagensProcessadas} mensagens processadas pelo Shield-Layer`}
+                  detalhe={`${snapshot.mensagensProcessadas} mensagens analisadas e protegidas automaticamente`}
                   dica="Conversas da Neural Inbox com status 'resolvida' no período — cada uma credita minutos manuais evitados ao mesmo total acima."
                 />
                 <MetricCard
                   rotulo="Frustração crítica"
                   valor={String(snapshot.conversasComFrustracaoCritica)}
-                  detalhe="conversas com Circuit Breaker acionado"
+                  detalhe="conversas com atenção urgente acionada"
                   tom={snapshot.conversasComFrustracaoCritica > 0 ? "atencao" : "positivo"}
                   dica="Conversas em que o Radar de Sentimento cruzou o limiar crítico e abriu um ticket P1 de SLA."
                 />

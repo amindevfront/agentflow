@@ -52,7 +52,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "compliance", label: "Compliance" },
   { valor: "cofre", label: "Cofre" },
   { valor: "auditoria", label: "Auditoria" },
-  { valor: "opex", label: "OpEx & Tax Shield" },
+  { valor: "opex", label: "Economia em Encargos" },
   { valor: "parametros", label: "Matriz de Lucro & Encargos" },
   { valor: "saude", label: "Health Score" },
   { valor: "ai-act", label: "EU AI Act" },

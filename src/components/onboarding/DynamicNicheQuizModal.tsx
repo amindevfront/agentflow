@@ -174,15 +174,16 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                 {passo === "salvando" ? "Salvando…" : `Passo ${indicePasso} de ${PASSOS.length}`}
               </p>
               <h2 id="quiz-onboarding-title" className="mt-1 text-lg font-semibold text-ink-950">
-                Onboarding Cognitivo
+                Vamos configurar sua conta
               </h2>
               <p className="mt-1 text-sm text-ink-500">
-                Três perguntas rápidas para calibrar os guardrails, a moeda e o SLA do seu workspace.
+                Três perguntas rápidas para deixar o AgentFlow pronto para o seu negócio.
               </p>
             </div>
 
             {passo === "nicho" && (
               <>
+                <p className="text-sm font-medium text-ink-700">Qual é o seu nicho de negócio?</p>
                 <div role="radiogroup" aria-label="Nicho e setor" className="grid gap-2 sm:grid-cols-2">
                   {NICHE_ORDER.filter((k) => k !== "outros").map((key) => (
                     <CartaoOpcao
@@ -215,6 +216,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
 
             {passo === "ralo" && (
               <>
+                <p className="text-sm font-medium text-ink-700">Qual é a sua maior dor operacional hoje?</p>
                 <div role="radiogroup" aria-label="Maior ralo de caixa" className="flex flex-col gap-2">
                   {PAIN_POINT_ORDER.map((key) => (
                     <CartaoOpcao
@@ -240,6 +242,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
 
             {(passo === "regiao" || passo === "salvando") && (
               <>
+                <p className="text-sm font-medium text-ink-700">Onde o seu negócio opera?</p>
                 {setor && (
                   <p className="text-xs text-ink-400">
                     Sugerido para &quot;{NICHE_PRESETS[setor].label}&quot;: {REGIAO_PRESETS[regiaoRecomendadaPorSetor(setor)].label}.

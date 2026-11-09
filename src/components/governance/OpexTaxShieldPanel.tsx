@@ -266,9 +266,9 @@ export function OpexTaxShieldPanel() {
     >
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-semibold text-ink-950">OpEx &amp; Tax Shield</h2>
+          <h2 className="text-sm font-semibold text-ink-950">Economia em folha e encargos</h2>
           <p className="mt-0.5 text-xs text-ink-400">
-            {snapshot.periodo.rotulo} · o que o custo humano evitado representaria se fosse{" "}
+            {snapshot.periodo.rotulo} · quanto você não precisou desembolsar em salário e encargos, como se fosse{" "}
             {apresentacao.tipoFolha}
           </p>
         </div>
@@ -295,7 +295,7 @@ export function OpexTaxShieldPanel() {
       ) : semDados ? (
         <EmptyState
           title="Nenhuma execução no período"
-          description="O Tax Shield é calculado a partir do mesmo custo humano evitado do painel de ROI."
+          description="Esta economia é calculada a partir do mesmo custo humano evitado do painel de ROI."
         />
       ) : (
         <>
@@ -321,7 +321,7 @@ export function OpexTaxShieldPanel() {
               valor={moedaDoValor(snapshot.economiaLiquidaBrl)}
               detalhe={`após custo de IA, revisão humana e plataforma`}
               tom={snapshot.economiaLiquidaBrl >= 0 ? "positivo" : "erro"}
-              dica="Custo humano evitado menos o custo total de operar o Time de Agentes Digitais (IA + revisão humana sob Supervisão HITL + rateio de plataforma) — o mesmo número do painel de ROI."
+              dica="Custo humano evitado menos o custo total de operar os agentes de IA (IA + revisão humana quando necessário + rateio de plataforma) — o mesmo número do painel de ROI."
             />
             <MetricCard
               rotulo="Custo-hora de referência"

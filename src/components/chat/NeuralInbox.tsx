@@ -289,7 +289,7 @@ export function NeuralInbox() {
 
   const opcoesFiltro = [
     { valor: "ativas" as const, label: "Ativas", contagem: contagens.ativas },
-    { valor: "circuit-breaker" as const, label: "Circuit Breaker", contagem: contagens.circuitBreaker },
+    { valor: "circuit-breaker" as const, label: "Atenção urgente", contagem: contagens.circuitBreaker },
     { valor: "sem-atribuicao" as const, label: "Sem atribuição", contagem: contagens.semAtribuicao },
     { valor: "resolvidas" as const, label: "Resolvidas", contagem: contagens.resolvidas },
     { valor: "todas" as const, label: "Todas", contagem: conversas.length },
@@ -544,9 +544,9 @@ export function NeuralInbox() {
           tom={contagens.semAtribuicao > 0 ? "atencao" : "neutro"}
         />
         <MetricCard
-          rotulo="Circuit Breaker ativo"
+          rotulo="Atenção urgente"
           valor={String(contagens.circuitBreaker)}
-          detalhe="frustração crítica — P1 de SLA aberto"
+          detalhe="cliente muito insatisfeito — precisa de atendimento humano agora"
           tom={contagens.circuitBreaker > 0 ? "erro" : "positivo"}
         />
         <MetricCard
@@ -632,7 +632,7 @@ export function NeuralInbox() {
           {visiveis.length === 0 ? (
             <EmptyState
               title="Nenhuma conversa nesta visão"
-              description="Conversas chegam aqui em tempo real de WhatsApp, Web Chat e redes sociais, assim que o Shield-Layer processa a primeira mensagem."
+              description="Conversas chegam aqui em tempo real de WhatsApp, Web Chat e redes sociais, já protegidas e analisadas automaticamente."
             />
           ) : (
             <ul className="flex flex-col gap-1 overflow-y-auto">
@@ -665,8 +665,8 @@ export function NeuralInbox() {
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-semibold text-ink-950">{conversa.participante.nome}</span>
                           {conversa.circuitBreakerAtivo && (
-                            <span className="mono flex-none rounded-full bg-state-error-bg px-1.5 py-0.5 text-[10px] font-medium text-state-error">
-                              P1
+                            <span className="flex-none rounded-full bg-state-error-bg px-1.5 py-0.5 text-[10px] font-medium text-state-error">
+                              urgente
                             </span>
                           )}
                           {workspace?.setor === "construtora-imobiliaria" && conversa.leadAltoPadrao && (
@@ -758,11 +758,11 @@ export function NeuralInbox() {
               {selecionada.circuitBreakerAtivo && executiveBrief && (
                 <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-state-error-ink/40 bg-state-error-bg p-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="mono flex-none rounded-full bg-state-error px-2 py-0.5 text-[11px] font-semibold text-white">
-                      P1 · CIRCUIT BREAKER
+                    <span className="flex-none rounded-full bg-state-error px-2 py-0.5 text-[11px] font-semibold text-white">
+                      ATENÇÃO URGENTE
                     </span>
                     <p className="text-xs font-semibold text-state-error">
-                      Ticket de SLA aberto{selecionada.slaTicketId ? ` (${selecionada.slaTicketId})` : ""}
+                      Atendimento urgente aberto{selecionada.slaTicketId ? ` (${selecionada.slaTicketId})` : ""}
                     </p>
                   </div>
                   <p className="text-xs text-ink-700">
@@ -796,7 +796,7 @@ export function NeuralInbox() {
                     <Button size="sm" variant="secondary" disabled={processando} onClick={handleAssumir}>
                       Assumir
                     </Button>
-                    <Button size="sm" variant="secondary" disabled={processando} onClick={handleRotear} title="Aciona o Swarm Routing para encontrar o melhor operador ou agente disponível">
+                    <Button size="sm" variant="secondary" disabled={processando} onClick={handleRotear} title="Encontra automaticamente o melhor operador ou agente disponível para esta conversa">
                       Rotear automaticamente
                     </Button>
                   </>
@@ -846,7 +846,7 @@ export function NeuralInbox() {
                     aria-expanded={roteamentoAberto}
                     className="flex w-full items-center justify-between px-2 py-1.5 text-left font-medium text-ink-700 hover:bg-mist-50"
                   >
-                    <span>Por que foi roteada assim? (explicabilidade do Swarm Routing)</span>
+                    <span>Por que foi roteada assim?</span>
                     <span className="mono text-ink-400">{roteamentoAberto ? "ocultar" : "mostrar"}</span>
                   </button>
                   {roteamentoAberto && (
