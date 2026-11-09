@@ -221,32 +221,49 @@ export function agregarPipelinePorVertical(
  * `calcularMetricasPipelineVertical` (pura) para que a lógica de negócio
  * continue testável sem Firestore — mesmo desenho de
  * `executarFluxo`/`executarFluxoReal` em `@/lib/server/orchestrator(Admin)`.
+ *
+ * Contrato de resiliência (bug real em produção: a aba "Oportunidade &
+ * Pipeline" respondia HTTP 500 — ver `/api/roi-dashboard`): esta função
+ * NUNCA deixa uma falha pontual de leitura (rede instável, Admin SDK
+ * indisponível, etc.) escapar como exceção — degrada para `null`
+ * (`disponivel: false`, o mesmo estado normal de "workspace sem setor"), e
+ * loga o motivo real no servidor para diagnóstico. Antes, só
+ * `obterDashboardCLevelAdmin` (que itera vários workspaces) tinha esse
+ * try/catch por fora; o caminho direto usado por `/api/roi-dashboard`
+ * (um único workspace) não tinha proteção nenhuma e propagava qualquer
+ * exceção até o catch-all genérico de `comGuarda` → 500 para o dono do
+ * negócio. A garantia agora vive na própria função, para qualquer chamador.
  */
 export async function obterMetricasPipelineVerticalAdmin(
   workspaceId: string,
   opcoes: { periodo?: RoiPeriodo; valorMedioPipelineBrl?: number; referencia?: Date } = {}
 ): Promise<MetricasPipelineVertical | null> {
-  const db = firestoreAdmin();
+  try {
+    const db = firestoreAdmin();
 
-  const workspaceSnap = await db.collection("workspaces").doc(workspaceId).get();
-  if (!workspaceSnap.exists) return null;
-  const setor = (workspaceSnap.data() as { setor?: unknown }).setor;
-  if (typeof setor !== "string") return null;
+    const workspaceSnap = await db.collection("workspaces").doc(workspaceId).get();
+    if (!workspaceSnap.exists) return null;
+    const setor = (workspaceSnap.data() as { setor?: unknown }).setor;
+    if (typeof setor !== "string") return null;
 
-  const [conversasSnap, ticketsSnap] = await Promise.all([
-    db.collection("conversations").where("workspaceId", "==", workspaceId).get(),
-    db.collection("hitlTickets").where("workspaceId", "==", workspaceId).get(),
-  ]);
+    const [conversasSnap, ticketsSnap] = await Promise.all([
+      db.collection("conversations").where("workspaceId", "==", workspaceId).get(),
+      db.collection("hitlTickets").where("workspaceId", "==", workspaceId).get(),
+    ]);
 
-  return calcularMetricasPipelineVertical({
-    workspaceId,
-    setor: setor as NicheKey,
-    conversas: conversasSnap.docs.map((d) => d.data() as Conversation),
-    tickets: ticketsSnap.docs.map((d) => d.data() as HandoffTicket),
-    periodo: opcoes.periodo,
-    valorMedioPipelineBrl: opcoes.valorMedioPipelineBrl,
-    referencia: opcoes.referencia,
-  });
+    return calcularMetricasPipelineVertical({
+      workspaceId,
+      setor: setor as NicheKey,
+      conversas: conversasSnap.docs.map((d) => d.data() as Conversation),
+      tickets: ticketsSnap.docs.map((d) => d.data() as HandoffTicket),
+      periodo: opcoes.periodo,
+      valorMedioPipelineBrl: opcoes.valorMedioPipelineBrl,
+      referencia: opcoes.referencia,
+    });
+  } catch (erro) {
+    console.error(`[roi-dashboard] falha ao calcular métricas de pipeline do workspace ${workspaceId}:`, erro);
+    return null;
+  }
 }
 
 /**

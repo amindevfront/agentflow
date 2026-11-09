@@ -13,6 +13,14 @@
 // Vertical de confirmação de agendamento implementado (valor médio
 // configurado em 0) dizem isso explicitamente, em vez de mostrar um zero sem
 // contexto — ver `VALOR_MEDIO_PIPELINE_PADRAO_BRL`.
+//
+// Bug real em produção: a aba mostrava "Nicho ainda não configurado" (e, por
+// trás, um HTTP 500) mesmo com um Fluxo já criado e salvo. Causa raiz: a
+// gravação do workspace em Firestore (`setor` incluso, ver `prepareWorkspace`
+// em `@/lib/firestore`) é otimista — `useWorkspace()`/`pendingSync` já sabe
+// quando essa confirmação ainda está em voo (ver ADR-0003/0006), mas este
+// painel ignorava esse sinal e tratava "ainda sincronizando" como se fosse
+// "nicho nunca configurado", um tom enganoso para o dono do negócio.
 
 import { useEffect, useState } from "react";
 import type { RoiConfig } from "@/types";
@@ -23,6 +31,7 @@ import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Button } from "@/components/ui/Button";
 
 interface RespostaRoiDashboard {
   disponivel: boolean;
@@ -31,11 +40,12 @@ interface RespostaRoiDashboard {
 }
 
 export function RoiOpportunityPanel() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, pendingSync } = useWorkspace();
   const [config, setConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
   const [resposta, setResposta] = useState<RespostaRoiDashboard | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -43,7 +53,13 @@ export function RoiOpportunityPanel() {
   }, [workspaceId]);
 
   useEffect(() => {
-    if (!workspaceId) return;
+    // Enquanto a gravação do workspace ainda está sincronizando (ver
+    // `pendingSync` em `@/lib/workspace`), o Admin SDK pode legitimamente
+    // ainda não ver o `setor` que o usuário já escolheu — buscar agora só
+    // produziria o falso negativo "nicho não configurado". Espera a
+    // sincronização confirmar (ou falhar de vez) antes de perguntar ao
+    // servidor.
+    if (!workspaceId || pendingSync) return;
     let cancelado = false;
 
     async function carregar() {
@@ -74,7 +90,7 @@ export function RoiOpportunityPanel() {
     return () => {
       cancelado = true;
     };
-  }, [workspaceId]);
+  }, [workspaceId, pendingSync, tentativa]);
 
   const moedaDoValor = (valorBrl: number) =>
     formatarMoeda(valorBrl, config.moedaExibicao, cambioParaMoeda(config, config.moedaExibicao));
@@ -93,10 +109,20 @@ export function RoiOpportunityPanel() {
         </p>
       </header>
 
-      {erro && <p className="text-xs text-state-error">{erro}</p>}
-
-      {carregando ? (
+      {pendingSync ? (
+        <p className="text-xs text-ink-400">Sincronizando configuração do workspace…</p>
+      ) : carregando ? (
         <p className="text-xs text-ink-400">Carregando pipeline…</p>
+      ) : erro ? (
+        <EmptyState
+          title="Não foi possível carregar o pipeline"
+          description={erro}
+          action={
+            <Button variant="secondary" size="sm" onClick={() => setTentativa((n) => n + 1)}>
+              Tentar novamente
+            </Button>
+          }
+        />
       ) : !resposta?.disponivel || !metricas ? (
         <EmptyState
           title="Nicho ainda não configurado"

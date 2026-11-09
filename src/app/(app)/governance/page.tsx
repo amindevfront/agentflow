@@ -24,9 +24,11 @@ import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
 import { RoiOpportunityPanel } from "@/components/governance/RoiOpportunityPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
 import { DocumentVaultPanel } from "@/components/niche/DocumentVaultPanel";
+import { Banner } from "@/components/ui/Banner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { drenarFilaAuditoria } from "@/lib/auditLog";
+import { precisaConfigurarNicho } from "@/lib/governanceGuards";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { obterIdsModulosAtivos } from "@/modules/registry";
@@ -71,11 +73,20 @@ function CtaAtivarEmConfiguracoes() {
 
 export default function GovernancePage() {
   const [aba, setAba] = useState<Aba>("oportunidade");
-  const { workspaceId } = useWorkspace();
-  const { data: workspace } = useWorkspaceDoc(workspaceId);
+  const { workspaceId, pendingSync } = useWorkspace();
+  const { data: workspace, isLoading: workspaceCarregando } = useWorkspaceDoc(workspaceId);
   const idsModulosAtivos = obterIdsModulosAtivos(workspace);
   const documentAiVaultAtivo = idsModulosAtivos.includes("document-ai-vault");
   const arRecoveryAtivo = idsModulosAtivos.includes("ar-recovery-engine");
+
+  // Guia de 4 Passos (Configurações → Fluxo → Sandbox → Governança):
+  // quem pula direto para a Governança por URL, sem nunca ter passado por
+  // Configurações, não tem `setor` gravado — em vez de deixar cada painel
+  // (Oportunidade & Pipeline, Back-office, etc.) mostrar isso como se fosse
+  // um erro próprio e desconectado, um único aviso no topo já explica a
+  // causa real e guia de volta (lógica em `@/lib/governanceGuards`, testável
+  // sem DOM).
+  const mostrarAvisoNicho = precisaConfigurarNicho({ pendingSync, workspaceCarregando, workspace });
 
   useEffect(() => {
     // Eventos de auditoria que ficaram presos na fila local (queda de rede,
@@ -87,6 +98,19 @@ export default function GovernancePage() {
 
   return (
     <div className="flex flex-col gap-4">
+      {mostrarAvisoNicho && (
+        <Banner
+          action={
+            <Link href="/settings" className="text-sm font-medium underline">
+              ir para Configurações
+            </Link>
+          }
+        >
+          Defina o nicho do seu negócio em Configurações antes de usar a Governança — é o que liga os painéis certos
+          para o seu tipo de empresa.
+        </Banner>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <BusinessROIWidget compacto className="flex-1" />
         <ExecutiveReportPanel />

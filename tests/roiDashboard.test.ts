@@ -1,13 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Conversation, HandoffTicket } from "@/types";
 import {
   JANELA_MADRUGADA,
   VALOR_MEDIO_PIPELINE_PADRAO_BRL,
   agregarPipelinePorVertical,
   calcularMetricasPipelineVertical,
+  obterMetricasPipelineVerticalAdmin,
 } from "@/lib/server/roiDashboard";
 import { periodoMesAtual } from "@/lib/roi";
 import { foraDoExpediente } from "@/lib/inbox/revenueRescue";
+import { resetarAdminParaTeste } from "@/lib/server/firebaseAdmin";
 
 const REFERENCIA = new Date("2026-03-15T12:00:00.000Z");
 const PERIODO = periodoMesAtual(REFERENCIA);
@@ -177,6 +179,37 @@ describe("calcularMetricasPipelineVertical", () => {
     });
     expect(resultado.atendimentos).toBe(0);
     expect(resultado.agendamentosConfirmados).toBe(0);
+  });
+});
+
+describe("obterMetricasPipelineVerticalAdmin (resiliência — bug real: HTTP 500 na aba Oportunidade & Pipeline)", () => {
+  const chaveOriginal = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+  beforeEach(() => {
+    resetarAdminParaTeste();
+    // Credencial deliberadamente inválida: força o Admin SDK a falhar ao
+    // inicializar, exercitando a mesma condição que um ambiente de produção
+    // mal configurado (ou uma instabilidade transitória do Admin SDK)
+    // produziria ao ler `workspaces/conversations/hitlTickets` — sem
+    // depender de rede ou de um emulador real.
+    process.env.FIREBASE_SERVICE_ACCOUNT_JSON = "{ isso não é json válido";
+  });
+
+  afterEach(() => {
+    if (chaveOriginal === undefined) delete process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+    else process.env.FIREBASE_SERVICE_ACCOUNT_JSON = chaveOriginal;
+    resetarAdminParaTeste();
+    vi.restoreAllMocks();
+  });
+
+  it("nunca lança quando o Admin SDK falha ao inicializar — degrada para null (disponível:false), não HTTP 500", async () => {
+    const erroEspiao = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const resultado = await obterMetricasPipelineVerticalAdmin("ws-qualquer");
+
+    expect(resultado).toBeNull();
+    expect(erroEspiao).toHaveBeenCalledOnce();
+    expect(String(erroEspiao.mock.calls[0][0])).toContain("ws-qualquer");
   });
 });
 

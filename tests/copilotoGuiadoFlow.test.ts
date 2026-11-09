@@ -19,6 +19,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { obterExemploFluxo } from "@/lib/flowDemoData";
 import { extrairClienteSimulado } from "@/lib/payloadSimulatorInbox";
+import { precisaConfigurarNicho } from "@/lib/governanceGuards";
 import {
   construirTabelaPipelinePadrao,
   obterIdsModulosAtivos,
@@ -180,6 +181,33 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
 
     const modulos = obterModulosAtivos(workspaceComExtra);
     expect(modulos.map((m) => m.id)).toEqual(["construtora-imobiliaria", "document-ai-vault"]);
+  });
+
+  it("Regressão do bug real (HTTP 500/'Nicho ainda não configurado'): conta zerada pulando direto para Governança, sem passar por Configurações, nunca quebra — só pede para voltar", () => {
+    // Nenhum `setor` ainda — exatamente quem pula o Passo 1 e vai direto
+    // para a Governança por URL, com `pendingSync` já resolvido (não é mais
+    // uma gravação em voo, é ausência real de configuração).
+    const workspaceSemNicho: Pick<Workspace, "setor" | "modulosAtivos"> = {};
+
+    // Guia de 4 Passos: o aviso único de "volte para Configurações" dispara.
+    expect(
+      precisaConfigurarNicho({ pendingSync: false, workspaceCarregando: false, workspace: workspaceSemNicho })
+    ).toBe(true);
+
+    // Nenhum painel por baixo lança: back-office cai para "desligado" (nunca
+    // acessa `NICHE_PRESETS[undefined]`), e a tabela de pipeline não tem
+    // nenhuma gaveta ativa para somar.
+    const idsAtivos = obterIdsModulosAtivos(workspaceSemNicho);
+    expect(idsAtivos).toEqual([]);
+    expect(() => construirTabelaPipelinePadrao(idsAtivos)).not.toThrow();
+
+    // Enquanto a mesma ausência de `setor` é só a confirmação da gravação
+    // otimista ainda em voo (ver `prepareWorkspace`/`persistWorkspace`), o
+    // aviso NÃO dispara — essa é a causa raiz real do bug, e o utilitário
+    // precisa distinguir os dois casos.
+    expect(
+      precisaConfigurarNicho({ pendingSync: true, workspaceCarregando: false, workspace: workspaceSemNicho })
+    ).toBe(false);
   });
 
   it("o mesmo roteiro funciona para QUALQUER nicho de indústria, não só Horizon BC — Preenchimento Mágico nunca devolve um exemplo inválido", () => {
