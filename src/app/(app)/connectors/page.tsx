@@ -66,7 +66,16 @@ export default function ConnectorsPage() {
     setNomeError(null);
     setSaving(true);
     try {
-      await createConnector(workspaceId, { ...validado.data, status: "nao-configurado" });
+      // Web Widget Corporativo é o único tipo de conector cuja ingestão real
+      // já está implementada ponta a ponta (ver `widgetHabilitado` em
+      // `@/lib/server/inboxWidgetAdmin` — ela só checa a EXISTÊNCIA deste
+      // registro, nunca um status "conectado" que nada jamais grava). Os
+      // demais tipos (Webhook, SMS/Twilio, E-mail, API externa) ainda não têm
+      // o provedor real ligado nesta versão — "não configurado" é honesto
+      // para eles, mas era enganoso para o Widget: o cliente via a mesma pill
+      // cinza mesmo com o canal já funcionando de verdade.
+      const status = validado.data.tipo === TIPO_WIDGET ? "conectado" : "nao-configurado";
+      await createConnector(workspaceId, { ...validado.data, status });
       setNome("");
       setShowForm(false);
     } finally {
@@ -145,6 +154,20 @@ export default function ConnectorsPage() {
             Já funciona de ponta a ponta: mensagens enviadas pelo widget chegam na Neural Inbox passando pelo mesmo
             Shield-Layer, Radar de Sentimento e Circuit Breaker dos demais canais. Ainda não há exibição de resposta
             do atendente em tempo real dentro do próprio widget — essa resposta chega por fora, hoje.
+          </p>
+        </div>
+      )}
+
+      {showForm && tipo !== TIPO_WIDGET && (
+        <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
+          <p className="text-xs font-medium text-ink-700">
+            Este tipo ainda não recebe mensagens reais nesta versão.
+          </p>
+          <p className="text-[11px] text-ink-500">
+            O registro salva o nome do canal para planejamento, mas a ligação com o provedor de verdade (WhatsApp
+            Business, Instagram/Facebook via Meta, SMS/WhatsApp via Twilio) ainda não está disponível — as rotas de
+            recebimento existem e validam a assinatura do provedor, mas respondem que a ingestão não está pronta.
+            O único canal que já funciona de ponta a ponta hoje é o <span className="font-medium">Web Widget Corporativo</span>.
           </p>
         </div>
       )}
