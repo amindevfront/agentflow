@@ -33,16 +33,24 @@ const ROLE_LABEL: Record<UserRole, string> = {
   admin: "admin",
 };
 
-function Brand() {
+function Brand({ workspaceName }: { workspaceName: string | null }) {
   return (
-    <div className="flex items-center gap-2 px-5 py-5">
-      <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 32 L20 20 L32 8" stroke="var(--color-signal-500)" strokeWidth="3" strokeLinecap="round" />
-        <circle cx="8" cy="32" r="4.5" fill="var(--color-ink-950)" stroke="var(--color-signal-500)" strokeWidth="3" />
-        <circle cx="20" cy="20" r="4.5" fill="var(--color-signal-500)" />
-        <circle cx="32" cy="8" r="4.5" fill="var(--color-signal-500)" />
-      </svg>
-      <span className="text-[15px] font-semibold text-ink-950">AgentFlow</span>
+    <div className="flex flex-col gap-0.5 px-5 py-5">
+      <div className="flex items-center gap-2">
+        <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M8 32 L20 20 L32 8" stroke="var(--color-signal-500)" strokeWidth="3" strokeLinecap="round" />
+          <circle cx="8" cy="32" r="4.5" fill="var(--color-ink-950)" stroke="var(--color-signal-500)" strokeWidth="3" />
+          <circle cx="20" cy="20" r="4.5" fill="var(--color-signal-500)" />
+          <circle cx="32" cy="8" r="4.5" fill="var(--color-signal-500)" />
+        </svg>
+        <span className="text-[15px] font-semibold text-ink-950">AgentFlow</span>
+      </div>
+      {/* Mostra SEMPRE qual negócio está sendo administrado nesta tela — um
+          implementador loga em contas diferentes por cliente, e sem isto não
+          há como distinguir, só olhando a tela, qual empresa está aberta. */}
+      <p className="truncate text-xs font-medium text-ink-500" title={workspaceName ?? undefined}>
+        {workspaceName ? `Painel de: ${workspaceName}` : "Carregando workspace…"}
+      </p>
     </div>
   );
 }
@@ -52,9 +60,10 @@ interface SidebarProps {
   onClose: () => void;
   userName: string;
   userRole: UserRole;
+  workspaceName: string | null;
 }
 
-export function Sidebar({ isOpen, onClose, userName, userRole }: SidebarProps) {
+export function Sidebar({ isOpen, onClose, userName, userRole, workspaceName }: SidebarProps) {
   const pathname = usePathname();
 
   return (
@@ -74,7 +83,7 @@ export function Sidebar({ isOpen, onClose, userName, userRole }: SidebarProps) {
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <Brand />
+        <Brand workspaceName={workspaceName} />
         <div className="flex flex-1 flex-col gap-0.5 px-2">
           {itensVisiveis(userRole).map((item) => {
             const active = pathname?.startsWith(item.href);
@@ -99,7 +108,7 @@ export function Sidebar({ isOpen, onClose, userName, userRole }: SidebarProps) {
           <Avatar name={userName} size="sm" />
           <div className="min-w-0">
             <strong className="block truncate text-[13px] text-ink-950">{userName}</strong>
-            <span className="mono text-[11px] text-ink-500">{ROLE_LABEL[userRole]}</span>
+            <span className="mono text-[11px] text-ink-500">{ROLE_LABEL[userRole]} deste workspace</span>
           </div>
         </div>
       </nav>

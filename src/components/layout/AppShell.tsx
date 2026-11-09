@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { assinarConectividade, assinarOperacoesPendentes, estaOnline, type OperacaoPendente } from "@/lib/offlineQueue";
 import { exigeAdmin } from "./navAcesso";
 import { Sidebar } from "./Sidebar";
@@ -28,7 +29,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, loading: authLoading } = useAuth();
-  const { appUser, loading: workspaceLoading, pendingSync, retry } = useWorkspace();
+  const { appUser, workspaceId, loading: workspaceLoading, pendingSync, retry } = useWorkspace();
+  // Clareza de "de quem é este painel": um implementador loga em workspaces
+  // DIFERENTES para cada cliente (cada conta é um negócio só) — sem o nome
+  // visível o tempo todo, fica ambíguo se esta tela é "o painel que eu uso
+  // pra administrar a empresa do cliente" ou algo do próprio AgentFlow.
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pausedGlobally, setPausedGlobally] = useState(false);
@@ -83,6 +89,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClose={() => setSidebarOpen(false)}
           userName={displayName}
           userRole={appUser?.papel ?? "operacoes"}
+          workspaceName={workspace?.nome ?? null}
         />
         <div className="flex min-h-screen flex-1 flex-col">
           <Topbar
