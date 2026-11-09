@@ -126,6 +126,16 @@ export interface Conversation {
   widgetVisitorId?: string | null;
 
   /**
+   * Número de telefone (formato E.164, ex.: "5547988322566") do contato no
+   * WhatsApp Cloud API — usado para reencontrar a mesma conversa entre
+   * mensagens, mesmo papel de `widgetVisitorId` para o canal WhatsApp. Em
+   * claro de propósito (mesma lógica de `widgetVisitorId`): é o identificador
+   * técnico usado para a consulta, não o dado mostrado ao operador — a UI usa
+   * `participante.identificadorMascarado`.
+   */
+  whatsappTelefone?: string | null;
+
+  /**
    * Auto-Feedback de Conversão: desfecho comercial registrado pelo operador
    * ao concluir o atendimento. Alimenta `calcularInsightsConversao`
    * (`@/lib/inbox/conversionFeedback`), que por sua vez atualiza

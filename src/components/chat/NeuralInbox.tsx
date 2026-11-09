@@ -52,6 +52,7 @@ import type { MediaTypeAnalise } from "@/lib/server/visionAdmin";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
@@ -353,6 +354,36 @@ export function NeuralInbox() {
         workspaceId: selecionada.workspaceId,
       });
       setResposta("");
+
+      // WhatsApp é o único canal com entrega EXTERNA real nesta versão — a
+      // mensagem acima já ficou registrada na conversa independente disto;
+      // uma falha aqui não desfaz o registro, só avisa que o cliente não
+      // recebeu de verdade (ex.: janela de 24h de atendimento fechada).
+      if (selecionada.canal === "whatsapp") {
+        try {
+          const token = await auth?.currentUser?.getIdToken();
+          const resp = await fetchComTimeout(
+            "/api/inbox/whatsapp/send",
+            {
+              method: "POST",
+              headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` },
+              body: JSON.stringify({ conversationId: selecionada.id, texto: resposta }),
+            },
+            "Não foi possível entregar a mensagem pelo WhatsApp agora.",
+            15_000
+          );
+          if (!resp.ok) {
+            const corpo = (await resp.json().catch(() => null)) as { erro?: { mensagem?: string } } | null;
+            setErro(
+              corpo?.erro?.mensagem ??
+                "A resposta foi registrada na conversa, mas não foi entregue pelo WhatsApp de verdade."
+            );
+          }
+        } catch (e) {
+          reportarErro(e, "inbox:enviar-whatsapp");
+          setErro("A resposta foi registrada na conversa, mas não foi entregue pelo WhatsApp de verdade.");
+        }
+      }
     } catch (e) {
       reportarErro(e, "inbox:enviar-resposta");
       setErro("Não foi possível enviar a resposta agora. Tente novamente em alguns instantes.");

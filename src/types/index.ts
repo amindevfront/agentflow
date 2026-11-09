@@ -268,6 +268,14 @@ export interface Connector {
   tipo: string;
   status: ConnectorStatus;
   atualizadoEm: string;
+  /**
+   * Phone Number ID do WhatsApp Cloud API (Meta for Developers) — só usado
+   * quando `tipo` é o conector de WhatsApp. É o identificador interno do
+   * Meta, não o número de telefone em si; é o que aparece em
+   * `value.metadata.phone_number_id` em todo webhook real, e o que a rota de
+   * envio usa para responder pelo número certo.
+   */
+  metaPhoneNumberId?: string;
 }
 
 export interface TeamMember {

@@ -1,34 +1,27 @@
-// POST /api/inbox/webhook — ingestão de mensagens de canais externos.
+// POST /api/inbox/webhook — ingestão de mensagens do WhatsApp Business Cloud
+// API (Meta Graph API).
 //
-// Ponto de entrada real para WhatsApp Business Cloud API, Instagram e
-// Facebook Messenger (via Meta Graph API) — o provedor do canal chamaria
-// esta rota a cada mensagem recebida. Nenhum desses três provedores tem
-// credenciais configuradas neste ambiente (não há como validar a assinatura
-// de um webhook sem o segredo real do app Meta), então esta rota opera em
-// modo de DIAGNÓSTICO: valida a assinatura e o formato do payload, e devolve
-// exatamente o que faltaria para processá-lo de verdade, em vez de fingir
-// sucesso.
+// Valida a assinatura HMAC do Meta (`X-Hub-Signature-256`) antes de
+// qualquer outra coisa, exatamente como a documentação do provedor exige.
+// Com a assinatura validada, resolve o workspace pelo `phone_number_id` do
+// payload (ver `resolverConectorPorPhoneNumberId` em
+// `@/lib/server/whatsappCloudApiAdmin` — é o único jeito de saber de quem é
+// a mensagem, já que o Meta não manda nenhuma credencial por conversa) e
+// registra via o mesmo pipeline Shield-Layer/Radar de Sentimento/Circuit
+// Breaker que todo outro canal já usa.
+//
+// Instagram e Facebook Messenger (também cobertos pela Meta Graph API) NÃO
+// são processados aqui ainda — o payload chega, mas a rota devolve o
+// diagnóstico de "ingestão não implementada para este provedor" em vez de
+// fingir que tratou. WhatsApp é o único provedor com o pipeline completo
+// nesta versão.
 //
 // DELIBERADAMENTE NÃO usa `comGuarda`: aquele wrapper exige um ID token do
 // Firebase em `Authorization: Bearer`, e um webhook real do Meta nunca envia
-// isso — ele autentica por assinatura HMAC no corpo (`X-Hub-Signature-256`),
-// um mecanismo completamente diferente. Exigir sessão Firebase aqui rejeitaria
-// toda chamada real do provedor antes mesmo de validar a assinatura.
-//
-// O pipeline de processamento em si — Shield-Layer, Radar de Sentimento,
-// Circuit Breaker — é real e já está implementado em
-// `@/lib/inbox/firestore` (`registrarMensagemCliente`). Esta rota está pronta
-// para chamá-lo assim que `META_WEBHOOK_SECRET` estiver configurado; a
-// validação de assinatura HMAC do Meta é aplicada antes de qualquer outra
-// coisa, exatamente como a documentação do provedor exige — ela só não pode
-// ser EXERCITADA sem o segredo real.
-//
-// O canal "webchat" não depende de credencial externa nem desta rota: o
-// operador autenticado chama `registrarMensagemCliente` (em
-// `@/lib/inbox/firestore`) diretamente do navegador, com sua própria sessão
-// Firebase — ver o harness de simulação em `NeuralInbox.tsx`.
+// isso — ele autentica por assinatura HMAC no corpo (`X-Hub-Signature-256`).
 
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { registrarMensagemWhatsappAdmin, resolverConectorPorPhoneNumberId } from "@/lib/server/whatsappCloudApiAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,6 +48,26 @@ function validarAssinaturaMeta(corpoBruto: string, assinaturaRecebida: string | 
   const bufferEsperado = Buffer.from(esperada);
   if (bufferRecebido.length !== bufferEsperado.length) return false;
   return timingSafeEqual(bufferRecebido, bufferEsperado);
+}
+
+interface MensagemWhatsappBruta {
+  from?: string;
+  id?: string;
+  type?: string;
+  text?: { body?: string };
+}
+
+interface ValorWebhookWhatsapp {
+  metadata?: { phone_number_id?: string };
+  contacts?: Array<{ profile?: { name?: string }; wa_id?: string }>;
+  messages?: MensagemWhatsappBruta[];
+}
+
+interface PayloadWebhookMeta {
+  object?: string;
+  entry?: Array<{
+    changes?: Array<{ field?: string; value?: ValorWebhookWhatsapp }>;
+  }>;
 }
 
 export async function POST(requisicao: Request): Promise<Response> {
@@ -87,28 +100,58 @@ export async function POST(requisicao: Request): Promise<Response> {
       return respostaJson({ erro: { codigo: "assinatura_invalida", mensagem: "Assinatura do webhook inválida." } }, 401);
     }
 
+    let payload: PayloadWebhookMeta;
     try {
-      JSON.parse(corpoBruto);
+      payload = JSON.parse(corpoBruto) as PayloadWebhookMeta;
     } catch {
       return respostaJson({ erro: { codigo: "json_invalido", mensagem: "Corpo do webhook não é JSON válido." } }, 400);
     }
 
-    // A partir daqui, com a assinatura validada, o processamento real seria
-    // extrair conversationId/texto/canal do formato específico do provedor
-    // (WhatsApp Cloud API e Meta Graph API têm envelopes diferentes) e chamar
-    // o pipeline real já construído em `registrarMensagemCliente`. Trabalho
-    // futuro assim que um provedor real estiver configurado e este caminho
-    // puder ser exercitado de ponta a ponta contra tráfego real — ver
-    // `src/lib/inbox/firestore.ts`.
-    return respostaJson(
-      {
-        erro: {
-          codigo: "ingestao_nao_implementada",
-          mensagem: "Assinatura validada, mas a ingestão real ainda não está implementada para este canal.",
-        },
-      },
-      501
-    );
+    if (payload.object !== "whatsapp_business_account") {
+      // Instagram/Facebook Messenger chegam com outro `object` — reconhecidos,
+      // mas ainda não processados (ver cabeçalho do arquivo).
+      return respostaJson(
+        { erro: { codigo: "ingestao_nao_implementada", mensagem: "Assinatura validada, mas este provedor ainda não tem ingestão implementada." } },
+        501
+      );
+    }
+
+    const resultados: Array<{ conversationId: string; messageId: string }> = [];
+    for (const entry of payload.entry ?? []) {
+      for (const change of entry.changes ?? []) {
+        if (change.field !== "messages") continue;
+        const valor = change.value;
+        const phoneNumberId = valor?.metadata?.phone_number_id;
+        if (!phoneNumberId || !valor?.messages?.length) continue;
+
+        const conector = await resolverConectorPorPhoneNumberId(phoneNumberId);
+        if (!conector) {
+          console.error(`[inbox/webhook] phone_number_id "${phoneNumberId}" sem conector cadastrado — mensagem descartada.`);
+          continue;
+        }
+
+        const nomeContato = valor.contacts?.[0]?.profile?.name ?? "";
+
+        for (const mensagem of valor.messages) {
+          if (mensagem.type !== "text" || !mensagem.text?.body || !mensagem.from) {
+            // Áudio/imagem/documento/figurinha: fora do escopo desta v1 —
+            // registrado em log, nunca descartado silenciosamente.
+            console.error(`[inbox/webhook] mensagem do tipo "${mensagem.type}" ainda não suportada — ignorada.`);
+            continue;
+          }
+          const resultado = await registrarMensagemWhatsappAdmin({
+            workspaceId: conector.workspaceId,
+            telefoneCliente: mensagem.from,
+            nomeCliente: nomeContato,
+            texto: mensagem.text.body,
+            idExterno: mensagem.id,
+          });
+          resultados.push(resultado);
+        }
+      }
+    }
+
+    return respostaJson({ processadas: resultados.length }, 200);
   } catch (erro) {
     console.error("[inbox/webhook] erro não tratado:", erro);
     return respostaJson({ erro: { codigo: "erro_interno", mensagem: "Erro interno ao processar o webhook." } }, 500);
