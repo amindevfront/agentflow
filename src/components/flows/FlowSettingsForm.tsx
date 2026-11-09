@@ -413,7 +413,13 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
         </div>
       )}
 
-      <Button type="submit" loading={saving} disabled={!canSubmit} title={!canSubmit ? pendencias.join(" ") : undefined}>
+      <Button
+        type="submit"
+        loading={saving}
+        disabled={!canSubmit}
+        title={!canSubmit ? pendencias.join(" ") : undefined}
+        className="w-full sm:w-auto"
+      >
         Salvar configurações
       </Button>
     </form>
