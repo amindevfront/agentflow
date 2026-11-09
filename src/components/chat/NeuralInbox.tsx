@@ -717,6 +717,13 @@ export function NeuralInbox() {
             />
           ) : (
             <>
+              {/* Duplicado deliberadamente perto da ação: o único outro lugar
+                  onde `erro` é exibido (acima da grade de duas colunas) fica
+                  fora da tela quando o operador já está com o painel de
+                  conversa aberto — uma falha ao assumir/responder/resolver
+                  parecia "não fazer nada" porque o aviso aparecia longe
+                  demais do clique que o gerou. */}
+              {erro && <p className="mb-1 text-xs text-state-error">{erro}</p>}
               <div className="flex flex-wrap items-start justify-between gap-2 border-b border-ink-100 pb-3">
                 <div>
                   <div className="flex items-center gap-2">
