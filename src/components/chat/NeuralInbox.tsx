@@ -211,20 +211,33 @@ export function NeuralInbox() {
   const [simuladorAberto, setSimuladorAberto] = useState(false);
 
   useEffect(() => {
+    // Bug real corrigido aqui: nenhuma destas assinaturas passava
+    // `workspaceId` — todas caíam no padrão `DEFAULT_WORKSPACE_ID` ("default",
+    // ver `@/lib/firestore`), um workspace que não é o do usuário logado.
+    // A Neural Inbox inteira (lista de conversas, fila de transbordo,
+    // operadores, agentes, config de ROI) ficava presa num workspace que não
+    // existe de verdade para a conta real — por isso a lista aparecia vazia
+    // mesmo com conversas recém-criadas no workspace certo, e por isso
+    // "Assumir" numa conversa criada por "Nova conversa" (que tinha o MESMO
+    // bug — ver `handleCriarConversa` abaixo) falhava: a escrita ia para
+    // "default", e `firestore.rules` nega a atualização porque esse id não
+    // bate com o workspace real do usuário autenticado.
+    if (!workspaceId) return;
     const cancelamentos = [
       subscribeConversations(setConversas, {
+        workspaceId,
         onError: () => setErro("Não foi possível carregar as conversas agora. Tente novamente em instantes."),
       }),
       // SLA Rescue: tickets de transbordo alimentam a varredura abaixo, que
       // aciona o Circuit Breaker quando um P1 estoura o SLA (ver efeito
       // seguinte) — independente de qualquer sinal textual de frustração.
-      subscribeFilaTransbordo(setTickets),
-      subscribeOperatorProfiles(setOperadores),
-      subscribeAgentProfiles(setAgentes),
-      subscribeRoiConfig(setRoiConfig),
+      subscribeFilaTransbordo(setTickets, { workspaceId }),
+      subscribeOperatorProfiles(setOperadores, workspaceId),
+      subscribeAgentProfiles(setAgentes, workspaceId),
+      subscribeRoiConfig(setRoiConfig, workspaceId),
     ];
     return () => cancelamentos.forEach((cancelar) => cancelar());
-  }, []);
+  }, [workspaceId]);
 
   // SLA Rescue & Circuit Breaker: varredura sob demanda (mesmo padrão de
   // `expirarTicketsVencidos`) — a cada mudança em conversas/tickets, aplica o
@@ -530,6 +543,7 @@ export function NeuralInbox() {
         nomeParticipante: novoNomeCliente.trim(),
         identificadorParticipante: novoContatoCliente.trim(),
         assunto: novoAssunto.trim() || "Novo contato via Web Chat",
+        workspaceId: workspaceId ?? undefined,
       });
       setSelecionadaId(conversa.id);
       setNovaConversaAberta(false);
