@@ -1,21 +1,55 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { criarConversa, registrarMensagemCliente } from "@/lib/inbox/firestore";
+import { extrairClienteSimulado } from "@/lib/payloadSimulatorInbox";
+import { obterExemploFluxo } from "@/lib/flowDemoData";
+import { marcarSimuladorTestado } from "@/components/flows/PrimeirosPassosCard";
 import type { SimTestResult } from "@/types";
 
+interface PayloadSimulatorProps {
+  /** Nome do fluxo selecionado — vira o assunto da conversa de demonstração, só para contexto. */
+  flowNome?: string;
+}
+
 /**
- * Sandbox local: NUNCA grava em flowRuns nem chama execução real.
- * Apenas valida o JSON e ecoa um resultado sintético, conforme
+ * Sandbox local: "Executar teste" NUNCA grava em flowRuns nem chama
+ * execução real — só valida o JSON e ecoa um resultado sintético, conforme
  * "Não afeta execuções reais — roda isolado, localmente" (design-system.html).
+ *
+ * "Enviar como lead de teste" é uma ação SEPARADA e explícita (nunca
+ * disparada automaticamente pelo teste acima): cria uma conversa real na
+ * Neural Inbox a partir do payload, pelo MESMO pipeline que uma mensagem de
+ * cliente de verdade usaria (Shield-Layer, radar de sentimento, roteamento)
+ * — mesma honestidade do harness "simular mensagem do cliente" da própria
+ * Neural Inbox (`NeuralInbox.tsx`): nunca finge ser um canal real, só
+ * rotulado como demonstração.
  */
-export function PayloadSimulator() {
+export function PayloadSimulator({ flowNome }: PayloadSimulatorProps) {
+  const { workspaceId } = useWorkspace();
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
   const [payload, setPayload] = useState("{\n  \n}");
   const [payloadError, setPayloadError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
   const [output, setOutput] = useState<string | null>(null);
+  const [ultimoPayloadValido, setUltimoPayloadValido] = useState<unknown>(null);
   const [history, setHistory] = useState<SimTestResult[]>([]);
+
+  const [enviandoInbox, setEnviandoInbox] = useState(false);
+  const [erroInbox, setErroInbox] = useState<string | null>(null);
+  const [conversaCriada, setConversaCriada] = useState<{ id: string; nome: string } | null>(null);
+
+  /** Preenchimento Mágico por Nicho (Sandbox): mesma fonte de exemplo do botão em `FlowSettingsForm` — a demo fica coerente em qualquer tela. */
+  function handlePreencherExemplo() {
+    const exemplo = obterExemploFluxo(workspace?.setor);
+    setPayload(JSON.stringify(exemplo.payloadExemplo, null, 2));
+    setPayloadError(null);
+  }
 
   function handleRun() {
     setPayloadError(null);
@@ -28,16 +62,47 @@ export function PayloadSimulator() {
     }
 
     setRunning(true);
+    setConversaCriada(null);
+    setErroInbox(null);
     setTimeout(() => {
       const result = { status: "ok", recebido: parsed, executadoEm: new Date().toISOString() };
       const formatted = JSON.stringify(result, null, 2);
       setOutput(formatted);
+      setUltimoPayloadValido(parsed);
       setHistory((h) => [
         { id: crypto.randomUUID(), executadoEm: new Date().toISOString(), payload, output: formatted, sucesso: true },
         ...h,
       ]);
       setRunning(false);
     }, 400);
+  }
+
+  async function handleEnviarParaInbox() {
+    if (!workspaceId) return;
+    setEnviandoInbox(true);
+    setErroInbox(null);
+    try {
+      const { nome, texto } = extrairClienteSimulado(ultimoPayloadValido);
+      const conversa = await criarConversa({
+        canal: "webchat",
+        nomeParticipante: nome,
+        identificadorParticipante: `sandbox:${Date.now()}`,
+        assunto: flowNome ? `Simulação via Fluxos — ${flowNome}` : "Simulação via Fluxos",
+        workspaceId,
+      });
+      await registrarMensagemCliente({
+        conversationId: conversa.id,
+        texto,
+        canal: "webchat",
+        workspaceId,
+      });
+      setConversaCriada({ id: conversa.id, nome });
+      marcarSimuladorTestado();
+    } catch (e) {
+      setErroInbox(e instanceof Error ? e.message : "Não foi possível enviar para a Neural Inbox.");
+    } finally {
+      setEnviandoInbox(false);
+    }
   }
 
   return (
@@ -50,9 +115,19 @@ export function PayloadSimulator() {
       </div>
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-ink-700" htmlFor="sim-payload">
-          Payload de teste (JSON)
-        </label>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <label className="text-sm font-medium text-ink-700" htmlFor="sim-payload">
+            Payload de teste (JSON)
+          </label>
+          <button
+            type="button"
+            onClick={handlePreencherExemplo}
+            className="flex-none whitespace-nowrap rounded-full border border-signal-500/40 bg-signal-50 px-3 py-1.5 text-xs font-medium text-signal-700 hover:bg-signal-100"
+            title="Preenche um payload de exemplo calibrado para o seu nicho ativo."
+          >
+            ✨ Simular payload de exemplo
+          </button>
+        </div>
         <textarea
           id="sim-payload"
           value={payload}
@@ -82,6 +157,34 @@ export function PayloadSimulator() {
           <p className="text-xs text-ink-400">Execute um teste para ver o resultado aqui.</p>
         )}
       </div>
+
+      {output && (
+        <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-signal-500/30 bg-signal-50 p-3">
+          <p className="text-xs text-ink-700">
+            Quer ver isso virando atendimento de verdade? Envie este payload como uma conversa de
+            demonstração na Neural Inbox — passa pelo mesmo Shield-Layer e roteamento de uma mensagem real,
+            só rotulada como teste.
+          </p>
+          {!conversaCriada ? (
+            <Button type="button" size="sm" variant="secondary" loading={enviandoInbox} onClick={handleEnviarParaInbox}>
+              Enviar como lead de teste para a Neural Inbox
+            </Button>
+          ) : (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-full bg-state-done-bg px-2.5 py-1 text-[11px] font-medium text-state-done">
+                conversa criada: {conversaCriada.nome}
+              </span>
+              <Link
+                href={`/inbox?conversa=${conversaCriada.id}`}
+                className="text-xs font-medium text-signal-600 hover:underline"
+              >
+                abrir na Neural Inbox →
+              </Link>
+            </div>
+          )}
+          {erroInbox && <p className="text-xs text-state-error">{erroInbox}</p>}
+        </div>
+      )}
 
       <div>
         <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">

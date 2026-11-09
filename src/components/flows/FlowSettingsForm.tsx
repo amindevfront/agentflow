@@ -5,6 +5,8 @@ import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { createFlow, updateFlow } from "@/lib/firestore";
 import { useWorkspace } from "@/lib/workspace";
+import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { obterExemploFluxo } from "@/lib/flowDemoData";
 import {
   armazenarCredencial,
   obterCredencial,
@@ -14,6 +16,28 @@ import {
 import type { CredentialMetadata, Flow } from "@/types";
 
 const WEBHOOK_REGEX = /^https:\/\/[\w-]+(\.[\w-]+)+(\/.*)?$/i;
+
+/**
+ * Endpoint de teste público do próprio AgentFlow — preenchido com um clique
+ * quando o gatilho é Webhook e o operador só quer destravar o salvamento
+ * para testar o fluxo (sem ter um endpoint real em mãos ainda). Nunca
+ * inserido em silêncio: é sempre uma ação explícita do operador (botão
+ * "usar URL de teste"), nunca escrito automaticamente no campo.
+ */
+const WEBHOOK_URL_TESTE = "https://agentflow-black.vercel.app/api/webhook";
+
+/** Só o gatilho Webhook depende de fato de um endereço — os demais nunca deveriam travar o salvamento por isso. */
+function webhookEhObrigatorio(gatilho: string): boolean {
+  return gatilho === "webhook";
+}
+
+/** Mesmos rótulos das opções do seletor de gatilho, reaproveitados nas mensagens de ajuda. */
+const ROTULO_GATILHO: Record<string, string> = {
+  webhook: "Webhook",
+  agendado: "Agendado",
+  formulario: "Formulário",
+  manual: "Manual",
+};
 
 interface FlowSettingsFormProps {
   flow: Flow | null;
@@ -33,6 +57,10 @@ interface FlowSettingsFormProps {
  */
 export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
   const { workspaceId } = useWorkspace();
+  // Cacheado (ver `src/lib/queries/workspace.ts`) — só pra saber qual exemplo
+  // de Preenchimento Mágico sugerir; nenhuma leitura extra de Firestore além
+  // da que `/flows` já paga.
+  const { data: workspace } = useWorkspaceDoc(workspaceId);
   const [nome, setNome] = useState(flow?.nome ?? "");
   const [gatilho, setGatilho] = useState(flow?.gatilho ?? "webhook");
   const [origem, setOrigem] = useState(flow?.origem ?? "");
@@ -46,6 +74,17 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Confirmação explícita de que o fluxo foi salvo — sem isso, o único sinal
+  // era o formulário continuar na tela como se nada tivesse acontecido
+  // (mesma causa da confusão "não tem um botão que salva esse fluxo": o
+  // salvamento sempre funcionou, só nunca disse isso em voz alta).
+  const [savedRecently, setSavedRecently] = useState(false);
+
+  // Qualquer edição de verdade depois de salvar apaga a confirmação — ela
+  // não pode continuar na tela depois que o conteúdo salvo já mudou.
+  useEffect(() => {
+    setSavedRecently(false);
+  }, [nome, gatilho, origem, webhookUrl]);
 
   // Reidrata o estado do formulário quando o fluxo selecionado muda — sem
   // isso, trocar de fluxo na lista manteria os campos do anterior na tela.
@@ -57,6 +96,7 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
     setNovoToken("");
     setTrocandoToken(false);
     setSaveError(null);
+    setSavedRecently(false);
 
     const credentialId = flow?.apiTokenCredentialId;
     if (!credentialId) {
@@ -86,14 +126,38 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
   const nomeTouched = nome.length > 0;
   const nomeInvalid = nomeTouched && nome.trim().length < 3;
 
-  const webhookTouched = webhookUrl.length > 0;
-  const webhookInvalid = webhookTouched && !WEBHOOK_REGEX.test(webhookUrl);
-  const webhookValid = webhookTouched && WEBHOOK_REGEX.test(webhookUrl);
+  // Validação inteligente: a URL do webhook só é EXIGIDA quando o gatilho
+  // escolhido de fato depende dela. Para "agendado"/"formulário"/"manual",
+  // o campo é opcional por natureza — deixá-lo vazio nunca deveria travar o
+  // salvamento (antes deste ajuste, o formulário não bloqueava por estar
+  // vazio, mas também não explicava isso; agora o estado é explícito nos
+  // três lugares que dependem dele: validação, mensagem e botão).
+  const webhookObrigatorio = webhookEhObrigatorio(gatilho);
+  const webhookTouched = webhookUrl.trim().length > 0;
+  const webhookInvalid = webhookTouched && !WEBHOOK_REGEX.test(webhookUrl.trim());
+  const webhookValid = webhookTouched && !webhookInvalid;
+  const webhookFaltando = webhookObrigatorio && !webhookTouched;
 
   const tokenTouched = novoToken.length > 0;
   const tokenInvalid = tokenTouched && novoToken.trim().length < 8;
 
-  const canSubmit = nome.trim().length >= 3 && !webhookInvalid && !tokenInvalid;
+  // Cada pendência vira uma linha explicável no painel de ajuda — nunca só
+  // "o botão está cinza, adivinha por quê" (ver callout abaixo do formulário).
+  const pendencias: string[] = [];
+  if (nome.trim().length < 3) {
+    pendencias.push("Nome do fluxo — informe pelo menos 3 caracteres.");
+  }
+  if (webhookFaltando) {
+    pendencias.push('URL do webhook — obrigatória para o gatilho "Webhook" (ou use o endereço de teste abaixo).');
+  }
+  if (webhookInvalid) {
+    pendencias.push("URL do webhook — formato inválido (use https:// seguido de um domínio).");
+  }
+  if (tokenInvalid) {
+    pendencias.push("Token de API — informe pelo menos 8 caracteres, ou cancele a troca.");
+  }
+
+  const canSubmit = pendencias.length === 0;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -141,6 +205,7 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
       setNovoToken("");
       setTrocandoToken(false);
+      setSavedRecently(true);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Não foi possível salvar.");
     } finally {
@@ -150,15 +215,43 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
   const statusCredencial = credencialVinculada ? statusEfetivo(credencialVinculada) : null;
 
+  /**
+   * Preenchimento Mágico por Nicho (Modo Copiloto Guiado): preenche os
+   * campos com um exemplo de demonstração calibrado para o nicho ativo do
+   * workspace — pra implementador/vendedor nunca precisar digitar nada numa
+   * demo. Só aparece criando um fluxo NOVO (`!flow`): rodar isto sobre um
+   * fluxo real já salvo sobrescreveria configuração de produção de verdade,
+   * o que nunca deveria acontecer com um clique de atalho.
+   */
+  function handlePreenchimentoMagico() {
+    const exemplo = obterExemploFluxo(workspace?.setor);
+    setNome(exemplo.nomeFluxo);
+    setGatilho(exemplo.gatilho);
+    setOrigem(exemplo.origem);
+    setWebhookUrl(exemplo.gatilho === "webhook" ? WEBHOOK_URL_TESTE : "");
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-sm font-semibold text-ink-950">
-          {flow ? "Configurações do fluxo selecionado" : "Novo fluxo"}
-        </h2>
-        <p className="mt-0.5 text-xs text-ink-400">
-          Validação reativa antes de salvar — nada é aceito fora do formato esperado.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold text-ink-950">
+            {flow ? "Configurações do fluxo selecionado" : "Novo fluxo"}
+          </h2>
+          <p className="mt-0.5 text-xs text-ink-400">
+            Validação reativa antes de salvar — nada é aceito fora do formato esperado.
+          </p>
+        </div>
+        {!flow && (
+          <button
+            type="button"
+            onClick={handlePreenchimentoMagico}
+            className="flex-none whitespace-nowrap rounded-full border border-signal-500/40 bg-signal-50 px-3 py-1.5 text-xs font-medium text-signal-700 hover:bg-signal-100"
+            title="Preenche um exemplo de demonstração calibrado para o seu nicho — nunca sobrescreve um fluxo real já salvo."
+          >
+            ✨ Preenchimento mágico
+          </button>
+        )}
       </div>
 
       <Field
@@ -193,14 +286,36 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
         onChange={(e) => setOrigem(e.target.value)}
       />
 
-      <Field
-        label="URL do webhook"
-        placeholder="https://"
-        value={webhookUrl}
-        onChange={(e) => setWebhookUrl(e.target.value)}
-        errorText={webhookInvalid ? "Endereço incompleto — use https:// e um domínio válido." : undefined}
-        okText={webhookValid ? "Endereço válido." : undefined}
-      />
+      <div className="flex flex-col gap-1.5">
+        <Field
+          label="URL do webhook"
+          placeholder={webhookObrigatorio ? "https://" : "Opcional para este gatilho"}
+          value={webhookUrl}
+          onChange={(e) => setWebhookUrl(e.target.value)}
+          errorText={
+            webhookInvalid
+              ? "Endereço incompleto — use https:// e um domínio válido."
+              : webhookFaltando
+                ? 'Obrigatória para o gatilho "Webhook" — cole a sua ou use a de teste abaixo.'
+                : undefined
+          }
+          okText={webhookValid ? "Endereço válido." : undefined}
+          helpText={
+            !webhookObrigatorio && !webhookTouched
+              ? `Opcional para o gatilho "${ROTULO_GATILHO[gatilho] ?? gatilho}" — pode deixar em branco.`
+              : undefined
+          }
+        />
+        {(webhookObrigatorio || webhookTouched) && webhookUrl.trim() !== WEBHOOK_URL_TESTE && (
+          <button
+            type="button"
+            onClick={() => setWebhookUrl(WEBHOOK_URL_TESTE)}
+            className="self-start text-xs font-medium text-signal-600 hover:underline"
+          >
+            usar URL de teste do AgentFlow
+          </button>
+        )}
+      </div>
 
       <div className="flex flex-col gap-1.5">
         <span className="text-sm font-medium text-ink-700">Token de API</span>
@@ -273,7 +388,32 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
 
       {saveError && <p className="text-xs text-state-error">{saveError}</p>}
 
-      <Button type="submit" loading={saving} disabled={!canSubmit}>
+      {savedRecently && !saveError && (
+        <p
+          role="status"
+          className="rounded-[var(--radius-sm)] border border-state-done-ink/30 bg-state-done-bg px-3 py-2.5 text-xs text-state-done"
+        >
+          ✓ Fluxo salvo! Role até o Sandbox, mais abaixo, para testar e ver aparecendo na Neural Inbox.
+        </p>
+      )}
+
+      {!canSubmit && (
+        <div
+          role="status"
+          className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-state-run-ink/30 bg-state-run-bg px-3 py-2.5"
+        >
+          <p className="text-xs font-semibold text-state-run">Para salvar, corrija:</p>
+          <ul className="flex flex-col gap-0.5 pl-4 text-xs text-ink-700">
+            {pendencias.map((pendencia) => (
+              <li key={pendencia} className="list-disc">
+                {pendencia}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <Button type="submit" loading={saving} disabled={!canSubmit} title={!canSubmit ? pendencias.join(" ") : undefined}>
         Salvar configurações
       </Button>
     </form>

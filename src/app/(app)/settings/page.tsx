@@ -11,10 +11,20 @@ import { PAIN_POINT_PRESETS, REGIAO_PRESETS } from "@/lib/onboardingQuiz";
 import { lerRoiConfig } from "@/lib/roi";
 import { useAbrirQuizOnboarding } from "@/components/onboarding/DynamicNicheQuizModal";
 import { workspaceNameSchema } from "@/lib/validation/schemas";
-import type { Moeda, RegimeEncargos } from "@/types";
+import { obterModulo } from "@/modules/registry";
+import { patchWorkspace } from "@/lib/firestore";
+import type { Moeda, NicheKey, RegimeEncargos } from "@/types";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+
+/**
+ * Gavetas de back-office — funcionam JUNTO do nicho principal, nunca no
+ * lugar dele (ver `obterIdsModulosAtivos` em `@/modules/registry`). Lista
+ * curta e fixa de propósito: são as únicas gavetas hoje pensadas para
+ * ligar/desligar como extra, independente do nicho de indústria.
+ */
+const GAVETAS_EXTRAS: NicheKey[] = ["document-ai-vault", "sheet-reconciliation", "ar-recovery-engine"];
 
 const ROTULO_MOEDA: Record<Moeda, string> = {
   BRL: "Real (R$)",
@@ -66,8 +76,26 @@ export default function SettingsPage() {
   }, [workspaceId, appUser?.papel]);
 
   const setorLabel = workspace?.setor ? NICHE_PRESETS[workspace.setor].label : null;
+  const moduloDoSetor = workspace?.setor ? obterModulo(workspace.setor) : null;
   const regiaoLabel = workspace?.regiaoOperacao ? REGIAO_PRESETS[workspace.regiaoOperacao].label : null;
   const ralogDeCaixaLabel = workspace?.ralogDeCaixa ? PAIN_POINT_PRESETS[workspace.ralogDeCaixa].label : null;
+  const extrasAtivas = new Set((workspace?.modulosAtivos ?? []).filter((id) => id !== workspace?.setor));
+
+  /**
+   * `modulosAtivos` é um OVERRIDE completo (ver `obterIdsModulosAtivos`): se
+   * virar não-vazio sem o `setor` dentro dele, o workspace perde o nicho
+   * principal. Por isso o próprio `setor` sempre entra junto de qualquer
+   * extra ligada — e a lista volta a `[]` (nunca inventada vazia-com-setor)
+   * quando a última extra é desligada, pra cair no fallback normal.
+   */
+  async function handleToggleGaveta(id: NicheKey, ativar: boolean) {
+    if (!workspaceId || !workspace?.setor) return;
+    const extrasAtuais = [...extrasAtivas];
+    const novasExtras = ativar ? Array.from(new Set([...extrasAtuais, id])) : extrasAtuais.filter((m) => m !== id);
+    const modulosAtivos: NicheKey[] = novasExtras.length > 0 ? [workspace.setor, ...novasExtras] : [];
+    await patchWorkspace(workspaceId, { modulosAtivos });
+    invalidarWorkspace(workspaceId);
+  }
 
   async function handleSaveWorkspace(e: FormEvent) {
     e.preventDefault();
@@ -123,31 +151,79 @@ export default function SettingsPage() {
           // pelo banco para quem está em `operacoes`.
           <p className="mt-3 text-sm text-ink-700">{workspaceName || "—"}</p>
         )}
-        {setorLabel && <p className="mono mt-2 text-xs text-ink-400">Setor: {setorLabel}</p>}
+        {setorLabel && (
+          <div className="mt-3 rounded-[var(--radius-sm)] border border-signal-500/30 bg-signal-50 p-3">
+            <p className="text-xs font-medium text-ink-500">Nicho ativo</p>
+            <p className="mt-0.5 text-sm font-semibold text-ink-950">{setorLabel}</p>
+            <p className="mt-1 text-xs text-ink-500">
+              {moduloDoSetor?.descricao ??
+                "Este nicho ainda não tem guardrail/painel dedicado — a Neural Inbox funciona no modo padrão, sem nenhum recurso extra específico de setor."}
+            </p>
+            {appUser?.papel === "admin" && (
+              <Button variant="secondary" size="sm" className="mt-2" onClick={abrirQuizOnboarding}>
+                Trocar nicho
+              </Button>
+            )}
+          </div>
+        )}
       </section>
 
       {appUser?.papel === "admin" && (
-        <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
-          <h2 className="text-sm font-semibold text-ink-950">Região &amp; Moeda</h2>
-          <p className="mt-1 text-xs text-ink-500">
-            Definidos no Onboarding Cognitivo. O seletor completo (moeda, regime de encargos CLT/Payroll) vive em{" "}
-            <span className="font-medium text-ink-700">Governança → Parâmetros</span> — qualquer troca lá se
-            reflete aqui e na Neural Inbox em tempo real, sem perder histórico.
-          </p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-ink-500 sm:grid-cols-4">
-            <dt>Região</dt>
-            <dd className="mono text-ink-900">{regiaoLabel ?? "—"}</dd>
-            <dt>Ralo de caixa</dt>
-            <dd className="mono text-ink-900">{ralogDeCaixaLabel ?? "—"}</dd>
-            <dt>Moeda</dt>
-            <dd className="mono text-ink-900">{moedaAtual ? ROTULO_MOEDA[moedaAtual] : "—"}</dd>
-            <dt>Regime de encargos</dt>
-            <dd className="mono text-ink-900">{regimeAtual ? ROTULO_REGIME[regimeAtual] : "—"}</dd>
-          </dl>
-          <Button variant="secondary" size="sm" className="mt-3" onClick={abrirQuizOnboarding}>
-            Refazer o quiz de onboarding
-          </Button>
-        </section>
+        <>
+          <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+            <h2 className="text-sm font-semibold text-ink-950">Região &amp; Moeda</h2>
+            <p className="mt-1 text-xs text-ink-500">
+              Definidos junto com o nicho (cartão Workspace, acima — o mesmo botão &quot;Trocar nicho&quot; atualiza
+              os três). O seletor completo de moeda/regime de encargos vive em{" "}
+              <span className="font-medium text-ink-700">Governança → Parâmetros</span> — qualquer troca lá se
+              reflete aqui e na Neural Inbox em tempo real, sem perder histórico.
+            </p>
+            <dl className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-ink-500 sm:grid-cols-4">
+              <dt>Região</dt>
+              <dd className="mono text-ink-900">{regiaoLabel ?? "—"}</dd>
+              <dt>Ralo de caixa</dt>
+              <dd className="mono text-ink-900">{ralogDeCaixaLabel ?? "—"}</dd>
+              <dt>Moeda</dt>
+              <dd className="mono text-ink-900">{moedaAtual ? ROTULO_MOEDA[moedaAtual] : "—"}</dd>
+              <dt>Regime de encargos</dt>
+              <dd className="mono text-ink-900">{regimeAtual ? ROTULO_REGIME[regimeAtual] : "—"}</dd>
+            </dl>
+          </section>
+
+          {workspace?.setor && (
+            <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+              <h2 className="text-sm font-semibold text-ink-950">Gavetas extras (opcional)</h2>
+              <p className="mt-1 text-xs text-ink-500">
+                Ligue funcionalidades de back-office além do seu nicho principal — funcionam juntas, sem precisar
+                trocar de nicho.
+              </p>
+              <div className="mt-3 flex flex-col gap-2">
+                {GAVETAS_EXTRAS.map((id) => {
+                  const modulo = obterModulo(id);
+                  if (!modulo) return null;
+                  const ativa = extrasAtivas.has(id);
+                  return (
+                    <label
+                      key={id}
+                      className="flex items-center justify-between gap-3 rounded-[var(--radius-sm)] border border-ink-100 p-3"
+                    >
+                      <span>
+                        <span className="block text-sm font-medium text-ink-950">{modulo.nome}</span>
+                        <span className="block text-xs text-ink-500">{modulo.descricao}</span>
+                      </span>
+                      <input
+                        type="checkbox"
+                        checked={ativa}
+                        onChange={(e) => handleToggleGaveta(id, e.target.checked)}
+                        className="h-4 w-4 flex-none accent-signal-600"
+                      />
+                    </label>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+        </>
       )}
 
       <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">

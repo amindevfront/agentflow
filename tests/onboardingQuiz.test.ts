@@ -5,6 +5,7 @@ import {
   REGIAO_ORDER,
   REGIAO_PRESETS,
   derivarAjustesDoQuiz,
+  regiaoRecomendadaPorSetor,
 } from "@/lib/onboardingQuiz";
 import { NICHE_PRESETS } from "@/lib/niches";
 
@@ -52,11 +53,31 @@ describe("REGIAO_PRESETS", () => {
     }
   });
 
-  it("Brasil usa Real e regime CLT; Global usa Dólar e regime Payroll", () => {
+  it("Brasil usa Real e regime CLT; Global usa Dólar e regime Payroll; Portugal usa Euro e Segurança Social", () => {
     expect(REGIAO_PRESETS.br.moedaPadrao).toBe("BRL");
     expect(REGIAO_PRESETS.br.regimeEncargosPadrao).toBe("clt-br");
     expect(REGIAO_PRESETS.global.moedaPadrao).toBe("USD");
     expect(REGIAO_PRESETS.global.regimeEncargosPadrao).toBe("payroll-us-uk");
+    expect(REGIAO_PRESETS.pt.moedaPadrao).toBe("EUR");
+    expect(REGIAO_PRESETS.pt.regimeEncargosPadrao).toBe("seguranca-social-pt");
+  });
+});
+
+describe("regiaoRecomendadaPorSetor", () => {
+  it("recomenda Portugal para a gaveta de clínicas portuguesas — nunca 'global' (que daria moeda/regime dos EUA)", () => {
+    expect(regiaoRecomendadaPorSetor("portugal-clinics-health")).toBe("pt");
+  });
+
+  it("recomenda Global para as gavetas americanas", () => {
+    expect(regiaoRecomendadaPorSetor("us-real-estate-luxury")).toBe("global");
+    expect(regiaoRecomendadaPorSetor("us-construction-remodeling")).toBe("global");
+  });
+
+  it("recomenda Brasil para qualquer outro nicho (padrão honesto, nunca 'global' por omissão)", () => {
+    expect(regiaoRecomendadaPorSetor("construtora-imobiliaria")).toBe("br");
+    expect(regiaoRecomendadaPorSetor("clinica-alto-padrao")).toBe("br");
+    expect(regiaoRecomendadaPorSetor("document-ai-vault")).toBe("br");
+    expect(regiaoRecomendadaPorSetor("outros")).toBe("br");
   });
 });
 
@@ -86,6 +107,14 @@ describe("derivarAjustesDoQuiz", () => {
       REFERENCIA
     );
     expect(ajustes.roiConfigPatch).toEqual({ moedaExibicao: "USD", regimeEncargos: "payroll-us-uk" });
+  });
+
+  it("região Portugal deriva moeda EUR e regime Segurança Social no patch do RoiConfig", () => {
+    const ajustes = derivarAjustesDoQuiz(
+      { setor: "portugal-clinics-health", ralogDeCaixa: "outro", regiaoOperacao: "pt" },
+      REFERENCIA
+    );
+    expect(ajustes.roiConfigPatch).toEqual({ moedaExibicao: "EUR", regimeEncargos: "seguranca-social-pt" });
   });
 
   it("propaga os guardrailOverrides do ralo de caixa escolhido", () => {

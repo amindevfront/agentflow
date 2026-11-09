@@ -82,10 +82,18 @@ export type NicheKey =
 /**
  * Região/idioma da operação, capturada no Onboarding Cognitivo
  * (`DynamicNicheQuizModal`). Determina o regime legal de referência exibido
- * na UI (LGPD vs. CCPA/GDPR) e os valores padrão de moeda/regime de encargos
- * aplicados ao `RoiConfig` do workspace — ver `@/lib/onboardingQuiz`.
+ * na UI (LGPD vs. GDPR vs. CCPA) e os valores padrão de moeda/regime de
+ * encargos aplicados ao `RoiConfig` do workspace — ver
+ * `@/lib/onboardingQuiz`.
+ *
+ * `"pt"` existe como opção PRÓPRIA (não encaixada em `"global"`) desde a
+ * Expansão Enterprise Global: antes disso, escolher a gaveta
+ * `portugal-clinics-health` e depois "global" aqui resultava em moeda USD/
+ * regime Payroll-US-UK para um workspace português — mismatch real que
+ * `regiaoRecomendadaPorSetor` (`@/lib/onboardingQuiz`) agora evita por
+ * desenho, sugerindo a região certa a partir do nicho escolhido.
  */
-export type RegiaoOperacao = "br" | "global";
+export type RegiaoOperacao = "br" | "pt" | "global";
 
 /**
  * Maior ralo de caixa relatado no Quiz de onboarding — mapeado para ajustes

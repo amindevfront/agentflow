@@ -25,7 +25,14 @@ import type { NicheKey, PainPointKey, RegiaoOperacao } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import { useInvalidarWorkspace, useWorkspaceDoc } from "@/lib/queries/workspace";
 import { NICHE_ORDER, NICHE_PRESETS } from "@/lib/niches";
-import { PAIN_POINT_ORDER, PAIN_POINT_PRESETS, REGIAO_ORDER, REGIAO_PRESETS, salvarRespostaQuiz } from "@/lib/onboardingQuiz";
+import {
+  PAIN_POINT_ORDER,
+  PAIN_POINT_PRESETS,
+  REGIAO_ORDER,
+  REGIAO_PRESETS,
+  regiaoRecomendadaPorSetor,
+  salvarRespostaQuiz,
+} from "@/lib/onboardingQuiz";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -108,6 +115,18 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
 
   const indicePasso = PASSOS.indexOf(passo === "salvando" ? "regiao" : passo) + 1;
 
+  /**
+   * Escolher o nicho já pré-seleciona a região certa (Passo 3) — sem isso,
+   * nada impedia configurar `portugal-clinics-health` com moeda USD só
+   * porque "global" parecia a opção mais próxima de "não é Brasil". O
+   * operador ainda troca livremente no Passo 3; isto só evita o mismatch
+   * por omissão.
+   */
+  function escolherSetor(key: NicheKey) {
+    setSetor(key);
+    setRegiaoOperacao(regiaoRecomendadaPorSetor(key));
+  }
+
   function fechar() {
     setAbertoManualmente(false);
     setDispensadoNestaSessao(true);
@@ -172,7 +191,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                       selecionado={setor === key}
                       titulo={NICHE_PRESETS[key].label}
                       descricao={NICHE_PRESETS[key].descricao}
-                      onSelect={() => setSetor(key)}
+                      onSelect={() => escolherSetor(key)}
                     />
                   ))}
                   <CartaoOpcao
@@ -180,7 +199,7 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
                     selecionado={setor === "outros"}
                     titulo={NICHE_PRESETS.outros.label}
                     descricao={NICHE_PRESETS.outros.descricao}
-                    onSelect={() => setSetor("outros")}
+                    onSelect={() => escolherSetor("outros")}
                   />
                 </div>
                 <div className="flex items-center justify-between gap-2">
@@ -221,6 +240,12 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
 
             {(passo === "regiao" || passo === "salvando") && (
               <>
+                {setor && (
+                  <p className="text-xs text-ink-400">
+                    Sugerido para &quot;{NICHE_PRESETS[setor].label}&quot;: {REGIAO_PRESETS[regiaoRecomendadaPorSetor(setor)].label}.
+                    Já vem marcado — troque se precisar.
+                  </p>
+                )}
                 <div role="radiogroup" aria-label="Idioma/região da operação" className="grid gap-2 sm:grid-cols-2">
                   {REGIAO_ORDER.map((key) => (
                     <CartaoOpcao

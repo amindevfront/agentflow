@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/Button";
 import { FlowRail } from "@/components/ui/FlowRail";
 import { FlowSettingsForm } from "@/components/flows/FlowSettingsForm";
 import { PayloadSimulator } from "@/components/flows/PayloadSimulator";
+import { PrimeirosPassosCard } from "@/components/flows/PrimeirosPassosCard";
 import { RealExecutionPanel } from "@/components/flows/RealExecutionPanel";
 import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
 import { ClientPortalLinkCard } from "@/components/flows/ClientPortalLinkCard";
@@ -49,11 +50,22 @@ export default function FlowsPage() {
     });
   }, [workspaceId]);
 
+  // Numa conta nova (zero fluxos), esperar o operador clicar em "Novo fluxo"
+  // antes de mostrar o formulário criava um primeiro acesso confuso: a tela
+  // inteira só exibia dois avisos de "nada selecionado" lado a lado, com
+  // nenhum formulário visível — exatamente o tipo de desconexão que o Guia
+  // de Primeiros Passos (Passo 2) precisa não contradizer. `carregouFlows`
+  // garante que só decidimos "está vazio mesmo" depois do primeiro snapshot
+  // real chegar, nunca antes dele (senão o formulário "novo" apareceria e
+  // desapareceria num flash assim que os fluxos reais carregassem).
   useEffect(() => {
-    if (selectedId === null && flows.length > 0) {
+    if (selectedId !== null) return;
+    if (flows.length > 0) {
       setSelectedId(flows[0].id);
+    } else if (carregouFlows) {
+      setSelectedId("new");
     }
-  }, [flows, selectedId]);
+  }, [flows, selectedId, carregouFlows]);
 
   const filteredFlows = useMemo(
     () => flows.filter((f) => f.nome.toLowerCase().includes(search.toLowerCase())),
@@ -65,7 +77,10 @@ export default function FlowsPage() {
   const activeRun = selectedFlow ? runs.find((r) => r.flowId === selectedFlow.id) ?? null : null;
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <div className="flex flex-col gap-4">
+      <PrimeirosPassosCard temNicho={Boolean(workspace?.setor)} temFluxo={flows.length > 0} ehAdmin={appUser?.papel === "admin"} />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
         <div className="flex items-center gap-2">
           <input
@@ -168,10 +183,13 @@ export default function FlowsPage() {
           </section>
         )}
 
-        <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Sandbox — sem efeito real</p>
-          <PayloadSimulator />
+        <section id="sandbox-fluxos" className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
+            Sandbox — testar payload é sempre isolado; enviar para a Inbox é opcional e explícito
+          </p>
+          <PayloadSimulator flowNome={selectedFlow?.nome} />
         </section>
+      </div>
       </div>
     </div>
   );

@@ -116,6 +116,13 @@ export const REGIAO_PRESETS: Record<RegiaoOperacao, RegiaoPreset> = {
     moedaPadrao: "BRL",
     regimeEncargosPadrao: "clt-br",
   },
+  pt: {
+    key: "pt",
+    label: "Português · Portugal",
+    descricao: "Conformidade de referência: RGPD (GDPR). Moeda padrão: Euro (€) · Segurança Social.",
+    moedaPadrao: "EUR",
+    regimeEncargosPadrao: "seguranca-social-pt",
+  },
   global: {
     key: "global",
     label: "English · Global (US/UK)",
@@ -125,7 +132,22 @@ export const REGIAO_PRESETS: Record<RegiaoOperacao, RegiaoPreset> = {
   },
 };
 
-export const REGIAO_ORDER: RegiaoOperacao[] = ["br", "global"];
+export const REGIAO_ORDER: RegiaoOperacao[] = ["br", "pt", "global"];
+
+/**
+ * Região RECOMENDADA a partir do nicho escolhido no Passo 1 do quiz —
+ * fecha o mismatch real que existia antes: nada ligava automaticamente
+ * `portugal-clinics-health` (ou as gavetas dos EUA) à região certa, então
+ * era perfeitamente possível configurar um workspace português em USD/
+ * Payroll-US-UK só por escolher "global" sem pensar na moeda. O Passo 3
+ * do wizard usa isto como valor inicial — o operador ainda pode trocar
+ * manualmente, nunca é travado.
+ */
+export function regiaoRecomendadaPorSetor(setor: NicheKey): RegiaoOperacao {
+  if (setor === "portugal-clinics-health") return "pt";
+  if (setor === "us-real-estate-luxury" || setor === "us-construction-remodeling") return "global";
+  return "br";
+}
 
 export interface RespostaQuizOnboarding {
   setor: NicheKey;

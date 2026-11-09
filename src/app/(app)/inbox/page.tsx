@@ -2,6 +2,7 @@
 
 // Página da Neural Inbox — central de atendimento omnichannel.
 
+import { Suspense } from "react";
 import { NeuralInbox } from "@/components/chat/NeuralInbox";
 import { useMedirCarregamentoRota } from "@/lib/telemetry/useRoutePerformance";
 
@@ -11,5 +12,12 @@ export default function InboxPage() {
   // mais grosso que o de `/flows`, que mede até os dados chegarem). Ver
   // ADR-0005.
   useMedirCarregamentoRota("/inbox");
-  return <NeuralInbox />;
+  // `NeuralInbox` lê `?conversa=` via `useSearchParams` (deep-link do
+  // Simulador de Payload de Fluxos) — o App Router exige um limite de
+  // Suspense em volta de qualquer uso desse hook.
+  return (
+    <Suspense fallback={null}>
+      <NeuralInbox />
+    </Suspense>
+  );
 }

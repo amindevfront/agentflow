@@ -279,10 +279,12 @@
     <div class="navitem no-break"><h4>Execuções</h4><p>Histórico de toda rodada de Fluxo — status, custo, tempo.</p><ul><li>Usar quando: checar se uma automação rodou/falhou.</li></ul></div>
     <div class="navitem no-break"><h4>Conectores <span class="lock">🔒 admin</span></h4><p>Webhooks de saída (Connect Hub) para CRM/ERP externo.</p><ul><li>Usar quando: integrar com HubSpot, Salesforce, Sienge, RD Station, etc.</li></ul></div>
     <div class="navitem no-break"><h4>Equipe <span class="lock">🔒 admin</span></h4><p>Convite de operador, papel (admin/operações).</p><ul><li>Usar quando: onboarding de um novo atendente.</li></ul></div>
-    <div class="navitem no-break"><h4>Configurações</h4><p>Nome do workspace e preferências gerais.</p><ul><li>Usar quando: ajuste básico de conta.</li></ul></div>
+    <div class="navitem no-break"><h4>Configurações</h4><p>Nicho ativo (com botão "Trocar nicho"), gavetas extras de back-office (interruptor simples) e nome do workspace.</p><ul><li>Usar quando: mudar de nicho, ligar Document AI Vault/Sheet Reconciliation/AR Recovery, ou ajuste básico de conta.</li></ul></div>
   </div>
 
-  <div class="callout" style="margin-top:4mm;"><b>Governança 🔒 admin</b> — a tela mais importante pra fechar e renovar contrato. Abas: <b>ROI</b> (horas economizadas, custo evitado), <b>Oportunidade &amp; Pipeline</b> (quanto negócio isso gerou), <b>Guardrails</b> (o que foi bloqueado e por quê), <b>Auditoria</b> (trilha imutável), <b>Fila HITL</b> (transbordo humano pendente), <b>Cofre de Credenciais</b>, <b>LGPD/AI Act</b> e <b>Simulador de Contingência</b>. É literalmente a tela que você abre numa reunião de renovação pra mostrar dinheiro.</div>
+  <div class="callout" style="margin-top:4mm;"><b>Primeiros passos (dentro de Fluxos)</b> — cartão fixo no topo da tela de Fluxos: 4 passos numerados com ✓ ao vivo (escolher nicho → criar/salvar fluxo → testar no simulador e ver virando conversa real na Inbox → acompanhar em Governança). Funciona igual pra qualquer nicho — é o atalho mais rápido pra treinar alguém novo no time.</div>
+
+  <div class="callout" style="margin-top:4mm;"><b>Governança 🔒 admin</b> — a tela mais importante pra fechar e renovar contrato. Abas: <b>ROI</b> (horas economizadas, custo evitado), <b>Oportunidade &amp; Pipeline</b> (quanto negócio isso gerou), <b>Guardrails</b> (o que foi bloqueado e por quê), <b>Auditoria</b> (trilha imutável), <b>Fila HITL</b> (transbordo humano pendente), <b>Cofre de Credenciais</b>, <b>LGPD/AI Act</b>, <b>Simulador de Contingência</b> e <b>Back-office</b> (Document AI Vault/AR Recovery — só mostra o painel de verdade quando a gaveta está ligada em Configurações; senão, mostra o atalho direto pra ligar). É literalmente a tela que você abre numa reunião de renovação pra mostrar dinheiro.</div>
 </section>
 
 <!-- ============ 5. PREÇOS ============ -->
@@ -368,9 +370,9 @@
   <p class="lede">Isto evita prometer ao cliente algo que ainda precisa de 1 ajuste manual — Artigo IV do produto: nunca inventar capacidade que não existe ainda.</p>
 
   <div class="statuslist">
-    <div class="statusrow no-break"><span class="dot dot-done"></span><div><b>Pronto e ao vivo:</b><p>Neural Inbox, guardrails de todas as 12 gavetas completas, ROI multi-moeda (BRL/USD/GBP/EUR), Fluxos/Execuções, Governança completa, Portal do Cliente, Sheet Reconciliation (já aparece sozinho no Inbox conforme o nicho).</p></div></div>
-    <div class="statusrow no-break"><span class="dot dot-run"></span><div><b>Lógica pronta, falta 1 linha de integração visual:</b><p>Document AI Vault e AR Recovery Engine já têm todo o motor funcionando e testado — só ainda não têm um botão fixo no menu. Hoje eles são mostrados manualmente (ou plugados numa página existente); colocar um atalho visível é o próximo passo rápido, não uma reconstrução.</p></div></div>
-    <div class="statusrow no-break"><span class="dot dot-run"></span><div><b>Ativação multi-gaveta ainda é manual:</b><p>Ligar uma gaveta extra junto do nicho principal (ex.: clínica que também quer o Document AI Vault) hoje é feito direto na configuração do banco de dados — ainda não existe um botão de "ativar módulo" dentro de Configurações. É o toggle mais valioso a construir a seguir.</p></div></div>
+    <div class="statusrow no-break"><span class="dot dot-done"></span><div><b>Pronto e ao vivo:</b><p>Neural Inbox, guardrails de todas as 12 gavetas completas, ROI multi-moeda (BRL/USD/GBP/EUR), Fluxos/Execuções, Governança completa (inclusive aba <span class="mono" style="font-size:8.5pt;">Back-office</span> com Document AI Vault e AR Recovery Engine), Portal do Cliente, Sheet Reconciliation (já aparece sozinho no Inbox conforme o nicho), cartão "Primeiros passos" guiando a primeira implementação em qualquer nicho.</p></div></div>
+    <div class="statusrow no-break"><span class="dot dot-done"></span><div><b>Ativação de gaveta extra (Configurações → Gavetas extras):</b><p>Document AI Vault, Sheet Reconciliation e AR Recovery Engine agora se ligam com um clique, junto do nicho principal — sem precisar editar o banco de dados.</p></div></div>
+    <div class="statusrow no-break"><span class="dot dot-run"></span><div><b>Ainda em aberto:</b><p>Região "Portugal" como opção própria do quiz (EUR/Segurança Social, em vez de herdar USD de "Global") acabou de entrar — vale conferir se workspaces portugueses já criados antes disso precisam de uma correção manual pontual de moeda/regime.</p></div></div>
   </div>
 </section>
 

@@ -18,6 +18,7 @@
 // roteamento) de ponta a ponta.
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type {
   AgentProfile,
   Canal,
@@ -185,6 +186,14 @@ export function NeuralInbox() {
   const [filtro, setFiltro] = useState<FiltroInbox>("ativas");
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
 
+  // Deep-link vindo do Simulador de Payload (`@/components/flows/PayloadSimulator`):
+  // ao criar uma conversa de demonstração, o link "abrir na Neural Inbox"
+  // aponta pra `/inbox?conversa={id}` — pré-seleciona sozinho assim que a
+  // conversa aparecer na lista, sem sobrescrever uma seleção manual do
+  // operador (ver efeito abaixo, após `conversas` carregar).
+  const searchParams = useSearchParams();
+  const conversaDaUrl = searchParams.get("conversa");
+
   const [resposta, setResposta] = useState("");
   const [simulacao, setSimulacao] = useState("");
   const [processando, setProcessando] = useState(false);
@@ -236,6 +245,13 @@ export function NeuralInbox() {
       onError: () => setErro("Não foi possível carregar as mensagens desta conversa agora. Tente novamente em instantes."),
     });
   }, [selecionadaId]);
+
+  useEffect(() => {
+    if (!conversaDaUrl || selecionadaId) return;
+    if (conversas.some((c) => c.id === conversaDaUrl)) {
+      setSelecionadaId(conversaDaUrl);
+    }
+  }, [conversaDaUrl, conversas, selecionadaId]);
 
   const visiveis = useMemo(() => conversas.filter((c) => corresponde(c, filtro)), [conversas, filtro]);
   const selecionada = conversas.find((c) => c.id === selecionadaId) ?? null;
