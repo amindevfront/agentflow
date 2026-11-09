@@ -269,7 +269,11 @@ export default function PortalClientePage() {
     );
   }
 
-  const nicheLabel = workspace.setor ? NICHE_PRESETS[workspace.setor].label : null;
+  // `workspace.setor` vem do Firestore sem validação em runtime — um valor
+  // legado/corrompido que não bata com nenhum `NicheKey` conhecido não pode
+  // quebrar este portal PÚBLICO (visível ao cliente final, não só ao dono
+  // do negócio).
+  const nicheLabel = workspace.setor ? NICHE_PRESETS[workspace.setor]?.label ?? null : null;
 
   return (
     <main className="min-h-screen bg-mist-50 pb-12">

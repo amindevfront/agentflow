@@ -1,6 +1,6 @@
 // E2E lógico do Modo Copiloto Guiado — Protocolo de estresse pedido pelo
 // usuário: simular a jornada completa de um operador novato (conta zerada
-// → nicho → Preenchimento Mágico → salvar Fluxo → Sandbox → Neural Inbox →
+// → nicho → Carregar Dados de Demonstração → salvar Fluxo → Sandbox → Neural Inbox →
 // Governança), encadeando as MESMAS funções reais que cada botão da tela
 // chama — não um clique de verdade (este projeto não tem React Testing
 // Library nem um browser disponível nesta sessão, ver `vitest.config.ts`:
@@ -110,7 +110,7 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
     expect(INBOX_EXTRAS_REGISTRY["construtora-imobiliaria"]).toBeDefined();
   });
 
-  it("Passo 2 — Preenchimento Mágico gera dados válidos, e Salvar persiste o fluxo 'Horizon BC' com workspaceId propagado", async () => {
+  it("Passo 2 — Carregar Dados de Demonstração gera dados válidos, e Salvar persiste o fluxo 'Horizon BC' com workspaceId propagado", async () => {
     const exemplo = obterExemploFluxo("construtora-imobiliaria");
     expect(exemplo.nomeFluxo).toContain("Horizon BC");
     expect(exemplo.nomeFluxo.trim().length).toBeGreaterThanOrEqual(3); // mesma regra de `FlowSettingsForm` (mín. 3 caracteres)
@@ -140,7 +140,7 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
   it("Passo 3 — payload de exemplo do Sandbox é EXATAMENTE o que a Neural Inbox extrai como lead", () => {
     const exemplo = obterExemploFluxo("construtora-imobiliaria");
 
-    // "✨ Simular payload de exemplo" preenche a textarea com isto:
+    // "Carregar Payload de Exemplo" preenche a textarea com isto:
     const textoDaTextarea = JSON.stringify(exemplo.payloadExemplo, null, 2);
     // "Executar teste" faz isto:
     const payloadValidado = JSON.parse(textoDaTextarea);
@@ -210,7 +210,7 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
     ).toBe(false);
   });
 
-  it("o mesmo roteiro funciona para QUALQUER nicho de indústria, não só Horizon BC — Preenchimento Mágico nunca devolve um exemplo inválido", () => {
+  it("o mesmo roteiro funciona para QUALQUER nicho de indústria, não só Horizon BC — Carregar Dados de Demonstração nunca devolve um exemplo inválido", () => {
     for (const setor of NICHE_ORDER) {
       const exemplo = obterExemploFluxo(setor as NicheKey);
       expect(exemplo.nomeFluxo.trim().length).toBeGreaterThanOrEqual(3);

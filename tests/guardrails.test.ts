@@ -561,6 +561,31 @@ describe("inspecionarEntrada", () => {
     expect(inspecao.veredito).toBe("permitido");
     vault.clear();
   });
+
+  it("payload genuinamente vazio nunca lança — libera sem violações nem PII", () => {
+    const { inspecao, vault } = inspecionarEntrada({ payload: "" });
+    expect(inspecao.veredito).toBe("permitido");
+    expect(inspecao.violacoes).toEqual([]);
+    expect(inspecao.piiDetectada).toEqual([]);
+    expect(inspecao.payloadSanitizado).toBe("");
+    vault.clear();
+  });
+
+  it("payload não-string em runtime (dado vindo de fora do TypeScript) degrada para vazio, nunca lança", () => {
+    // `InspecaoEntradaInput.payload` é tipado como `string`, mas o valor pode
+    // vir de uma API/Firestore sem essa garantia em runtime — a função já
+    // normaliza explicitamente (`typeof entrada.payload === "string" ? ... : ""`);
+    // este teste prova esse caminho defensivo, não o tipo declarado.
+    const semPayload = inspecionarEntrada({ payload: undefined as unknown as string });
+    expect(semPayload.inspecao.veredito).toBe("permitido");
+    expect(semPayload.inspecao.payloadSanitizado).toBe("");
+    semPayload.vault.clear();
+
+    const payloadNumerico = inspecionarEntrada({ payload: 42 as unknown as string });
+    expect(payloadNumerico.inspecao.veredito).toBe("permitido");
+    expect(payloadNumerico.inspecao.payloadSanitizado).toBe("");
+    payloadNumerico.vault.clear();
+  });
 });
 
 describe("inspecionarSaida", () => {

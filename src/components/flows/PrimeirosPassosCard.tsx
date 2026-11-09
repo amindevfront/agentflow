@@ -120,7 +120,7 @@ export function PrimeirosPassosCard({ temNicho, temFluxo, ehAdmin }: PrimeirosPa
     {
       numero: 2,
       titulo: "Crie e salve o seu primeiro Fluxo",
-      descricao: 'Clique em "✨ Preenchimento mágico" no formulário ao lado e depois em "Salvar configurações".',
+      descricao: 'Clique em "Preencher com Dados de Demonstração" no formulário ao lado e depois em "Salvar configurações".',
       feito: temFluxo,
       acao: (
         <span className="text-xs text-ink-400">
@@ -131,7 +131,7 @@ export function PrimeirosPassosCard({ temNicho, temFluxo, ehAdmin }: PrimeirosPa
     {
       numero: 3,
       titulo: "Veja isso virando atendimento de verdade",
-      descricao: 'No Simulador (mais abaixo), use "✨ Simular payload de exemplo" → "Executar teste" → "Enviar como lead de teste para a Neural Inbox".',
+      descricao: 'No Simulador (mais abaixo), use "Carregar Payload de Exemplo" → "Executar teste" → "Enviar como lead de teste para a Neural Inbox".',
       feito: testouSimulador,
       acao: (
         <a href="#sandbox-fluxos" className="text-xs font-medium text-signal-600 hover:underline">

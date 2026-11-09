@@ -10,6 +10,7 @@ import { criarConversa, registrarMensagemCliente } from "@/lib/inbox/firestore";
 import { extrairClienteSimulado } from "@/lib/payloadSimulatorInbox";
 import { obterExemploFluxo } from "@/lib/flowDemoData";
 import { marcarSimuladorTestado } from "@/components/flows/PrimeirosPassosCard";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import type { SimTestResult } from "@/types";
 
 interface PayloadSimulatorProps {
@@ -99,7 +100,12 @@ export function PayloadSimulator({ flowNome }: PayloadSimulatorProps) {
       setConversaCriada({ id: conversa.id, nome });
       marcarSimuladorTestado();
     } catch (e) {
-      setErroInbox(e instanceof Error ? e.message : "Não foi possível enviar para a Neural Inbox.");
+      // Nunca expõe o texto técnico do erro (ex.: código do Firestore,
+      // "Firestore não configurado...") para o dono do negócio — só o
+      // registra para diagnóstico (ver `reportarErro`) e mostra um aviso
+      // acionável.
+      reportarErro(e, "sandbox:enviar-para-inbox");
+      setErroInbox("Não foi possível enviar para a Neural Inbox agora. Tente novamente em alguns segundos.");
     } finally {
       setEnviandoInbox(false);
     }
@@ -125,7 +131,7 @@ export function PayloadSimulator({ flowNome }: PayloadSimulatorProps) {
             className="flex-none whitespace-nowrap rounded-full border border-signal-500/40 bg-signal-50 px-3 py-1.5 text-xs font-medium text-signal-700 hover:bg-signal-100"
             title="Preenche um payload de exemplo calibrado para o seu nicho ativo."
           >
-            ✨ Simular payload de exemplo
+            Carregar Payload de Exemplo
           </button>
         </div>
         <textarea

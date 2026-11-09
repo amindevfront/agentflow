@@ -3,8 +3,17 @@ export function cn(...classes: Array<string | false | null | undefined>): string
   return classes.filter(Boolean).join(" ");
 }
 
-/** Formata um timestamp em texto relativo curto (ex.: "há 2 min", "ontem"). */
+/**
+ * Formata um timestamp em texto relativo curto (ex.: "há 2 min", "ontem").
+ *
+ * Reaproveitado em toda gaveta que lista algo por data (Fluxos, Auditoria,
+ * Neural Inbox, Cofre, Transbordo, Agendamentos) — um campo de data ausente
+ * ou malformado em QUALQUER uma delas (`new Date(undefined)` → Invalid Date)
+ * nunca pode virar "há NaN dias" na tela de um cliente pagante.
+ */
 export function formatRelativeTime(date: Date): string {
+  if (Number.isNaN(date.getTime())) return "—";
+
   const diffMs = Date.now() - date.getTime();
   const diffMin = Math.round(diffMs / 60000);
 

@@ -13,6 +13,7 @@ import { useAbrirQuizOnboarding } from "@/components/onboarding/DynamicNicheQuiz
 import { workspaceNameSchema } from "@/lib/validation/schemas";
 import { obterModulo } from "@/modules/registry";
 import { patchWorkspace } from "@/lib/firestore";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import type { Moeda, NicheKey, RegimeEncargos } from "@/types";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -55,6 +56,7 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [moedaAtual, setMoedaAtual] = useState<Moeda | null>(null);
   const [regimeAtual, setRegimeAtual] = useState<RegimeEncargos | null>(null);
+  const [gavetaErro, setGavetaErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (workspace) setWorkspaceName(workspace.nome);
@@ -75,10 +77,15 @@ export default function SettingsPage() {
     };
   }, [workspaceId, appUser?.papel]);
 
-  const setorLabel = workspace?.setor ? NICHE_PRESETS[workspace.setor].label : null;
+  // `?.label` (não `[chave].label` direto): `setor`/`regiaoOperacao`/`ralogDeCaixa`
+  // são lidos de um documento do Firestore sem validação de runtime — um
+  // valor legado de um preset já removido (ex.: nicho descontinuado) indexaria
+  // `undefined` e quebraria a tela inteira com `TypeError`, exatamente a classe
+  // de bug que esta auditoria pede para eliminar.
+  const setorLabel = workspace?.setor ? NICHE_PRESETS[workspace.setor]?.label ?? null : null;
   const moduloDoSetor = workspace?.setor ? obterModulo(workspace.setor) : null;
-  const regiaoLabel = workspace?.regiaoOperacao ? REGIAO_PRESETS[workspace.regiaoOperacao].label : null;
-  const ralogDeCaixaLabel = workspace?.ralogDeCaixa ? PAIN_POINT_PRESETS[workspace.ralogDeCaixa].label : null;
+  const regiaoLabel = workspace?.regiaoOperacao ? REGIAO_PRESETS[workspace.regiaoOperacao]?.label ?? null : null;
+  const ralogDeCaixaLabel = workspace?.ralogDeCaixa ? PAIN_POINT_PRESETS[workspace.ralogDeCaixa]?.label ?? null : null;
   const extrasAtivas = new Set((workspace?.modulosAtivos ?? []).filter((id) => id !== workspace?.setor));
 
   /**
@@ -90,11 +97,22 @@ export default function SettingsPage() {
    */
   async function handleToggleGaveta(id: NicheKey, ativar: boolean) {
     if (!workspaceId || !workspace?.setor) return;
-    const extrasAtuais = [...extrasAtivas];
-    const novasExtras = ativar ? Array.from(new Set([...extrasAtuais, id])) : extrasAtuais.filter((m) => m !== id);
-    const modulosAtivos: NicheKey[] = novasExtras.length > 0 ? [workspace.setor, ...novasExtras] : [];
-    await patchWorkspace(workspaceId, { modulosAtivos });
-    invalidarWorkspace(workspaceId);
+    setGavetaErro(null);
+    try {
+      const extrasAtuais = [...extrasAtivas];
+      const novasExtras = ativar ? Array.from(new Set([...extrasAtuais, id])) : extrasAtuais.filter((m) => m !== id);
+      const modulosAtivos: NicheKey[] = novasExtras.length > 0 ? [workspace.setor, ...novasExtras] : [];
+      await patchWorkspace(workspaceId, { modulosAtivos });
+      invalidarWorkspace(workspaceId);
+    } catch (erro) {
+      // Sem isto, uma escrita negada (rede instável, regra do Firestore)
+      // deixava o checkbox "mentindo" — marcado na tela sem nunca ter
+      // persistido — e a falha virava uma promise rejeitada sem dono. A
+      // mensagem exibida é sempre fixa: o texto técnico (código do
+      // Firestore, "Failed to fetch") vai só para o log de diagnóstico.
+      reportarErro(erro, "settings:gaveta-extra");
+      setGavetaErro("Não foi possível salvar esta gaveta agora. Tente novamente em alguns instantes.");
+    }
   }
 
   async function handleSaveWorkspace(e: FormEvent) {
@@ -112,14 +130,25 @@ export default function SettingsPage() {
       await updateWorkspaceName(workspaceId, validado.data);
       invalidarWorkspace(workspaceId);
       setSaved(true);
+    } catch (erro) {
+      // Texto técnico (código do Firestore, "Failed to fetch") vai só para o
+      // log de diagnóstico — o campo sempre mostra uma mensagem fixa e amigável.
+      reportarErro(erro, "settings:salvar-nome-workspace");
+      setNameError("Não foi possível salvar o nome agora. Tente novamente em alguns instantes.");
     } finally {
       setSaving(false);
     }
   }
 
   async function handleSignOut() {
-    await signOut();
-    router.push("/login");
+    // Mesmo que o SDK falhe ao avisar o servidor (rede instável), o operador
+    // nunca deve ficar travado num botão "Sair" que parece não fazer nada —
+    // sempre navega para o login, que é o estado seguro por padrão.
+    try {
+      await signOut();
+    } finally {
+      router.push("/login");
+    }
   }
 
   return (
@@ -197,6 +226,7 @@ export default function SettingsPage() {
                 Ligue funcionalidades de back-office além do seu nicho principal — funcionam juntas, sem precisar
                 trocar de nicho.
               </p>
+              {gavetaErro && <p className="mt-2 text-xs text-state-error">{gavetaErro}</p>}
               <div className="mt-3 flex flex-col gap-2">
                 {GAVETAS_EXTRAS.map((id) => {
                   const modulo = obterModulo(id);

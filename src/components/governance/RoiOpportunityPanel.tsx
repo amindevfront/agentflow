@@ -29,6 +29,7 @@ import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, subscribeRoiConfig }
 import { NICHE_PRESETS } from "@/lib/niches";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
@@ -71,12 +72,21 @@ export function RoiOpportunityPanel() {
           throw new Error("Sessão expirada. Entre novamente para ver o pipeline.");
         }
 
-        const res = await fetch("/api/roi-dashboard", {
-          headers: { authorization: `Bearer ${await usuario.getIdToken()}` },
-        });
+        // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
+        // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
+        // chegar como texto técnico na tela do dono do negócio.
+        let res: Response;
+        try {
+          res = await fetch("/api/roi-dashboard", {
+            headers: { authorization: `Bearer ${await usuario.getIdToken()}` },
+          });
+        } catch (erroDeRede) {
+          reportarErro(erroDeRede, "governanca:pipeline:rede");
+          throw new Error("Não foi possível conectar ao servidor para carregar o pipeline. Verifique sua conexão.");
+        }
         const dados = (await res.json().catch(() => ({}))) as RespostaRoiDashboard;
         if (!res.ok) {
-          throw new Error(dados.erro?.mensagem ?? `Falha ao carregar o pipeline (HTTP ${res.status}).`);
+          throw new Error(dados.erro?.mensagem ?? "Falha ao carregar o pipeline. Tente novamente em alguns instantes.");
         }
         if (!cancelado) setResposta(dados);
       } catch (e) {
@@ -96,6 +106,13 @@ export function RoiOpportunityPanel() {
     formatarMoeda(valorBrl, config.moedaExibicao, cambioParaMoeda(config, config.moedaExibicao));
 
   const metricas = resposta?.metricas ?? null;
+  // `metricas.setor` vem do Firestore (`as NicheKey` sem validação em
+  // runtime, ver `obterMetricasPipelineVerticalAdmin`) — um valor legado ou
+  // corrompido que seja string mas não bata com nenhum `NicheKey` conhecido
+  // faria `NICHE_PRESETS[...]` devolver `undefined` e quebrar a tela ao
+  // acessar `.label`. Nunca confiar que o dado persistido bate com o tipo.
+  const nichePreset = metricas ? NICHE_PRESETS[metricas.setor] : undefined;
+  const labelDoNicho = nichePreset?.label ?? "Nicho não reconhecido";
 
   return (
     <section
@@ -131,7 +148,7 @@ export function RoiOpportunityPanel() {
       ) : metricas.valorMedioPipelineUsadoBrl <= 0 ? (
         <EmptyState
           title="Pipeline ainda não disponível para este nicho"
-          description={`${NICHE_PRESETS[metricas.setor].label} ainda não tem um Módulo Vertical de confirmação de agendamento com valor de pipeline configurado. Fale com o time AgentFlow para calibrar o ticket médio deste negócio.`}
+          description={`${labelDoNicho} ainda não tem um Módulo Vertical de confirmação de agendamento com valor de pipeline configurado. Fale com o time AgentFlow para calibrar o ticket médio deste negócio.`}
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -145,7 +162,7 @@ export function RoiOpportunityPanel() {
           <MetricCard
             rotulo="Agendamentos confirmados"
             valor={String(metricas.agendamentosConfirmados)}
-            detalhe={NICHE_PRESETS[metricas.setor].label}
+            detalhe={labelDoNicho}
             tom="positivo"
           />
           <MetricCard

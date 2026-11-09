@@ -495,4 +495,38 @@ describe("transbordo: fila", () => {
       )
     ).toBe("atrasado 5 min");
   });
+
+  it("fila genuinamente vazia nunca lança — nem estatísticas nem ordenação (painel com conta zerada)", () => {
+    expect(() => estatisticasFila([], AGORA)).not.toThrow();
+    const estatisticas = estatisticasFila([], AGORA);
+    expect(estatisticas.total).toBe(0);
+    expect(estatisticas.abertos).toBe(0);
+    expect(estatisticas.emViolacaoDeSla).toBe(0);
+    expect(estatisticas.tempoMedioResolucaoMin).toBeNull();
+
+    expect(() => ordenarFila([], AGORA)).not.toThrow();
+    expect(ordenarFila([], AGORA)).toEqual([]);
+  });
+
+  it("SLA no limite exato (restante === 0ms) ainda não é violação — só `< 0` conta como vencido", () => {
+    const noLimite = ticketFila({ id: "t1", slaExpiraEm: AGORA.toISOString() });
+    expect(slaViolado(noLimite, AGORA)).toBe(false);
+    expect(formatarSla(noLimite, AGORA)).toBe("0 min");
+
+    // Um milissegundo depois, já é violação.
+    const umMsDepois = new Date(AGORA.getTime() + 1);
+    expect(slaViolado(noLimite, umMsDepois)).toBe(true);
+  });
+
+  it("ticket malformado (violações/campos opcionais ausentes) não quebra fila nem estatísticas", () => {
+    const semViolacoes = ticketFila({ id: "t1", violacoes: [] });
+    // "resolvido" sem `decididoEm` (campo opcional nunca preenchido) — não deveria contar como resolução cronometrável.
+    const semDecisao = ticketFila({ id: "t2", status: "resolvido" });
+
+    expect(() => estatisticasFila([semViolacoes, semDecisao], AGORA)).not.toThrow();
+    const estatisticas = estatisticasFila([semViolacoes, semDecisao], AGORA);
+    // `decididoEm` ausente num ticket "resolvido" não deveria contar como uma resolução cronometrável.
+    expect(estatisticas.tempoMedioResolucaoMin).toBeNull();
+    expect(() => ordenarFila([semViolacoes, semDecisao], AGORA)).not.toThrow();
+  });
 });

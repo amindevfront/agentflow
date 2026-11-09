@@ -13,6 +13,7 @@ import {
   rotacionarCredencial,
   statusEfetivo,
 } from "@/lib/credentials";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import type { CredentialMetadata, Flow } from "@/types";
 
 const WEBHOOK_REGEX = /^https:\/\/[\w-]+(\.[\w-]+)+(\/.*)?$/i;
@@ -207,7 +208,11 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
       setTrocandoToken(false);
       setSavedRecently(true);
     } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Não foi possível salvar.");
+      // Nunca expõe o texto técnico (ex.: erro do cofre de credenciais,
+      // código do Firestore) ao dono do negócio — só registra para
+      // diagnóstico e mostra um aviso acionável.
+      reportarErro(err, "flows:salvar-fluxo");
+      setSaveError("Não foi possível salvar o fluxo agora. Tente novamente em alguns segundos.");
     } finally {
       setSaving(false);
     }
@@ -249,7 +254,7 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
             className="flex-none whitespace-nowrap rounded-full border border-signal-500/40 bg-signal-50 px-3 py-1.5 text-xs font-medium text-signal-700 hover:bg-signal-100"
             title="Preenche um exemplo de demonstração calibrado para o seu nicho — nunca sobrescreve um fluxo real já salvo."
           >
-            ✨ Preenchimento mágico
+            Preencher com Dados de Demonstração
           </button>
         )}
       </div>

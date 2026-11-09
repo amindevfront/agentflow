@@ -21,6 +21,7 @@ import { POLITICAS_PREDEFINIDAS, ROTULO_POR_KIND } from "@/lib/guardrails";
 import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { cn } from "@/lib/utils";
@@ -96,24 +97,33 @@ export function GuardrailInspectorPanel() {
       const listaAmostras = amostras.split("\n").map((l) => l.trim()).filter(Boolean);
       const listaContextos = contextos.split("\n").map((l) => l.trim()).filter(Boolean);
 
-      const resposta = await fetch("/api/guardrails/inspect", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${await usuario.getIdToken()}`,
-        },
-        body: JSON.stringify({
-          payload,
-          politica,
-          sobrescritas: sobrescritasDoWorkspace,
-          amostras: listaAmostras,
-          contextos: listaContextos,
-        }),
-      });
+      // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
+      // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
+      // chegar como texto técnico na tela do dono do negócio.
+      let resposta: Response;
+      try {
+        resposta = await fetch("/api/guardrails/inspect", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${await usuario.getIdToken()}`,
+          },
+          body: JSON.stringify({
+            payload,
+            politica,
+            sobrescritas: sobrescritasDoWorkspace,
+            amostras: listaAmostras,
+            contextos: listaContextos,
+          }),
+        });
+      } catch (erroDeRede) {
+        reportarErro(erroDeRede, "governanca:guardrails:rede");
+        throw new Error("Não foi possível conectar ao servidor para inspecionar o payload. Verifique sua conexão.");
+      }
 
       const dados = (await resposta.json().catch(() => ({}))) as RespostaInspecao;
       if (!resposta.ok) {
-        throw new Error(dados.erro?.mensagem ?? `Falha na inspeção (HTTP ${resposta.status}).`);
+        throw new Error(dados.erro?.mensagem ?? "Falha na inspeção. Tente novamente em alguns instantes.");
       }
       setResultado(dados);
     } catch (e) {

@@ -17,6 +17,7 @@ import { useState } from "react";
 import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import type { RunCostMetrics } from "@/types";
 
 interface RealExecutionPanelProps {
@@ -60,18 +61,27 @@ export function RealExecutionPanel({ flowId, flowNome }: RealExecutionPanelProps
       const usuario = auth?.currentUser;
       if (!usuario) throw new Error("Sessão expirada. Entre novamente para executar o fluxo.");
 
-      const resposta = await fetch("/api/flows/execute", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: `Bearer ${await usuario.getIdToken()}`,
-        },
-        body: JSON.stringify({ flowId, payload }),
-      });
+      // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
+      // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
+      // chegar como texto técnico na tela do dono do negócio.
+      let resposta: Response;
+      try {
+        resposta = await fetch("/api/flows/execute", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${await usuario.getIdToken()}`,
+          },
+          body: JSON.stringify({ flowId, payload }),
+        });
+      } catch (erroDeRede) {
+        reportarErro(erroDeRede, "flows:executar-fluxo-real:rede");
+        throw new Error("Não foi possível conectar ao servidor para executar o fluxo. Verifique sua conexão e tente novamente.");
+      }
 
       const dados = (await resposta.json().catch(() => ({}))) as RespostaExecucao;
       if (!resposta.ok) {
-        throw new Error(dados.erro?.mensagem ?? `Falha ao executar o fluxo (HTTP ${resposta.status}).`);
+        throw new Error(dados.erro?.mensagem ?? "Falha ao executar o fluxo. Tente novamente em alguns instantes.");
       }
       setResultado(dados);
     } catch (e) {
