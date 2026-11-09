@@ -19,6 +19,7 @@ import {
   verificarTrilhaAuditoria,
 } from "@/lib/auditLog";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
+import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -31,6 +32,7 @@ const corResultado: Record<AuditEntry["corpo"]["resultado"], string> = {
 };
 
 export function AuditTrailPanel() {
+  const { workspaceId } = useWorkspace();
   const [entradas, setEntradas] = useState<AuditEntry[]>([]);
   const [verificacao, setVerificacao] = useState<AuditChainVerification | null>(null);
   const [avisoVerificacao, setAvisoVerificacao] = useState<string | null>(null);
@@ -39,12 +41,18 @@ export function AuditTrailPanel() {
   const [pendentes, setPendentes] = useState(0);
   const [selecionadaId, setSelecionadaId] = useState<string | null>(null);
 
+  // Bug real corrigido aqui (mesma classe do bug raiz da Neural Inbox): sem
+  // `workspaceId`, a assinatura caía no padrão `DEFAULT_WORKSPACE_ID`
+  // ("default") — a trilha de Auditoria aparecia sempre vazia para qualquer
+  // workspace real, mesmo com eventos reais já selados.
   useEffect(() => {
+    if (!workspaceId) return;
     return subscribeTrilhaAuditoria(setEntradas, {
+      workspaceId,
       limite: 200,
       onError: () => setErro("Não foi possível carregar a trilha de auditoria agora. Tente novamente em instantes."),
     });
-  }, []);
+  }, [workspaceId]);
 
   useEffect(() => {
     setPendentes(tamanhoFilaAuditoria());

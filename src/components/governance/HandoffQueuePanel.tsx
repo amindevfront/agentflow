@@ -23,6 +23,7 @@ import {
   subscribeFilaTransbordo,
 } from "@/lib/humanInTheLoop";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
+import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -58,6 +59,7 @@ interface HandoffQueuePanelProps {
 }
 
 export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {}) {
+  const { workspaceId } = useWorkspace();
   const [ticketsBrutos, setTicketsBrutos] = useState<HandoffTicket[]>([]);
   const [filtro, setFiltro] = useState<FiltroFila>("ativos");
   const [selecionadoId, setSelecionadoId] = useState<string | null>(null);
@@ -74,12 +76,19 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
     return () => clearInterval(intervalo);
   }, []);
 
+  // Bug real corrigido aqui (mesma classe do bug raiz da Neural Inbox): sem
+  // `workspaceId`, a assinatura caía no padrão `DEFAULT_WORKSPACE_ID`
+  // ("default") — a fila de Transbordo (e a de Compliance, que reaproveita
+  // este componente filtrado) aparecia sempre vazia para qualquer workspace
+  // real, mesmo com tickets reais pendentes.
   useEffect(() => {
+    if (!workspaceId) return;
     return subscribeFilaTransbordo(setTicketsBrutos, {
+      workspaceId,
       limite: 200,
       onError: () => setErro("Não foi possível carregar a fila de transbordo agora. Tente novamente em instantes."),
     });
-  }, []);
+  }, [workspaceId]);
 
   // Filtro por motivo é aplicado ANTES das estatísticas/ordenação: o painel de
   // Compliance Preventivo mostra métricas escopadas só aos seus próprios
@@ -92,10 +101,11 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
   useEffect(() => {
     // Varredura de expiração ao montar: sem worker server-side nesta versão, a
     // transição aberto → expirado é observada quando alguém abre o painel.
-    expirarTicketsVencidos().catch((e) =>
+    if (!workspaceId) return;
+    expirarTicketsVencidos(workspaceId).catch((e) =>
       console.error("[transbordo] varredura de expiração falhou:", e)
     );
-  }, []);
+  }, [workspaceId]);
 
   const estatisticas = useMemo(() => estatisticasFila(tickets, referencia), [tickets, referencia]);
   const ordenados = useMemo(() => ordenarFila(tickets, referencia), [tickets, referencia]);

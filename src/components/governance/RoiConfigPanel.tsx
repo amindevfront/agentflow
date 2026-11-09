@@ -16,6 +16,7 @@ import type {
   RegimeEncargos,
   RoiConfig,
 } from "@/types";
+import { useWorkspace } from "@/lib/workspace";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import {
   PRECOS_REFERENCIA,
@@ -38,14 +39,23 @@ const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
 const MODELOS = Object.keys(PRECOS_REFERENCIA);
 
 export function RoiConfigPanel() {
+  const { workspaceId } = useWorkspace();
   const [config, setConfig] = useState<RoiConfig>(ROI_CONFIG_PADRAO);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [salvo, setSalvo] = useState(false);
 
+  // Bug real corrigido aqui: sem `workspaceId`, tanto a leitura quanto a
+  // gravação caíam no padrão `DEFAULT_WORKSPACE_ID` ("default") — um admin
+  // editando "Matriz de Lucro & Encargos" via de fato gravava os parâmetros
+  // num workspace que não é o seu, e via sempre os valores de fábrica em vez
+  // dos já salvos. Os demais painéis de ROI (que já usavam `useWorkspace()`
+  // corretamente) nunca refletiam a alteração — parecia que "Salvar" não
+  // fazia nada.
   useEffect(() => {
-    return subscribeRoiConfig(setConfig);
-  }, []);
+    if (!workspaceId) return;
+    return subscribeRoiConfig(setConfig, workspaceId);
+  }, [workspaceId]);
 
   function atualizarNumero(campo: keyof RoiConfig, bruto: string) {
     const valor = Number(bruto.replace(",", "."));
@@ -126,16 +136,18 @@ export function RoiConfigPanel() {
   const percentualSalarioBasePayroll = Math.max(0, 1 - somaEncargosPayroll);
 
   async function salvar() {
+    if (!workspaceId) return;
     setErro(null);
     setSalvando(true);
     setSalvo(false);
     try {
-      const normalizada = await salvarRoiConfig(config);
+      const normalizada = await salvarRoiConfig(config, workspaceId);
       setConfig(normalizada);
       setSalvo(true);
       await registrarEventoAuditoriaSilencioso({
         tipo: "config.alterada",
         recurso: "workspaces/roiConfig",
+        workspaceId,
         detalhes: {
           custoHoraOperadorBrl: normalizada.custoHoraOperadorBrl,
           minutosManuaisPorExecucao: normalizada.minutosManuaisPorExecucao,

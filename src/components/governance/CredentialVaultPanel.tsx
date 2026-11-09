@@ -18,6 +18,7 @@ import {
   subscribeCredenciais,
 } from "@/lib/credentials";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
+import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
@@ -46,6 +47,7 @@ const ROTULO_STATUS: Record<CredentialMetadata["status"], string> = {
 };
 
 export function CredentialVaultPanel() {
+  const { workspaceId } = useWorkspace();
   const [credenciais, setCredenciais] = useState<CredentialMetadata[]>([]);
   const [erro, setErro] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -60,13 +62,20 @@ export function CredentialVaultPanel() {
   const [novoSegredo, setNovoSegredo] = useState("");
   const [revogacaoAlvo, setRevogacaoAlvo] = useState<CredentialMetadata | null>(null);
 
+  // Bug real corrigido aqui (mesma classe do bug raiz da Neural Inbox): sem
+  // `workspaceId`, a assinatura caía no padrão `DEFAULT_WORKSPACE_ID`
+  // ("default") — o Cofre aparecia sempre vazio para qualquer workspace
+  // real, mesmo com credenciais já seladas.
   useEffect(() => {
+    if (!workspaceId) return;
     return subscribeCredenciais(setCredenciais, {
+      workspaceId,
       onError: () => setErro("Não foi possível carregar o cofre de credenciais agora. Tente novamente em instantes."),
     });
-  }, []);
+  }, [workspaceId]);
 
   async function handleCriar() {
+    if (!workspaceId) return;
     setErro(null);
     setAviso(null);
     setSalvando(true);
@@ -76,6 +85,7 @@ export function CredentialVaultPanel() {
         tipo,
         segredo,
         expiraEm: expiraEm ? new Date(expiraEm).toISOString() : null,
+        workspaceId,
       });
       // Limpa o campo do segredo imediatamente: não há motivo para ele
       // continuar em memória do browser depois de selado.
