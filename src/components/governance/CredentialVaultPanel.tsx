@@ -17,6 +17,7 @@ import {
   statusEfetivo,
   subscribeCredenciais,
 } from "@/lib/credentials";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Field } from "@/components/ui/Field";
@@ -83,7 +84,11 @@ export function CredentialVaultPanel() {
       setExpiraEm("");
       setAviso(`Credencial "${criada.nome}" selada na versão ${criada.versao}.`);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível armazenar a credencial.");
+      // Cofre de credenciais: nunca expõe o texto técnico do erro de selagem
+      // (código do Firestore, "Failed to fetch") — só o registra para
+      // diagnóstico e mostra um aviso fixo.
+      reportarErro(e, "cofre:armazenar-credencial");
+      setErro("Não foi possível armazenar a credencial agora. Tente novamente em alguns instantes.");
     } finally {
       setSalvando(false);
     }
@@ -99,7 +104,8 @@ export function CredentialVaultPanel() {
       setRotacionandoId(null);
       setAviso(`"${credencial.nome}" rotacionada para a versão ${atualizada.versao}.`);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível rotacionar a credencial.");
+      reportarErro(e, "cofre:rotacionar-credencial");
+      setErro("Não foi possível rotacionar a credencial agora. Tente novamente em alguns instantes.");
     } finally {
       setSalvando(false);
     }
@@ -114,7 +120,8 @@ export function CredentialVaultPanel() {
       setAviso(`"${revogacaoAlvo.nome}" revogada.`);
       setRevogacaoAlvo(null);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível revogar a credencial.");
+      reportarErro(e, "cofre:revogar-credencial");
+      setErro("Não foi possível revogar a credencial agora. Tente novamente em alguns instantes.");
     } finally {
       setSalvando(false);
     }

@@ -13,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Appointment } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import {
   calcularCheckInsPosAtendimentoPendentes,
   calcularJanelasPendentes,
@@ -114,7 +115,8 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
       setValorProcedimento("");
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível criar o agendamento.");
+      reportarErro(e, "agendamentos:criar");
+      setErro("Não foi possível criar o agendamento agora. Tente novamente em alguns instantes.");
     }
   }
 
@@ -129,7 +131,8 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
     try {
       await enviarConfirmacaoAgendamento(agendamento, janela, { remetenteId: uid });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível enviar a confirmação.");
+      reportarErro(e, "agendamentos:enviar-confirmacao");
+      setErro("Não foi possível enviar a confirmação agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }
@@ -141,11 +144,8 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
     try {
       await registrarConsentimentoProcedimento(agendamento);
     } catch (e) {
-      setErro(
-        e instanceof Error
-          ? `Consentimento NÃO foi selado: ${e.message}`
-          : "Não foi possível selar o registro de consentimento."
-      );
+      reportarErro(e, "agendamentos:registrar-consentimento");
+      setErro("Consentimento NÃO foi selado. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }
@@ -162,7 +162,8 @@ export function AppointmentRemindersPanel({ conversaSelecionada }: AppointmentRe
     try {
       await enviarCheckInPosAtendimento(agendamento, { remetenteId: uid });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível enviar a checagem pós-atendimento.");
+      reportarErro(e, "agendamentos:enviar-pos-atendimento");
+      setErro("Não foi possível enviar a checagem pós-atendimento agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }

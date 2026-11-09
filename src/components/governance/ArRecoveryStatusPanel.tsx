@@ -18,6 +18,7 @@ import {
   subscribeDocumentosPendentes,
 } from "@/lib/documentosPendentes";
 import { calcularDiasAtraso, classificarUrgenciaCobranca } from "@/lib/arRecoveryEngine";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -96,7 +97,8 @@ export function ArRecoveryStatusPanel() {
       setVencimentoEm("");
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível cadastrar o documento.");
+      reportarErro(e, "ar-recovery:cadastrar-documento");
+      setErro("Não foi possível cadastrar o documento agora. Tente novamente em alguns instantes.");
     }
   }
 
@@ -106,7 +108,8 @@ export function ArRecoveryStatusPanel() {
     try {
       await atualizarStatusDocumentoPendente(documento, "pago");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível atualizar o status.");
+      reportarErro(e, "ar-recovery:atualizar-status");
+      setErro("Não foi possível atualizar o status agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }

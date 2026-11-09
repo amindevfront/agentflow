@@ -16,6 +16,7 @@ import { registrarEventoAuditoriaSilencioso, subscribeTrilhaAuditoria, verificar
 import { avaliarProntidaoLgpd, type StatusItemProntidaoLgpd } from "@/lib/lgpdReadiness";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { cn } from "@/lib/utils";
@@ -81,7 +82,8 @@ export function LgpdReadinessPanel() {
       const { verificacao: resultadoVerificacao } = await verificarTrilhaAuditoria(entradas);
       setVerificacao(resultadoVerificacao);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível verificar a integridade da trilha.");
+      reportarErro(e, "lgpd:verificar-trilha");
+      setErro("Não foi possível verificar a integridade da trilha agora. Tente novamente em alguns instantes.");
     } finally {
       setVerificando(false);
     }
@@ -114,7 +116,8 @@ export function LgpdReadinessPanel() {
 
       acionarDownload(bytes, `agentflow-prontidao-lgpd-${workspaceId}.pdf`);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gerar o relatório de prontidão.");
+      reportarErro(e, "lgpd:baixar-pdf");
+      setErro("Não foi possível gerar o relatório de prontidão agora. Tente novamente em alguns instantes.");
     } finally {
       setGerandoPdf(false);
     }

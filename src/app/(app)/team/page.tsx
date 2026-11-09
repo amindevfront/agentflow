@@ -112,7 +112,15 @@ export default function TeamPage() {
       )}
 
       {members.length === 0 && invites.length === 0 ? (
-        <EmptyState title="Nenhum membro ainda" description="Convide colegas para colaborar neste workspace." />
+        <EmptyState
+          title="Nenhum membro ainda"
+          description="Convide colegas para colaborar neste workspace."
+          action={
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              Convidar membro
+            </Button>
+          }
+        />
       ) : (
         <div className="flex flex-col gap-1">
           {members.map((m) => (

@@ -51,12 +51,10 @@ export const POST = comGuarda(
       const texto = await transcreverAudioAdmin({ base64, mimeType });
       return respostaJson({ texto });
     } catch (erro) {
+      // O detalhe técnico (status HTTP do provedor, corpo de erro) fica só
+      // no log do servidor — nunca na resposta ao cliente.
       console.error("[inbox/transcrever-audio] falha ao transcrever áudio:", erro);
-      throw new ErroApi(
-        502,
-        erro instanceof Error ? erro.message : "Não foi possível transcrever o áudio.",
-        "falha_transcricao"
-      );
+      throw new ErroApi(502, "Não foi possível transcrever o áudio agora. Tente novamente em alguns instantes.", "falha_transcricao");
     }
   },
   {

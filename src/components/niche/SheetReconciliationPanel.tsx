@@ -25,6 +25,7 @@ import {
   subscribeRegistrosOperacionais,
   upsertRegistroOperacional,
 } from "@/lib/sheetReconciliation";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 
 const TABELA_PADRAO = "registros-atendimento";
@@ -77,7 +78,10 @@ export function SheetReconciliationPanel({ mensagensClienteRecentes, ultimaMensa
         }).catch(() => undefined);
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível aplicar a reconciliação.");
+      // Nunca expõe o texto técnico do erro (ex.: código do Firestore) ao
+      // operador — só o registra para diagnóstico e mostra um aviso fixo.
+      reportarErro(e, "sheet-reconciliation:aplicar-atualizacao");
+      setErro("Não foi possível aplicar a reconciliação agora. Tente novamente em alguns instantes.");
     } finally {
       setAplicando(false);
     }

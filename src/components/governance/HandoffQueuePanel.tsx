@@ -22,6 +22,7 @@ import {
   slaViolado,
   subscribeFilaTransbordo,
 } from "@/lib/humanInTheLoop";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -116,7 +117,8 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
     try {
       await assumirTicket(ticket.id, ticket.workspaceId);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível assumir o transbordo.");
+      reportarErro(e, "transbordo:assumir-ticket");
+      setErro("Não foi possível assumir o transbordo agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -144,7 +146,8 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
       setDecisaoAberta(null);
       setConfirmacaoAberta(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar a decisão.");
+      reportarErro(e, "transbordo:registrar-decisao");
+      setErro("Não foi possível registrar a decisão agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }

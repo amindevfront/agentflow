@@ -18,6 +18,7 @@ import {
   tamanhoFilaAuditoria,
   verificarTrilhaAuditoria,
 } from "@/lib/auditLog";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MetricCard } from "@/components/ui/MetricCard";
@@ -71,7 +72,8 @@ export function AuditTrailPanel() {
       setVerificacao(resultado);
       setAvisoVerificacao(aviso ?? null);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível verificar a trilha.");
+      reportarErro(e, "auditoria:verificar-trilha");
+      setErro("Não foi possível verificar a trilha agora. Tente novamente em alguns instantes.");
     } finally {
       setVerificando(false);
     }
@@ -86,7 +88,8 @@ export function AuditTrailPanel() {
         setErro("Nenhum evento pendente pôde ser reenviado. Verifique a conexão.");
       }
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Falha ao reenviar eventos pendentes.");
+      reportarErro(e, "auditoria:reenviar-pendentes");
+      setErro("Falha ao reenviar eventos pendentes. Tente novamente em alguns instantes.");
     }
   }
 

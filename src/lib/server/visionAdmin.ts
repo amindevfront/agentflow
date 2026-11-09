@@ -49,6 +49,9 @@ const PROMPT_ANALISE = [
   "Responda APENAS com a descrição em português, sem introdução nem comentário adicional.",
 ].join(" ");
 
+/** Mesmo teto de `orchestratorAdmin.ts` (`TIMEOUT_CHAMADA_MS`) — uma análise de imagem/documento é tão síncrona para quem espera na Neural Inbox quanto uma resposta de texto, nunca deveria esperar mais que isso. */
+const TIMEOUT_CHAMADA_MS = 20_000;
+
 let clienteCache: Anthropic | null = null;
 function clienteAnthropic(): Anthropic {
   if (clienteCache) return clienteCache;
@@ -68,16 +71,19 @@ export const executorVisaoAnthropic: ExecutorVisao = async (imagem: ImagemEntrad
         source: { type: "base64", media_type: imagem.mediaType as MediaTypeImagem, data: imagem.base64 },
       };
 
-  const resposta = await clienteAnthropic().messages.create({
-    model: modeloOrquestrador(),
-    max_tokens: MAX_TOKENS_SAIDA,
-    messages: [
-      {
-        role: "user",
-        content: [blocoMidia, { type: "text", text: PROMPT_ANALISE }],
-      },
-    ],
-  });
+  const resposta = await clienteAnthropic().messages.create(
+    {
+      model: modeloOrquestrador(),
+      max_tokens: MAX_TOKENS_SAIDA,
+      messages: [
+        {
+          role: "user",
+          content: [blocoMidia, { type: "text", text: PROMPT_ANALISE }],
+        },
+      ],
+    },
+    { timeout: TIMEOUT_CHAMADA_MS }
+  );
 
   const bloco = resposta.content.find((b): b is Anthropic.TextBlock => b.type === "text");
   return bloco?.text ?? "";

@@ -25,6 +25,9 @@ import { chaveTranscricao, diagnosticoTranscricao } from "./env";
 const ENDPOINT_TRANSCRICAO = "https://api.openai.com/v1/audio/transcriptions";
 const MODELO_TRANSCRICAO_PADRAO = "whisper-1";
 
+/** Mesmo teto de `orchestratorAdmin.ts` (`TIMEOUT_CHAMADA_MS`) — sem isto, um provedor externo lento travaria a requisição até o timeout da própria função serverless, bem mais longo que o aceitável para quem espera a transcrição na Neural Inbox. */
+const TIMEOUT_CHAMADA_MS = 20_000;
+
 /** Extensão de arquivo a partir do MIME type — a API decide o decoder pela extensão do nome enviado. */
 const EXTENSAO_POR_MIME: Record<string, string> = {
   "audio/ogg": "ogg",
@@ -46,17 +49,26 @@ export const executorTranscricaoOpenAI: ExecutorTranscricao = async (audio: Audi
   formData.append("file", arquivo, `audio.${extensao}`);
   formData.append("model", process.env.AGENTFLOW_TRANSCRICAO_MODEL?.trim() || MODELO_TRANSCRICAO_PADRAO);
 
-  const resposta = await fetch(ENDPOINT_TRANSCRICAO, {
-    method: "POST",
-    headers: { authorization: `Bearer ${chaveTranscricao()}` },
-    body: formData,
-  });
+  let resposta: Response;
+  try {
+    resposta = await fetch(ENDPOINT_TRANSCRICAO, {
+      method: "POST",
+      headers: { authorization: `Bearer ${chaveTranscricao()}` },
+      body: formData,
+      signal: AbortSignal.timeout(TIMEOUT_CHAMADA_MS),
+    });
+  } catch (erro) {
+    const motivo = erro instanceof Error && erro.name === "TimeoutError" ? "tempo esgotado" : "falha de rede";
+    throw new Error(`Falha ao transcrever o áudio: ${motivo} ao chamar o provedor.`);
+  }
 
   if (!resposta.ok) {
     const corpo = await resposta.text().catch(() => "");
     // `evidenciaSegura` mascara qualquer PII que o provedor eventualmente
     // ecoe de volta no corpo de erro (ex.: parâmetros da requisição) antes
-    // de entrar na mensagem de exceção, que pode acabar em log do servidor.
+    // de entrar na mensagem de exceção, que pode acabar em log do servidor —
+    // mas essa mensagem (com HTTP/corpo do provedor) é SÓ para o log: quem
+    // chama (a rota de API) nunca repassa `error.message` ao cliente.
     throw new Error(`Falha ao transcrever o áudio (HTTP ${resposta.status}): ${evidenciaSegura(corpo, 200)}`);
   }
 

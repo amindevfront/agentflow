@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Campaign, Conversation, FlowRun, HandoffTicket, Moeda, RoiConfig } from "@/types";
 import { subscribeFlowRuns } from "@/lib/firestore";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { useWorkspace } from "@/lib/workspace";
 import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
@@ -146,7 +147,8 @@ export function ExecutiveReportPanel() {
       const nomeArquivo = `agentflow-relatorio-executivo-${snapshot.periodo.inicio.slice(0, 10)}.pdf`;
       acionarDownload(bytes, nomeArquivo);
     } catch (erro) {
-      setAviso(erro instanceof Error ? erro.message : "Não foi possível gerar o relatório executivo.");
+      reportarErro(erro, "governanca:gerar-relatorio-executivo");
+      setAviso("Não foi possível gerar o relatório executivo agora. Tente novamente em alguns instantes.");
     } finally {
       setGerando(false);
     }

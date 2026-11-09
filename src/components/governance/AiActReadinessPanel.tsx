@@ -18,6 +18,7 @@ import { estatisticasFila, subscribeFilaTransbordo } from "@/lib/humanInTheLoop"
 import { avaliarProntidaoAiAct, type StatusItemProntidao } from "@/lib/aiActReadiness";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { cn } from "@/lib/utils";
@@ -104,7 +105,8 @@ export function AiActReadinessPanel() {
       const { verificacao: resultadoVerificacao } = await verificarTrilhaAuditoria(entradas);
       setVerificacao(resultadoVerificacao);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível verificar a integridade da trilha.");
+      reportarErro(e, "ai-act:verificar-trilha");
+      setErro("Não foi possível verificar a integridade da trilha agora. Tente novamente em alguns instantes.");
     } finally {
       setVerificando(false);
     }
@@ -138,7 +140,8 @@ export function AiActReadinessPanel() {
 
       acionarDownload(bytes, `agentflow-prontidao-ai-act-${workspaceId}.pdf`);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gerar o relatório de prontidão.");
+      reportarErro(e, "ai-act:baixar-pdf");
+      setErro("Não foi possível gerar o relatório de prontidão agora. Tente novamente em alguns instantes.");
     } finally {
       setGerandoPdf(false);
     }

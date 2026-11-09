@@ -17,8 +17,12 @@ import { useState } from "react";
 import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { Button } from "@/components/ui/Button";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import type { RunCostMetrics } from "@/types";
+
+/** Execução real chama um modelo de IA de verdade — mais lenta que o resto da API, mas nunca pendurada para sempre numa rede instável. */
+const TIMEOUT_EXECUCAO_MS = 30_000;
 
 interface RealExecutionPanelProps {
   flowId: string;
@@ -61,23 +65,19 @@ export function RealExecutionPanel({ flowId, flowNome }: RealExecutionPanelProps
       const usuario = auth?.currentUser;
       if (!usuario) throw new Error("Sessão expirada. Entre novamente para executar o fluxo.");
 
-      // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
-      // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
-      // chegar como texto técnico na tela do dono do negócio.
-      let resposta: Response;
-      try {
-        resposta = await fetch("/api/flows/execute", {
+      const resposta = await fetchComTimeout(
+        "/api/flows/execute",
+        {
           method: "POST",
           headers: {
             "content-type": "application/json",
             authorization: `Bearer ${await usuario.getIdToken()}`,
           },
           body: JSON.stringify({ flowId, payload }),
-        });
-      } catch (erroDeRede) {
-        reportarErro(erroDeRede, "flows:executar-fluxo-real:rede");
-        throw new Error("Não foi possível conectar ao servidor para executar o fluxo. Verifique sua conexão e tente novamente.");
-      }
+        },
+        "Não foi possível conectar ao servidor para executar o fluxo. Verifique sua conexão e tente novamente.",
+        TIMEOUT_EXECUCAO_MS
+      );
 
       const dados = (await resposta.json().catch(() => ({}))) as RespostaExecucao;
       if (!resposta.ok) {
@@ -85,6 +85,7 @@ export function RealExecutionPanel({ flowId, flowNome }: RealExecutionPanelProps
       }
       setResultado(dados);
     } catch (e) {
+      reportarErro(e, "flows:executar-fluxo-real");
       setErro(e instanceof Error ? e.message : "Não foi possível executar o fluxo.");
     } finally {
       setExecutando(false);

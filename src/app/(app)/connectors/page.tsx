@@ -153,6 +153,11 @@ export default function ConnectorsPage() {
         <EmptyState
           title="Nenhum conector configurado"
           description="Conecte webhooks, e-mail ou APIs externas para acionar seus fluxos."
+          action={
+            <Button size="sm" onClick={() => setShowForm(true)}>
+              Novo conector
+            </Button>
+          }
         />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

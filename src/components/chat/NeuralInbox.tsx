@@ -52,6 +52,7 @@ import type { MediaTypeAnalise } from "@/lib/server/visionAdmin";
 import { LIMIAR_FRUSTRACAO_CRITICA, gerarExecutiveBrief } from "@/lib/sentiment/radar";
 import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, formatarPercentual, subscribeRoiConfig } from "@/lib/roi";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { obterIdsModulosAtivos } from "@/modules/registry";
@@ -340,7 +341,8 @@ export function NeuralInbox() {
       });
       setResposta("");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível enviar a resposta.");
+      reportarErro(e, "inbox:enviar-resposta");
+      setErro("Não foi possível enviar a resposta agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -359,7 +361,8 @@ export function NeuralInbox() {
       });
       setSimulacao("");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível simular a mensagem.");
+      reportarErro(e, "inbox:simular-mensagem");
+      setErro("Não foi possível simular a mensagem agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -380,7 +383,8 @@ export function NeuralInbox() {
         mediaType: arquivo.type as MediaTypeAnalise,
       });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível analisar a imagem/documento.");
+      reportarErro(e, "inbox:analisar-imagem");
+      setErro("Não foi possível analisar a imagem/documento agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -401,7 +405,8 @@ export function NeuralInbox() {
         mimeType: arquivo.type || "audio/ogg",
       });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível transcrever o áudio.");
+      reportarErro(e, "inbox:transcrever-audio");
+      setErro("Não foi possível transcrever o áudio agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -419,7 +424,8 @@ export function NeuralInbox() {
     try {
       await atribuirConversaManual(selecionada.id, usuario.uid, usuario.displayName ?? usuario.email ?? "Operador");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível assumir a conversa.");
+      reportarErro(e, "inbox:assumir-conversa");
+      setErro("Não foi possível assumir a conversa agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -445,7 +451,8 @@ export function NeuralInbox() {
 
       await atribuirConversaPorRoteamento(selecionada.id, decisao);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível rotear a conversa.");
+      reportarErro(e, "inbox:rotear-conversa");
+      setErro("Não foi possível rotear a conversa agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -458,7 +465,8 @@ export function NeuralInbox() {
     try {
       await resolverConversa(selecionada.id, selecionada.workspaceId);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível resolver a conversa.");
+      reportarErro(e, "inbox:resolver-conversa");
+      setErro("Não foi possível resolver a conversa agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -477,7 +485,8 @@ export function NeuralInbox() {
         setor: workspace?.setor,
       });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar o desfecho comercial.");
+      reportarErro(e, "inbox:registrar-desfecho");
+      setErro("Não foi possível registrar o desfecho comercial agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -528,7 +537,8 @@ export function NeuralInbox() {
       setNovoContatoCliente("");
       setNovoAssunto("");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível criar a conversa.");
+      reportarErro(e, "inbox:criar-conversa");
+      setErro("Não foi possível criar a conversa agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }

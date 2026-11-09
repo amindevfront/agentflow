@@ -34,8 +34,9 @@ import type {
   Workspace,
 } from "@/types";
 import { NICHE_PRESETS } from "./niches";
-import { DEFAULT_WORKSPACE_ID, patchWorkspace } from "./firestore";
+import { DEFAULT_WORKSPACE_ID, getWorkspace, patchWorkspace } from "./firestore";
 import { lerRoiConfig, salvarRoiConfig } from "./roi";
+import { recalcularModulosAtivosParaNovoSetor } from "@/modules/registry";
 
 export interface PainPointPreset {
   key: PainPointKey;
@@ -158,7 +159,13 @@ export interface RespostaQuizOnboarding {
 export interface AjustesDoQuiz {
   workspacePatch: Pick<
     Workspace,
-    "setor" | "playbooksSugeridos" | "regiaoOperacao" | "ralogDeCaixa" | "guardrailOverrides" | "quizRespondidoEm"
+    | "setor"
+    | "playbooksSugeridos"
+    | "regiaoOperacao"
+    | "ralogDeCaixa"
+    | "guardrailOverrides"
+    | "quizRespondidoEm"
+    | "modulosAtivos"
   >;
   roiConfigPatch: Pick<RoiConfig, "moedaExibicao" | "regimeEncargos">;
 }
@@ -167,8 +174,18 @@ export interface AjustesDoQuiz {
  * Deriva, de forma pura, o que o quiz muda no workspace e no `RoiConfig`.
  * Separado de `salvarRespostaQuiz` para ser testável sem Firestore — dado o
  * mesmo input, o resultado é sempre o mesmo (mesma garantia de `calcularRoi`).
+ *
+ * `modulosAtivosAtuais` existe para que uma TROCA de nicho (não só o
+ * onboarding inicial, onde é sempre `undefined`) recalcule `modulosAtivos`
+ * via `recalcularModulosAtivosParaNovoSetor` — sem isso, o nicho anterior
+ * ficava "orfanizado" como primário sempre que o tenant já tinha alguma
+ * gaveta de back-office ligada (ver docblock daquela função).
  */
-export function derivarAjustesDoQuiz(resposta: RespostaQuizOnboarding, agora = new Date()): AjustesDoQuiz {
+export function derivarAjustesDoQuiz(
+  resposta: RespostaQuizOnboarding,
+  modulosAtivosAtuais?: NicheKey[],
+  agora = new Date()
+): AjustesDoQuiz {
   const regiao = REGIAO_PRESETS[resposta.regiaoOperacao];
   const dorDeCaixa = PAIN_POINT_PRESETS[resposta.ralogDeCaixa];
 
@@ -180,6 +197,7 @@ export function derivarAjustesDoQuiz(resposta: RespostaQuizOnboarding, agora = n
       ralogDeCaixa: resposta.ralogDeCaixa,
       guardrailOverrides: dorDeCaixa.guardrailOverrides,
       quizRespondidoEm: agora.toISOString(),
+      modulosAtivos: recalcularModulosAtivosParaNovoSetor(modulosAtivosAtuais, resposta.setor),
     },
     roiConfigPatch: {
       moedaExibicao: regiao.moedaPadrao,
@@ -201,8 +219,11 @@ export async function salvarRespostaQuiz(
   resposta: RespostaQuizOnboarding,
   workspaceId = DEFAULT_WORKSPACE_ID
 ): Promise<AjustesDoQuiz> {
-  const ajustes = derivarAjustesDoQuiz(resposta);
-  const configAtual = await lerRoiConfig(workspaceId);
+  const [workspaceAtual, configAtual] = await Promise.all([
+    getWorkspace(workspaceId),
+    lerRoiConfig(workspaceId),
+  ]);
+  const ajustes = derivarAjustesDoQuiz(resposta, workspaceAtual?.modulosAtivos);
 
   await Promise.all([
     patchWorkspace(workspaceId, ajustes.workspacePatch),

@@ -15,6 +15,7 @@ import { useWorkspace } from "@/lib/workspace";
 import { atualizarStatusPedido, criarPedido, subscribePedidos } from "@/lib/ecommercePedidos";
 import { calcularExposicaoChargebackDevolucao, type NivelAlertaChargeback } from "@/lib/chargebackRisk";
 import { formatarMoeda, formatarPercentual, periodoMesAtual } from "@/lib/roi";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -93,7 +94,8 @@ export function ChargebackRiskPanel() {
       setValorBrl("");
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar o pedido.");
+      reportarErro(e, "chargeback:criar-pedido");
+      setErro("Não foi possível registrar o pedido agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -105,7 +107,8 @@ export function ChargebackRiskPanel() {
     try {
       await atualizarStatusPedido(pedido, novoStatus);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível atualizar o status do pedido.");
+      reportarErro(e, "chargeback:atualizar-status");
+      setErro("Não foi possível atualizar o status do pedido agora. Tente novamente em alguns instantes.");
     } finally {
       setAtualizandoId(null);
     }

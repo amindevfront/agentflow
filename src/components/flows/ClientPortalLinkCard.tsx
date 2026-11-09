@@ -9,6 +9,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Workspace } from "@/types";
 import { garantirSlugWorkspace } from "@/lib/firestore";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 
 export function ClientPortalLinkCard({ workspace }: { workspace: Workspace }) {
@@ -45,7 +46,8 @@ export function ClientPortalLinkCard({ workspace }: { workspace: Workspace }) {
       const resolvido = await garantirSlugWorkspace(workspace);
       setSlug(resolvido);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível gerar o link do portal.");
+      reportarErro(e, "flows:gerar-link-portal");
+      setErro("Não foi possível gerar o link do portal agora. Tente novamente em alguns instantes.");
     } finally {
       setGerando(false);
     }

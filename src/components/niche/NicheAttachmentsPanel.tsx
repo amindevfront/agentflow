@@ -12,6 +12,7 @@ import { useEffect, useState } from "react";
 import type { NicheAttachment, NicheAttachmentTipo } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import {
   ROTULO_TIPO_ANEXO,
   criarAnexoDeNicho,
@@ -57,7 +58,8 @@ export function NicheAttachmentsPanel({ onInsert, className }: NicheAttachmentsP
       setUrl("");
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível adicionar o anexo.");
+      reportarErro(e, "anexos-nicho:criar");
+      setErro("Não foi possível adicionar o anexo agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -69,7 +71,8 @@ export function NicheAttachmentsPanel({ onInsert, className }: NicheAttachmentsP
     try {
       await removerAnexoDeNicho(id);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível remover o anexo.");
+      reportarErro(e, "anexos-nicho:remover");
+      setErro("Não foi possível remover o anexo agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }

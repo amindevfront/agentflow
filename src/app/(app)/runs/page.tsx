@@ -69,10 +69,17 @@ export default function RunsPage() {
           </div>
 
           {filteredRuns.length === 0 ? (
-            <EmptyState
-              title="Nenhuma execução por aqui"
-              description="Execuções de todos os fluxos do workspace aparecem nesta lista assim que forem disparadas."
-            />
+            runs.length === 0 ? (
+              <EmptyState
+                title="Nenhuma execução por aqui"
+                description="Execuções de todos os fluxos do workspace aparecem nesta lista assim que forem disparadas."
+              />
+            ) : (
+              <EmptyState
+                title="Nenhum resultado para este filtro"
+                description={`Não há execuções com status "${FILTERS.find((f) => f.value === filter)?.label}" no momento. Troque o filtro para ver as demais.`}
+              />
+            )
           ) : (
             <div className="flex flex-col gap-1">
               {filteredRuns.map((run) => (
@@ -101,6 +108,11 @@ export default function RunsPage() {
               </div>
               <FlowRail steps={selectedRun.steps} />
             </>
+          ) : runs.length === 0 ? (
+            <EmptyState
+              title="Nenhuma execução ainda"
+              description="Dispare um fluxo em Fluxos (Sandbox ou Executar fluxo agora) para ver o detalhe passo-a-passo aparecer aqui."
+            />
           ) : (
             <EmptyState
               title="Selecione uma execução"

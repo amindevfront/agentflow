@@ -24,6 +24,7 @@ import { auth } from "@/lib/firebase";
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { analisarClausulasCriticas, gerarResumoExecutivoContrato } from "@/lib/documentAiVault";
 import { salvarDocumentoAnalisado, subscribeDocumentosContratos } from "@/lib/documentosContratos";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { cn } from "@/lib/utils";
@@ -90,7 +91,10 @@ export function DocumentVaultPanel() {
       setNomeArquivo("");
       setTextoContrato("");
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível analisar o documento.");
+      // Nunca expõe o texto técnico do erro (ex.: código do Firestore) ao
+      // operador — só o registra para diagnóstico e mostra um aviso fixo.
+      reportarErro(e, "document-ai-vault:analisar-documento");
+      setErro("Não foi possível analisar o documento agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }

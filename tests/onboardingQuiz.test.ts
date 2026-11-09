@@ -85,6 +85,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("deriva playbooks sugeridos a partir do nicho (reaproveita NICHE_PRESETS)", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "clinica-alto-padrao", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.workspacePatch.setor).toBe("clinica-alto-padrao");
@@ -96,6 +97,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("região Brasil deriva moeda BRL e regime CLT no patch do RoiConfig", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "ecommerce", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.roiConfigPatch).toEqual({ moedaExibicao: "BRL", regimeEncargos: "clt-br" });
@@ -104,6 +106,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("região Global deriva moeda USD e regime Payroll no patch do RoiConfig", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "servicos-luxo", ralogDeCaixa: "outro", regiaoOperacao: "global" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.roiConfigPatch).toEqual({ moedaExibicao: "USD", regimeEncargos: "payroll-us-uk" });
@@ -112,6 +115,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("região Portugal deriva moeda EUR e regime Segurança Social no patch do RoiConfig", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "portugal-clinics-health", ralogDeCaixa: "outro", regiaoOperacao: "pt" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.roiConfigPatch).toEqual({ moedaExibicao: "EUR", regimeEncargos: "seguranca-social-pt" });
@@ -120,6 +124,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("propaga os guardrailOverrides do ralo de caixa escolhido", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "outros", ralogDeCaixa: "vazamento-pii", regiaoOperacao: "br" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.workspacePatch.guardrailOverrides).toEqual(
@@ -130,6 +135,7 @@ describe("derivarAjustesDoQuiz", () => {
   it("registra quizRespondidoEm com o instante injetado (determinístico)", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "outros", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.workspacePatch.quizRespondidoEm).toBe(REFERENCIA.toISOString());
@@ -137,15 +143,46 @@ describe("derivarAjustesDoQuiz", () => {
 
   it("é determinístico: mesma entrada produz sempre a mesma derivação", () => {
     const entrada = { setor: "logistica-portuaria" as const, ralogDeCaixa: "no-show-agendamento" as const, regiaoOperacao: "global" as const };
-    expect(derivarAjustesDoQuiz(entrada, REFERENCIA)).toEqual(derivarAjustesDoQuiz(entrada, REFERENCIA));
+    expect(derivarAjustesDoQuiz(entrada, undefined, REFERENCIA)).toEqual(
+      derivarAjustesDoQuiz(entrada, undefined, REFERENCIA)
+    );
   });
 
   it("preserva o ralo de caixa e a região escolhidos no patch do workspace", () => {
     const ajustes = derivarAjustesDoQuiz(
       { setor: "construtora-imobiliaria", ralogDeCaixa: "passivo-clt-overtime", regiaoOperacao: "global" },
+      undefined,
       REFERENCIA
     );
     expect(ajustes.workspacePatch.ralogDeCaixa).toBe("passivo-clt-overtime");
     expect(ajustes.workspacePatch.regiaoOperacao).toBe("global");
+  });
+
+  it("sem modulosAtivos atual (onboarding inicial), não inventa nenhuma gaveta extra", () => {
+    const ajustes = derivarAjustesDoQuiz(
+      { setor: "clinica-alto-padrao", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      undefined,
+      REFERENCIA
+    );
+    expect(ajustes.workspacePatch.modulosAtivos).toEqual([]);
+  });
+
+  it("TROCA de nicho com gaveta extra ligada: substitui o nicho antigo pelo novo, preserva a extra — nunca deixa o nicho anterior orfanizado", () => {
+    const ajustes = derivarAjustesDoQuiz(
+      { setor: "construtora-imobiliaria", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      ["clinica-alto-padrao", "document-ai-vault"],
+      REFERENCIA
+    );
+    expect(ajustes.workspacePatch.modulosAtivos).toEqual(["construtora-imobiliaria", "document-ai-vault"]);
+    expect(ajustes.workspacePatch.modulosAtivos).not.toContain("clinica-alto-padrao");
+  });
+
+  it("TROCA de nicho sem nenhuma gaveta extra ligada: modulosAtivos permanece vazio (volta a depender só de `setor`)", () => {
+    const ajustes = derivarAjustesDoQuiz(
+      { setor: "construtora-imobiliaria", ralogDeCaixa: "outro", regiaoOperacao: "br" },
+      ["clinica-alto-padrao"],
+      REFERENCIA
+    );
+    expect(ajustes.workspacePatch.modulosAtivos).toEqual([]);
   });
 });

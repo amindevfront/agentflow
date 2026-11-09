@@ -14,6 +14,7 @@
 // genéricos) precisa mudar.
 
 import type { NicheKey, Workspace } from "@/types";
+import { NICHE_ORDER } from "@/lib/niches";
 import type { VerticalModuleDefinition } from "./types";
 import { REAL_ESTATE_MODULE } from "./real-estate";
 import { CLINICS_EXAMS_MODULE, CLINICS_MODULE } from "./clinics";
@@ -65,6 +66,31 @@ export function obterIdsModulosAtivos(
   if (!workspace) return [];
   if (workspace.modulosAtivos && workspace.modulosAtivos.length > 0) return workspace.modulosAtivos;
   return workspace.setor ? [workspace.setor] : [];
+}
+
+const CHAVES_NICHO_INDUSTRIA = new Set<NicheKey>(NICHE_ORDER);
+
+/**
+ * Recalcula `Workspace.modulosAtivos` para uma TROCA de nicho (quiz de
+ * onboarding, ou "trocar nicho" em Configurações) — preserva as gavetas de
+ * back-office que o tenant já tinha ligado como extra, mas nunca deixa o
+ * nicho ANTERIOR sobrevivendo no slot primário.
+ *
+ * Bug real que isto corrige: `obterIdsModulosAtivos` dá prioridade total a
+ * `modulosAtivos` sobre `setor` sempre que ele existe e não está vazio. Como
+ * `handleToggleGaveta` (Configurações) grava `modulosAtivos = [setorAtual,
+ * ...extras]` ao ligar QUALQUER gaveta extra, e a troca de nicho (antes
+ * desta correção) só atualizava `setor` — nunca `modulosAtivos` —, o nicho
+ * ANTIGO ficava "orfanizado" como primário em todo consumidor de
+ * `obterIdsModulosAtivos` (Neural Inbox, aba Back-office da Governança)
+ * mesmo depois do operador confirmar o novo nicho em Configurações.
+ */
+export function recalcularModulosAtivosParaNovoSetor(
+  modulosAtivosAtuais: NicheKey[] | undefined,
+  novoSetor: NicheKey
+): NicheKey[] {
+  const extras = (modulosAtivosAtuais ?? []).filter((id) => !CHAVES_NICHO_INDUSTRIA.has(id));
+  return extras.length > 0 ? [novoSetor, ...extras] : [];
 }
 
 /** Mesmo que `obterIdsModulosAtivos`, já resolvido em definições (deduplicadas — duas chaves podem apontar para a mesma gaveta, ex. os dois `NicheKey` de Clínicas). */

@@ -29,10 +29,14 @@ import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda, subscribeRoiConfig }
 import { NICHE_PRESETS } from "@/lib/niches";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { MetricCard } from "@/components/ui/MetricCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
+
+/** Leitura de métricas de pipeline (Admin SDK) — mais lenta que uma leitura simples, mas nunca pendurada para sempre numa rede instável. */
+const TIMEOUT_PIPELINE_MS = 15_000;
 
 interface RespostaRoiDashboard {
   disponivel: boolean;
@@ -72,24 +76,19 @@ export function RoiOpportunityPanel() {
           throw new Error("Sessão expirada. Entre novamente para ver o pipeline.");
         }
 
-        // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
-        // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
-        // chegar como texto técnico na tela do dono do negócio.
-        let res: Response;
-        try {
-          res = await fetch("/api/roi-dashboard", {
-            headers: { authorization: `Bearer ${await usuario.getIdToken()}` },
-          });
-        } catch (erroDeRede) {
-          reportarErro(erroDeRede, "governanca:pipeline:rede");
-          throw new Error("Não foi possível conectar ao servidor para carregar o pipeline. Verifique sua conexão.");
-        }
+        const res = await fetchComTimeout(
+          "/api/roi-dashboard",
+          { headers: { authorization: `Bearer ${await usuario.getIdToken()}` } },
+          "Não foi possível conectar ao servidor para carregar o pipeline. Verifique sua conexão.",
+          TIMEOUT_PIPELINE_MS
+        );
         const dados = (await res.json().catch(() => ({}))) as RespostaRoiDashboard;
         if (!res.ok) {
           throw new Error(dados.erro?.mensagem ?? "Falha ao carregar o pipeline. Tente novamente em alguns instantes.");
         }
         if (!cancelado) setResposta(dados);
       } catch (e) {
+        reportarErro(e, "governanca:pipeline");
         if (!cancelado) setErro(e instanceof Error ? e.message : "Não foi possível carregar o pipeline.");
       } finally {
         if (!cancelado) setCarregando(false);

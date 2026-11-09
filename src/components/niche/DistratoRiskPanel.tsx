@@ -17,6 +17,7 @@ import { useEffect } from "react";
 import type { ContratoImobiliario } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import { auth } from "@/lib/firebase";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import {
   avancarStatusDistrato,
   criarContratoImobiliario,
@@ -139,7 +140,8 @@ export function DistratoRiskPanel() {
       setPatrimonioDeAfetacao(false);
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar o contrato.");
+      reportarErro(e, "distrato:registrar-contrato");
+      setErro("Não foi possível registrar o contrato agora. Tente novamente em alguns instantes.");
     }
   }
 
@@ -149,7 +151,8 @@ export function DistratoRiskPanel() {
     try {
       await avancarStatusDistrato(contrato);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível avançar o status do distrato.");
+      reportarErro(e, "distrato:avancar-status");
+      setErro("Não foi possível avançar o status do distrato agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }
@@ -161,7 +164,8 @@ export function DistratoRiskPanel() {
     try {
       await registrarEntregaUnidade(contrato);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar a entrega.");
+      reportarErro(e, "distrato:registrar-entrega");
+      setErro("Não foi possível registrar a entrega agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }

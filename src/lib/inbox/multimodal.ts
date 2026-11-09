@@ -8,8 +8,12 @@
 
 import type { Canal } from "@/types";
 import { auth } from "@/lib/firebase";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { registrarMensagemCliente, type RegistrarMensagemClienteResultado } from "./firestore";
 import type { MediaTypeAnalise } from "@/lib/server/visionAdmin";
+
+/** Visão/transcrição real chamam um modelo de IA — mais lento que o resto da API, mas nunca pendurado para sempre numa rede instável. */
+const TIMEOUT_MIDIA_MS = 30_000;
 
 async function idToken(): Promise<string> {
   const usuario = auth?.currentUser;
@@ -39,15 +43,20 @@ export interface ProcessarImagemClienteInput {
 export async function processarImagemCliente(
   entrada: ProcessarImagemClienteInput
 ): Promise<RegistrarMensagemClienteResultado> {
-  const resposta = await fetch("/api/inbox/analisar-imagem", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${await idToken()}` },
-    body: JSON.stringify({ base64: entrada.base64, mediaType: entrada.mediaType }),
-  });
+  const resposta = await fetchComTimeout(
+    "/api/inbox/analisar-imagem",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${await idToken()}` },
+      body: JSON.stringify({ base64: entrada.base64, mediaType: entrada.mediaType }),
+    },
+    "Não foi possível conectar ao servidor para analisar a imagem/documento. Verifique sua conexão e tente novamente.",
+    TIMEOUT_MIDIA_MS
+  );
 
   const dados = (await resposta.json().catch(() => ({}))) as RespostaErroApi & { descricao?: string };
   if (!resposta.ok || !dados.descricao) {
-    throw new Error(dados.erro?.mensagem ?? `Falha ao analisar a imagem/documento (HTTP ${resposta.status}).`);
+    throw new Error(dados.erro?.mensagem ?? "Falha ao analisar a imagem/documento. Tente novamente em alguns instantes.");
   }
 
   return registrarMensagemCliente({
@@ -75,15 +84,20 @@ export interface ProcessarAudioClienteInput {
 export async function processarAudioCliente(
   entrada: ProcessarAudioClienteInput
 ): Promise<RegistrarMensagemClienteResultado> {
-  const resposta = await fetch("/api/inbox/transcrever-audio", {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${await idToken()}` },
-    body: JSON.stringify({ base64: entrada.base64, mimeType: entrada.mimeType }),
-  });
+  const resposta = await fetchComTimeout(
+    "/api/inbox/transcrever-audio",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${await idToken()}` },
+      body: JSON.stringify({ base64: entrada.base64, mimeType: entrada.mimeType }),
+    },
+    "Não foi possível conectar ao servidor para transcrever o áudio. Verifique sua conexão e tente novamente.",
+    TIMEOUT_MIDIA_MS
+  );
 
   const dados = (await resposta.json().catch(() => ({}))) as RespostaErroApi & { texto?: string };
   if (!resposta.ok || !dados.texto) {
-    throw new Error(dados.erro?.mensagem ?? `Falha ao transcrever o áudio (HTTP ${resposta.status}).`);
+    throw new Error(dados.erro?.mensagem ?? "Falha ao transcrever o áudio. Tente novamente em alguns instantes.");
   }
 
   return registrarMensagemCliente({

@@ -21,10 +21,14 @@ import { POLITICAS_PREDEFINIDAS, ROTULO_POR_KIND } from "@/lib/guardrails";
 import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { cn } from "@/lib/utils";
+
+/** Inspeção roda guardrails + checagens de consistência — mais lenta que uma leitura simples, mas nunca pendurada para sempre numa rede instável. */
+const TIMEOUT_INSPECAO_MS = 20_000;
 
 type IdPolitica = keyof typeof POLITICAS_PREDEFINIDAS;
 
@@ -97,12 +101,9 @@ export function GuardrailInspectorPanel() {
       const listaAmostras = amostras.split("\n").map((l) => l.trim()).filter(Boolean);
       const listaContextos = contextos.split("\n").map((l) => l.trim()).filter(Boolean);
 
-      // Uma falha de rede crua (servidor fora do ar, sem conexão) lança um
-      // `TypeError` do próprio `fetch` ("Failed to fetch") — nunca deveria
-      // chegar como texto técnico na tela do dono do negócio.
-      let resposta: Response;
-      try {
-        resposta = await fetch("/api/guardrails/inspect", {
+      const resposta = await fetchComTimeout(
+        "/api/guardrails/inspect",
+        {
           method: "POST",
           headers: {
             "content-type": "application/json",
@@ -115,11 +116,10 @@ export function GuardrailInspectorPanel() {
             amostras: listaAmostras,
             contextos: listaContextos,
           }),
-        });
-      } catch (erroDeRede) {
-        reportarErro(erroDeRede, "governanca:guardrails:rede");
-        throw new Error("Não foi possível conectar ao servidor para inspecionar o payload. Verifique sua conexão.");
-      }
+        },
+        "Não foi possível conectar ao servidor para inspecionar o payload. Verifique sua conexão.",
+        TIMEOUT_INSPECAO_MS
+      );
 
       const dados = (await resposta.json().catch(() => ({}))) as RespostaInspecao;
       if (!resposta.ok) {
@@ -127,6 +127,7 @@ export function GuardrailInspectorPanel() {
       }
       setResultado(dados);
     } catch (e) {
+      reportarErro(e, "governanca:guardrails");
       setErro(e instanceof Error ? e.message : "Não foi possível inspecionar o payload.");
     } finally {
       setExecutando(false);

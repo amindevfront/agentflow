@@ -18,6 +18,7 @@ import {
 } from "@/lib/shipments";
 import { calcularRiscoDemurrage, type NivelAlertaDemurrage } from "@/lib/demurrage";
 import { calcularExposicaoCambial, type NivelAlertaCambial } from "@/lib/cambio";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { ROI_CONFIG_PADRAO, subscribeRoiConfig } from "@/lib/roi";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -168,7 +169,8 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
       setCambioContratado("");
       setFormAberto(false);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível registrar a carga.");
+      reportarErro(e, "cargo:registrar-carga");
+      setErro("Não foi possível registrar a carga agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessando(false);
     }
@@ -183,7 +185,8 @@ export function CargoTriagePanel({ textoParaExtrairCodigo, onInsertResposta }: C
     try {
       await atualizarStatusCarga(carga, proximo);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível avançar o status da carga.");
+      reportarErro(e, "cargo:avancar-status");
+      setErro("Não foi possível avançar o status da carga agora. Tente novamente em alguns instantes.");
     } finally {
       setAvancandoStatus(false);
     }

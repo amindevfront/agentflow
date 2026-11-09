@@ -70,10 +70,12 @@ export const POST = comGuarda(
       const descricao = await analisarImagemAdmin({ base64, mediaType: mediaTypeTexto as MediaTypeAnalise });
       return respostaJson({ descricao });
     } catch (erro) {
+      // O detalhe técnico (erro do SDK/provedor) fica só no log do servidor
+      // — nunca na resposta ao cliente.
       console.error("[inbox/analisar-imagem] falha ao analisar imagem/documento:", erro);
       throw new ErroApi(
         502,
-        erro instanceof Error ? erro.message : "Não foi possível analisar a imagem/documento.",
+        "Não foi possível analisar a imagem/documento agora. Tente novamente em alguns instantes.",
         "falha_analise"
       );
     }

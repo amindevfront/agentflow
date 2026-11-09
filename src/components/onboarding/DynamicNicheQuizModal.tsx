@@ -33,6 +33,7 @@ import {
   regiaoRecomendadaPorSetor,
   salvarRespostaQuiz,
 } from "@/lib/onboardingQuiz";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +143,8 @@ export function QuizModalProvider({ children }: { children: ReactNode }) {
       setAbertoManualmente(false);
       setDispensadoNestaSessao(true);
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar as respostas do quiz.");
+      reportarErro(e, "onboarding:salvar-quiz");
+      setErro("Não foi possível salvar as respostas do quiz agora. Tente novamente em alguns instantes.");
       setPasso("regiao");
     }
   }

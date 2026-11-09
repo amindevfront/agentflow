@@ -16,6 +16,7 @@ import type {
   RegimeEncargos,
   RoiConfig,
 } from "@/types";
+import { reportarErro } from "@/lib/telemetry/errorReporting";
 import {
   PRECOS_REFERENCIA,
   ROI_CONFIG_PADRAO,
@@ -143,7 +144,8 @@ export function RoiConfigPanel() {
         },
       });
     } catch (e) {
-      setErro(e instanceof Error ? e.message : "Não foi possível salvar os parâmetros.");
+      reportarErro(e, "governanca:salvar-parametros-roi");
+      setErro("Não foi possível salvar os parâmetros agora. Tente novamente em alguns instantes.");
     } finally {
       setSalvando(false);
     }
