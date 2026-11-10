@@ -21,6 +21,14 @@ const withPWA = withPWAInit({
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // `isomorphic-dompurify`/`jsdom` quebram em produção (ERR_REQUIRE_ESM) quando
+  // o bundler da Vercel tenta empacotar sua árvore de dependências — o
+  // transitivo `html-encoding-sniffer` requer um arquivo ESM (`@exodus/bytes`)
+  // via `require()` CJS. Deixando-os de fora do bundle, o Node resolve a
+  // árvore normalmente em runtime a partir de `node_modules`, sem o conflito
+  // introduzido pelo empacotamento estático. Afetava `/portal/[slug]` (SSR) e
+  // `/api/roi-dashboard` — ver erros em produção, 2026-11.
+  serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
 };
 
 export default withPWA(nextConfig);

@@ -119,6 +119,14 @@ export function firestoreAdmin(): Firestore {
   assertServidor();
   if (firestoreCache) return firestoreCache;
   firestoreCache = getFirestore(app());
+  // Todo o código do servidor trata campo opcional ausente como `undefined`
+  // (ex.: `atorEmail: usuario.email ?? undefined` em `/api/audit/seal`) — o
+  // Admin SDK, diferente do client SDK, rejeita `undefined` por padrão
+  // ("Cannot use 'undefined' as a Firestore value"), e isso já derrubou a
+  // trilha de auditoria em produção (traceId/severidade/atorEmail ausentes).
+  // Esta linha alinha o comportamento do Admin SDK ao do client SDK em todo
+  // o projeto, de uma vez, na fronteira — não em cada chamador.
+  firestoreCache.settings({ ignoreUndefinedProperties: true });
   return firestoreCache;
 }
 
