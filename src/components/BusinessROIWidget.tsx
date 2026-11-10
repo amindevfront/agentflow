@@ -129,6 +129,8 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
       calcularRoi({
         execucoes,
         tickets,
+        // `subscribeConversations` já exclui conversas de demonstração do
+        // Sandbox por padrão (ver `incluirSandbox` em `@/lib/inbox/firestore`).
         conversas,
         campanhas,
         config,

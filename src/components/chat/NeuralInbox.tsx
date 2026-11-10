@@ -160,9 +160,17 @@ function arquivoParaBase64(arquivo: File): Promise<string> {
   });
 }
 
-type FiltroInbox = "ativas" | "circuit-breaker" | "sem-atribuicao" | "resolvidas" | "todas";
+type FiltroInbox = "ativas" | "circuit-breaker" | "sem-atribuicao" | "resolvidas" | "todas" | "teste";
 
+/**
+ * Conversas de demonstração (`origemSandbox`, criadas pelo Simulador de
+ * Payload — ver `Conversation.origemSandbox`) nunca aparecem fora da aba
+ * "Teste (Sandbox)": nenhuma métrica/contagem real nem a visão padrão da
+ * Neural Inbox deve se misturar com lead fictício.
+ */
 function corresponde(conversa: Conversation, filtro: FiltroInbox): boolean {
+  if (filtro === "teste") return conversa.origemSandbox === true;
+  if (conversa.origemSandbox) return false;
   if (filtro === "todas") return true;
   if (filtro === "circuit-breaker") return conversa.circuitBreakerAtivo;
   if (filtro === "sem-atribuicao") return conversa.atribuidoTipo === "nenhum";
@@ -227,6 +235,10 @@ export function NeuralInbox() {
     const cancelamentos = [
       subscribeConversations(setConversas, {
         workspaceId,
+        // Única tela que precisa ver conversas de demonstração do Sandbox
+        // (aba "Teste (Sandbox)", abaixo) — todo o resto do produto (ROI,
+        // Governança, Portal do Cliente) nunca as recebe, por padrão.
+        incluirSandbox: true,
         onError: () => setErro("Não foi possível carregar as conversas agora. Tente novamente em instantes."),
       }),
       // SLA Rescue: tickets de transbordo alimentam a varredura abaixo, que
@@ -268,27 +280,36 @@ export function NeuralInbox() {
     }
   }, [conversaDaUrl, conversas, selecionadaId]);
 
-  const visiveis = useMemo(() => conversas.filter((c) => corresponde(c, filtro)), [conversas, filtro]);
+  // Base de toda métrica/contagem real exibida nesta tela: nunca inclui
+  // conversas de demonstração do Sandbox (ver `corresponde`/`origemSandbox`).
+  const conversasReais = useMemo(() => conversas.filter((c) => !c.origemSandbox), [conversas]);
+  const totalTeste = conversas.length - conversasReais.length;
+
+  const visiveis = useMemo(
+    () => (filtro === "teste" ? conversas.filter((c) => c.origemSandbox) : conversasReais.filter((c) => corresponde(c, filtro))),
+    [conversas, conversasReais, filtro]
+  );
   const selecionada = conversas.find((c) => c.id === selecionadaId) ?? null;
 
   const contagens = useMemo(() => {
-    const ativas = conversas.filter((c) => corresponde(c, "ativas")).length;
-    const circuitBreaker = conversas.filter((c) => c.circuitBreakerAtivo).length;
-    const semAtribuicao = conversas.filter((c) => c.atribuidoTipo === "nenhum" && c.status !== "resolvida").length;
-    const resolvidas = conversas.filter((c) => c.status === "resolvida").length;
-    const comFrustracao = conversas.filter((c) => c.status !== "resolvida");
+    const ativas = conversasReais.filter((c) => corresponde(c, "ativas")).length;
+    const circuitBreaker = conversasReais.filter((c) => c.circuitBreakerAtivo).length;
+    const semAtribuicao = conversasReais.filter((c) => c.atribuidoTipo === "nenhum" && c.status !== "resolvida").length;
+    const resolvidas = conversasReais.filter((c) => c.status === "resolvida").length;
+    const comFrustracao = conversasReais.filter((c) => c.status !== "resolvida");
     const frustracaoMedia =
       comFrustracao.length > 0
         ? Math.round(comFrustracao.reduce((acc, c) => acc + c.frustrationIndex, 0) / comFrustracao.length)
         : 0;
     return { ativas, circuitBreaker, semAtribuicao, resolvidas, frustracaoMedia };
-  }, [conversas]);
+  }, [conversasReais]);
 
   // Motor de Resgate de Receita Perdida: conversas de alta intenção comercial
   // resolvidas fora do expediente — prova de ROI imediato ("a empresa estaria
   // fechada e o cliente foi atendido assim mesmo"). Ver `@/lib/inbox/revenueRescue`
-  // sobre por que isto conta volume real em vez de inventar um valor em R$.
-  const receitaMadrugada = useMemo(() => calcularReceitaRecuperadaMadrugada(conversas), [conversas]);
+  // sobre por que isto conta volume real em vez de inventar um valor em R$ —
+  // por isso também nunca entra conversa de demonstração aqui.
+  const receitaMadrugada = useMemo(() => calcularReceitaRecuperadaMadrugada(conversasReais), [conversasReais]);
 
   // Custo humano evitado só nessas conversas — mesma fórmula honesta já
   // usada em `calcularRoi` (minutos manuais configurados × custo-hora),
@@ -307,7 +328,10 @@ export function NeuralInbox() {
     { valor: "circuit-breaker" as const, label: "Atenção urgente", contagem: contagens.circuitBreaker },
     { valor: "sem-atribuicao" as const, label: "Sem atribuição", contagem: contagens.semAtribuicao },
     { valor: "resolvidas" as const, label: "Resolvidas", contagem: contagens.resolvidas },
-    { valor: "todas" as const, label: "Todas", contagem: conversas.length },
+    { valor: "todas" as const, label: "Todas", contagem: conversasReais.length },
+    // Só aparece quando existe alguma — workspace novo/limpo nunca mostra
+    // esta aba (Zero-State real, sem resíduo de teste à vista).
+    ...(totalTeste > 0 ? [{ valor: "teste" as const, label: "Teste (Sandbox)", contagem: totalTeste }] : []),
   ];
 
   const executiveBrief = useMemo(() => {
@@ -719,6 +743,14 @@ export function NeuralInbox() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-1.5">
                           <span className="truncate text-sm font-semibold text-ink-950">{conversa.participante.nome}</span>
+                          {conversa.origemSandbox && (
+                            <span
+                              className="mono flex-none rounded-full bg-state-idle-bg px-1.5 py-0.5 text-[10px] font-medium text-state-idle"
+                              title="Criada pelo Simulador de Payload do Sandbox — nunca um lead real."
+                            >
+                              TESTE
+                            </span>
+                          )}
                           {conversa.circuitBreakerAtivo && (
                             <span className="flex-none rounded-full bg-state-error-bg px-1.5 py-0.5 text-[10px] font-medium text-state-error">
                               urgente

@@ -162,6 +162,16 @@ export interface Conversation {
   criadaEm: string;
   resolvidaEm?: string | null;
 
+  /**
+   * `true` quando esta conversa foi criada pelo Simulador de Payload do
+   * Sandbox ("Enviar como lead de teste para a Neural Inbox" em Fluxos),
+   * nunca por um cliente real ou por "Novo contato" manual do operador —
+   * ver `@/components/flows/PayloadSimulator`. Permite distinguir na UI
+   * (pill "Teste") e oferecer limpeza em lote antes de operar com clientes
+   * reais, sem arriscar apagar atendimento de verdade.
+   */
+  origemSandbox?: boolean;
+
   totalMensagens: number;
   totalMensagensCliente: number;
   tempoMedioRespostaSegundos?: number;

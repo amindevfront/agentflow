@@ -254,7 +254,12 @@ export async function obterMetricasPipelineVerticalAdmin(
     return calcularMetricasPipelineVertical({
       workspaceId,
       setor: setor as NicheKey,
-      conversas: conversasSnap.docs.map((d) => d.data() as Conversation),
+      // Nunca conta conversa de demonstração do Simulador de Payload do
+      // Sandbox (`origemSandbox`) como pipeline real — mesma regra do
+      // caminho client-side (`subscribeConversations`, `@/lib/inbox/firestore`).
+      conversas: conversasSnap.docs
+        .map((d) => d.data() as Conversation)
+        .filter((c) => !c.origemSandbox),
       tickets: ticketsSnap.docs.map((d) => d.data() as HandoffTicket),
       periodo: opcoes.periodo,
       valorMedioPipelineBrl: opcoes.valorMedioPipelineBrl,

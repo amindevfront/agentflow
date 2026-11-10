@@ -90,6 +90,7 @@ export function PayloadSimulator({ flowNome }: PayloadSimulatorProps) {
         identificadorParticipante: `sandbox:${Date.now()}`,
         assunto: flowNome ? `Simulação via Fluxos — ${flowNome}` : "Simulação via Fluxos",
         workspaceId,
+        origemSandbox: true,
       });
       await registrarMensagemCliente({
         conversationId: conversa.id,

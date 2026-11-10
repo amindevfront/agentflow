@@ -99,7 +99,7 @@ export function subscribeConversations(
   // `onError` nunca recebe o erro — quem consome mostra um texto amigável
   // fixo; índice ausente é absorvido de forma transparente (ver
   // `assinarComFallbackDeIndice`) e nem chega a chamar isto.
-  opcoes: { workspaceId?: string; limite?: number; onError?: () => void } = {}
+  opcoes: { workspaceId?: string; limite?: number; incluirSandbox?: boolean; onError?: () => void } = {}
 ): Unsubscribe {
   if (!db) {
     onChange([]);
@@ -109,6 +109,15 @@ export function subscribeConversations(
   const workspaceId = opcoes.workspaceId ?? DEFAULT_WORKSPACE_ID;
   const limite = opcoes.limite ?? 200;
   const mapearConversa = (d: QueryDocumentSnapshot) => ({ ...(d.data() as Conversation), id: d.id });
+
+  // Conversas de demonstração do Simulador de Payload (`origemSandbox`)
+  // nunca chegam a quem assina, por padrão — ROI, Governança, Executive
+  // Report e o Portal do Cliente não devem ver (nem contar) um lead
+  // fictício. Só a própria Neural Inbox, que precisa da aba "Teste
+  // (Sandbox)" explícita, passa `incluirSandbox: true`.
+  const repassar = opcoes.incluirSandbox
+    ? onChange
+    : (lista: Conversation[]) => onChange(lista.filter((c) => !c.origemSandbox));
 
   return assinarComFallbackDeIndice({
     consultaPrincipal: query(
@@ -121,7 +130,7 @@ export function subscribeConversations(
     mapearDoc: mapearConversa,
     ordenarFallback: (lista) =>
       [...lista].sort((a, b) => b.ultimaMensagemEm.localeCompare(a.ultimaMensagemEm)).slice(0, limite),
-    onChange,
+    onChange: repassar,
     aoFalharDeFormaIrrecuperavel: opcoes.onError,
     contexto: "inbox:conversas",
   });
@@ -202,6 +211,8 @@ export interface CriarConversaInput {
   identificadorParticipante: string;
   assunto: string;
   workspaceId?: string;
+  /** Ver `Conversation.origemSandbox` — só o Simulador de Payload do Sandbox deve passar `true`. */
+  origemSandbox?: boolean;
 }
 
 /**
@@ -239,6 +250,7 @@ export async function criarConversa(entrada: CriarConversaInput): Promise<Conver
       criadaEm: agora,
       totalMensagens: 0,
       totalMensagensCliente: 0,
+      ...(entrada.origemSandbox ? { origemSandbox: true as const } : {}),
     };
 
     await setDoc(doc(database, COLECAO_CONVERSAS, conversa.id), conversa);
