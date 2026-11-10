@@ -18,6 +18,7 @@
 // já documentadas na mesma função.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { registrarMensagemCliente } from "@/lib/inbox/firestore";
 
 interface RefFalsa {
   colecao: string;
@@ -76,8 +77,6 @@ describe("registrarMensagemCliente — resiliente a índice composto ausente", (
   });
 
   it("registra a mensagem do cliente mesmo quando a consulta de histórico recente falha", async () => {
-    const { registrarMensagemCliente } = await import("@/lib/inbox/firestore");
-
     const workspaceId = "ws-teste";
     const conversationId = "conv-teste";
     banco.set(`conversations/${conversationId}`, {

@@ -27,6 +27,9 @@ const CONNECTOR_TYPES = [
 
 const TIPO_WIDGET = "Web Widget Corporativo (Embed)";
 const TIPO_WHATSAPP = "WhatsApp Business (Cloud API)";
+const TIPOS_SEM_INGESTAO_REAL = new Set(
+  CONNECTOR_TYPES.filter((t) => t !== TIPO_WIDGET && t !== TIPO_WHATSAPP)
+);
 
 export default function ConnectorsPage() {
   const { workspaceId } = useWorkspace();
@@ -132,6 +135,7 @@ export default function ConnectorsPage() {
               {CONNECTOR_TYPES.map((t) => (
                 <option key={t} value={t}>
                   {t}
+                  {TIPOS_SEM_INGESTAO_REAL.has(t) ? " — ainda não recebe mensagens reais" : ""}
                 </option>
               ))}
             </select>
