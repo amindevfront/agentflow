@@ -8,11 +8,16 @@
 // tela) garante que todo documento em `flows`, `connectors`, `invites`,
 // `workspaces` e `users` já nasce seguro, independente de quem o lê depois.
 //
-// Isomórfico por desenho (ver `isomorphic-dompurify`): usa DOMPurify real no
-// navegador e um fallback via jsdom em Node (testes) — nenhuma lógica aqui
-// precisa saber em qual ambiente está rodando.
+// `sanitize-html` em vez de `isomorphic-dompurify`: a versão anterior
+// dependia de jsdom em Node, cujo transitivo `html-encoding-sniffer`
+// quebra em runtime na Vercel (`ERR_REQUIRE_ESM` ao exigir um arquivo
+// ESM de `@exodus/bytes` via `require()` CJS) — derrubava `/portal/[slug]`
+// e `/api/roi-dashboard` com HTTP 500 (visto em produção, 2026-11).
+// `sanitize-html` faz exatamente o que usávamos do DOMPurify aqui (remover
+// toda marcação com um allowlist vazio) sem precisar de DOM nenhum, real
+// ou simulado — funciona identicamente em qualquer ambiente Node.
 
-import DOMPurify from "isomorphic-dompurify";
+import sanitizeHtml from "sanitize-html";
 
 export class ErroSanitizacao extends Error {
   constructor(mensagem: string) {
@@ -30,7 +35,7 @@ const LIMITE_TEXTO_PADRAO = 500;
  */
 export function sanitizeText(valor: unknown, limite = LIMITE_TEXTO_PADRAO): string {
   const bruto = typeof valor === "string" ? valor : "";
-  const semMarcacao = DOMPurify.sanitize(bruto, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
+  const semMarcacao = sanitizeHtml(bruto, { allowedTags: [], allowedAttributes: {} });
   return semMarcacao.replace(/\s+/g, " ").trim().slice(0, limite);
 }
 
