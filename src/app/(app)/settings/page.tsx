@@ -37,6 +37,28 @@ interface RespostaResetAmbienteTeste {
   erro?: { codigo: string; mensagem: string };
 }
 
+interface DiagnosticoCapacidade {
+  pronto: boolean;
+  faltando: string[];
+}
+
+interface RespostaSaudeSistema {
+  adminSdk?: DiagnosticoCapacidade;
+  auditoria?: DiagnosticoCapacidade;
+  orquestradorIA?: DiagnosticoCapacidade;
+  transcricaoAudio?: DiagnosticoCapacidade;
+  whatsapp?: DiagnosticoCapacidade;
+  erro?: { codigo: string; mensagem: string };
+}
+
+const ROTULO_CAPACIDADE: Record<keyof Omit<RespostaSaudeSistema, "erro">, string> = {
+  adminSdk: "Conexão administrativa com o banco",
+  auditoria: "Trilha de auditoria",
+  orquestradorIA: "IA de orquestração (execução real de fluxos)",
+  transcricaoAudio: "Transcrição de áudio",
+  whatsapp: "WhatsApp Business (Cloud API)",
+};
+
 /**
  * Gavetas de back-office — funcionam JUNTO do nicho principal, nunca no
  * lugar dele (ver `obterIdsModulosAtivos` em `@/modules/registry`). Lista
@@ -83,9 +105,45 @@ export default function SettingsPage() {
   const [resetErro, setResetErro] = useState<string | null>(null);
   const [resetResultado, setResetResultado] = useState<RespostaResetAmbienteTeste | null>(null);
 
+  // Status do sistema — agrega diagnósticos que já existiam espalhados por
+  // outras rotas (ver `@/app/api/system/health`), pra um implementador ver
+  // de uma vez só o que falta configurar ANTES de uma demonstração real.
+  const [saude, setSaude] = useState<RespostaSaudeSistema | null>(null);
+  const [saudeCarregando, setSaudeCarregando] = useState(false);
+  const [saudeErro, setSaudeErro] = useState<string | null>(null);
+
   useEffect(() => {
     if (workspace) setWorkspaceName(workspace.nome);
   }, [workspace]);
+
+  useEffect(() => {
+    if (appUser?.papel !== "admin") return;
+    let cancelado = false;
+    setSaudeCarregando(true);
+    (async () => {
+      try {
+        const usuarioAtual = auth?.currentUser;
+        if (!usuarioAtual) throw new Error("Sessão expirada.");
+        const resposta = await fetchComTimeout(
+          "/api/system/health",
+          { headers: { authorization: `Bearer ${await usuarioAtual.getIdToken()}` } },
+          "Não foi possível verificar o status do sistema agora.",
+          10_000
+        );
+        const dados = (await resposta.json().catch(() => ({}))) as RespostaSaudeSistema;
+        if (cancelado) return;
+        if (!resposta.ok) throw new Error(dados.erro?.mensagem ?? "Falha ao verificar o status do sistema.");
+        setSaude(dados);
+      } catch (erro) {
+        if (!cancelado) setSaudeErro(erro instanceof Error ? erro.message : "Falha ao verificar o status do sistema.");
+      } finally {
+        if (!cancelado) setSaudeCarregando(false);
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [appUser?.papel]);
 
   // Dual-Layer Workspace View: a seção abaixo é administrativa (moeda/regime
   // de encargos afetam todo o painel financeiro) — só carregada para admin.
@@ -357,6 +415,38 @@ export default function SettingsPage() {
           >
             Zerar conversas e fluxos de teste
           </Button>
+        </section>
+      )}
+
+      {appUser?.papel === "admin" && (
+        <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+          <h2 className="text-sm font-semibold text-ink-950">Status do sistema</h2>
+          <p className="mt-1 text-xs text-ink-500">
+            O que o servidor já tem configurado — verifique isto antes de uma demonstração real, não durante.
+          </p>
+          {saudeCarregando && !saude && <p className="mt-2 text-xs text-ink-400">Verificando…</p>}
+          {saudeErro && <p className="mt-2 text-xs text-state-error">{saudeErro}</p>}
+          {saude && (
+            <ul className="mt-3 flex flex-col gap-1.5">
+              {(Object.keys(ROTULO_CAPACIDADE) as Array<keyof typeof ROTULO_CAPACIDADE>).map((chave) => {
+                const diag = saude[chave];
+                if (!diag) return null;
+                return (
+                  <li key={chave} className="flex items-start gap-2 text-xs">
+                    <span className={diag.pronto ? "text-state-done" : "text-state-error"}>
+                      {diag.pronto ? "✅" : "⚠️"}
+                    </span>
+                    <span className="text-ink-700">
+                      {ROTULO_CAPACIDADE[chave]}
+                      {!diag.pronto && diag.faltando.length > 0 && (
+                        <span className="text-ink-400"> — falta: {diag.faltando.join(", ")}</span>
+                      )}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </section>
       )}
 

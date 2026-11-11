@@ -199,3 +199,24 @@ export function diagnosticoTranscricao(): { pronto: boolean; faltando: string[] 
   }
   return { pronto: faltando.length === 0, faltando };
 }
+
+/**
+ * Diagnóstico do WhatsApp Business (Cloud API) — mesma filosofia das demais
+ * funções `diagnostico*` deste arquivo. Existia um gap real antes desta
+ * função: o conector de WhatsApp (Canais & Integrações) mostrava status
+ * "conectado" assim que criado no Firestore, mesmo quando estas duas
+ * variáveis nunca foram configuradas no servidor — a mensagem real só
+ * chegava como 503 em `/api/inbox/webhook` e `/api/inbox/whatsapp/send`,
+ * tarde demais, já na frente do cliente. Ver `src/app/(app)/connectors/page.tsx`.
+ */
+export function diagnosticoWhatsapp(): { pronto: boolean; faltando: string[] } {
+  assertServidor();
+  const faltando: string[] = [];
+  if (!process.env.WHATSAPP_ACCESS_TOKEN?.trim()) {
+    faltando.push("WHATSAPP_ACCESS_TOKEN");
+  }
+  if (!process.env.META_WEBHOOK_SECRET?.trim()) {
+    faltando.push("META_WEBHOOK_SECRET");
+  }
+  return { pronto: faltando.length === 0, faltando };
+}

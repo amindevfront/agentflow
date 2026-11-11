@@ -3,6 +3,8 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { subscribeConnectors, createConnector, deleteConnector } from "@/lib/firestore";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { auth } from "@/lib/firebase";
 import { useWorkspace } from "@/lib/workspace";
 import { connectorSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
 import { gerarWidgetEmbedSnippet } from "@/lib/inbox/channelAdapters";
@@ -47,11 +49,48 @@ export default function ConnectorsPage() {
   const [copiado, setCopiado] = useState(false);
   const [conectorParaExcluir, setConectorParaExcluir] = useState<Connector | null>(null);
   const [excluindo, setExcluindo] = useState(false);
+  const [whatsappFaltando, setWhatsappFaltando] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
     return subscribeConnectors(workspaceId, setConnectors);
   }, [workspaceId]);
+
+  const temConectorWhatsapp = connectors.some((c) => c.tipo === TIPO_WHATSAPP);
+
+  // Aviso real, não suposição: um conector WhatsApp "conectado" na tela não
+  // significa que o servidor tem as credenciais do Meta — ver
+  // `diagnosticoWhatsapp` em `@/lib/server/env`. Só checa quando existe pelo
+  // menos um conector desse tipo, pra não gastar uma chamada à toa.
+  useEffect(() => {
+    if (!temConectorWhatsapp) {
+      setWhatsappFaltando(null);
+      return;
+    }
+    let cancelado = false;
+    (async () => {
+      try {
+        const usuarioAtual = auth?.currentUser;
+        if (!usuarioAtual) return;
+        const resposta = await fetchComTimeout(
+          "/api/system/health",
+          { headers: { authorization: `Bearer ${await usuarioAtual.getIdToken()}` } },
+          "",
+          10_000
+        );
+        if (!resposta.ok || cancelado) return;
+        const dados = (await resposta.json()) as { whatsapp?: { pronto: boolean; faltando: string[] } };
+        if (!cancelado) setWhatsappFaltando(dados.whatsapp?.pronto ? null : (dados.whatsapp?.faltando ?? []));
+      } catch {
+        // Silencioso de propósito: isto é um aviso de conveniência, não uma
+        // ação crítica — uma falha de rede aqui não pode virar outro erro
+        // na tela de Conectores.
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [temConectorWhatsapp]);
 
   async function copiarSnippet(texto: string) {
     try {
@@ -132,6 +171,18 @@ export default function ConnectorsPage() {
           Novo conector
         </Button>
       </div>
+
+      {whatsappFaltando && whatsappFaltando.length > 0 && (
+        <div className="rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
+          <p className="text-xs font-semibold text-ink-900">
+            ⚠️ O WhatsApp aparece &quot;conectado&quot; aqui, mas o servidor ainda não está pronto para receber mensagem real.
+          </p>
+          <p className="mt-1 text-[11px] text-ink-600">
+            Falta configurar no servidor: <span className="mono">{whatsappFaltando.join(", ")}</span> — e registrar a
+            URL do webhook no Meta for Developers. Peça ajuda técnica; sem isso, nenhuma mensagem chega de verdade.
+          </p>
+        </div>
+      )}
 
       {showForm && (
         <form onSubmit={handleCreate} className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4 sm:flex-row sm:items-end">
