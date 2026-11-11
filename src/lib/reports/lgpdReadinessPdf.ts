@@ -9,8 +9,9 @@
 // painel — "isto não é um certificado de conformidade" — como primeira
 // seção visível, não como rodapé em letra miúda.
 
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
+import { PDFDocument, StandardFonts, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
 import type { ItemProntidaoLgpd, ProntidaoLgpdResultado, StatusItemProntidaoLgpd } from "@/lib/lgpdReadiness";
+import { MARGEM_PADRAO as MARGEM, ALTURA_A4 as ALTURA, LARGURA_A4 as LARGURA, TOKEN, quebrarLinhas } from "./pdfDesignTokens";
 
 /**
  * Forma estrutural genérica de um checklist de prontidão regulatória —
@@ -32,33 +33,6 @@ export interface ProntidaoGenericaResultado {
   itens: ItemProntidaoGenerico[];
   totalAtende: number;
   totalAvaliavelPorSoftware: number;
-}
-
-/** Espelha os tokens de cor de `globals.css` — nenhuma cor nova é introduzida. */
-const TOKEN = {
-  ink950: hexParaRgb("#0A0F1A"),
-  ink700: hexParaRgb("#202D40"),
-  ink500: hexParaRgb("#59697D"),
-  ink400: hexParaRgb("#7A8AA0"),
-  ink100: hexParaRgb("#E4E9EE"),
-  mist50: hexParaRgb("#F5F7F9"),
-  white: hexParaRgb("#FFFFFF"),
-  signal700: hexParaRgb("#0B3FCB"),
-  signal100: hexParaRgb("#E4ECFF"),
-  stateDoneInk: hexParaRgb("#1AA16B"),
-  stateDoneBg: hexParaRgb("#E1F5EB"),
-  stateError: hexParaRgb("#E5484D"),
-  stateErrorBg: hexParaRgb("#FBE7E7"),
-  stateIdle: hexParaRgb("#7A8AA0"),
-  stateIdleBg: hexParaRgb("#EDF1F4"),
-};
-
-function hexParaRgb(hex: string): RGB {
-  const limpo = hex.replace("#", "");
-  const r = parseInt(limpo.slice(0, 2), 16) / 255;
-  const g = parseInt(limpo.slice(2, 4), 16) / 255;
-  const b = parseInt(limpo.slice(4, 6), 16) / 255;
-  return rgb(r, g, b);
 }
 
 const CORES_STATUS: Record<StatusItemProntidaoLgpd, { tinta: RGB; fundo: RGB; rotulo: string }> = {
@@ -90,27 +64,6 @@ export interface RelatorioProntidaoGenericoInput {
   /** Metadados do PDF (título/assunto do documento, não o texto desenhado). */
   tituloDocumento: string;
   assuntoDocumento: string;
-}
-
-const LARGURA = 595.28; // A4 retrato, em pontos.
-const ALTURA = 841.89;
-const MARGEM = 40;
-
-function quebrarLinhas(texto: string, fonte: PDFFont, tamanho: number, larguraMax: number): string[] {
-  const palavras = texto.split(" ");
-  const linhas: string[] = [];
-  let atual = "";
-  for (const palavra of palavras) {
-    const candidata = atual ? `${atual} ${palavra}` : palavra;
-    if (fonte.widthOfTextAtSize(candidata, tamanho) > larguraMax && atual) {
-      linhas.push(atual);
-      atual = palavra;
-    } else {
-      atual = candidata;
-    }
-  }
-  if (atual) linhas.push(atual);
-  return linhas;
 }
 
 interface ContextoDesenho {
