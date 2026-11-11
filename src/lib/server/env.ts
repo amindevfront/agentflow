@@ -222,6 +222,27 @@ export function diagnosticoWhatsapp(): { pronto: boolean; faltando: string[] } {
 }
 
 /**
+ * Diagnóstico do Instagram Direct/Facebook Messenger (Meta Graph API) —
+ * mesma filosofia de `diagnosticoWhatsapp`. Os dois canais compartilham o
+ * MESMO Meta App/segredo de assinatura do WhatsApp (`META_WEBHOOK_SECRET`) —
+ * por isso esta função checa as duas variáveis juntas (a de assinatura,
+ * reaproveitada, e a nova `META_PAGE_ACCESS_TOKEN`, exclusiva do envio por
+ * Instagram/Facebook) em vez de duplicar a checagem de `META_WEBHOOK_SECRET`
+ * que `diagnosticoWhatsapp` já faz.
+ */
+export function diagnosticoMetaMessaging(): { pronto: boolean; faltando: string[] } {
+  assertServidor();
+  const faltando: string[] = [];
+  if (!process.env.META_PAGE_ACCESS_TOKEN?.trim()) {
+    faltando.push("META_PAGE_ACCESS_TOKEN");
+  }
+  if (!process.env.META_WEBHOOK_SECRET?.trim()) {
+    faltando.push("META_WEBHOOK_SECRET");
+  }
+  return { pronto: faltando.length === 0, faltando };
+}
+
+/**
  * Diagnóstico do SMS/Twilio Gateway (Canais Globais — EUA/UK/Europa) — mesma
  * filosofia de `diagnosticoWhatsapp`. `TWILIO_AUTH_TOKEN` já era checado
  * isoladamente dentro da rota de webhook; esta função o traz pro mesmo

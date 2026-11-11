@@ -74,6 +74,21 @@ const ROTULO_CANAL: Record<Canal, string> = {
   facebook: "Facebook",
   email: "E-mail",
   sms: "SMS",
+  telegram: "Telegram",
+};
+
+/**
+ * Canais com entrega EXTERNA real nesta versão → rota de envio
+ * correspondente (ver `handleEnviarResposta`). `webchat`/`email` ficam de
+ * fora: a entrega é interna ao próprio app (sem credencial/provedor
+ * externo), então não existe rota de "envio externo" para eles.
+ */
+const ROTA_ENVIO_EXTERNO_POR_CANAL: Partial<Record<Canal, string>> = {
+  whatsapp: "/api/inbox/whatsapp/send",
+  sms: "/api/inbox/sms/send",
+  instagram: "/api/inbox/meta-messaging/send",
+  facebook: "/api/inbox/meta-messaging/send",
+  telegram: "/api/inbox/telegram/send",
 };
 
 const corStatus: Record<Conversation["status"], string> = {
@@ -379,18 +394,15 @@ export function NeuralInbox() {
       });
       setResposta("");
 
-      // WhatsApp e SMS são os canais com entrega EXTERNA real nesta versão —
-      // a mensagem acima já ficou registrada na conversa independente disto;
-      // uma falha aqui não desfaz o registro, só avisa que o cliente não
-      // recebeu de verdade (ex.: janela de 24h de atendimento fechada no
-      // WhatsApp, ou credencial da Twilio ausente).
-      const rotaEnvioExterno =
-        selecionada.canal === "whatsapp"
-          ? "/api/inbox/whatsapp/send"
-          : selecionada.canal === "sms"
-            ? "/api/inbox/sms/send"
-            : null;
+      // WhatsApp, SMS, Instagram, Facebook e Telegram são os canais com
+      // entrega EXTERNA real nesta versão — a mensagem acima já ficou
+      // registrada na conversa independente disto; uma falha aqui não
+      // desfaz o registro, só avisa que o cliente não recebeu de verdade
+      // (ex.: janela de 24h de atendimento fechada no WhatsApp, credencial
+      // da Twilio ausente, ou token do bot do Telegram revogado).
+      const rotaEnvioExterno = ROTA_ENVIO_EXTERNO_POR_CANAL[selecionada.canal] ?? null;
       if (rotaEnvioExterno) {
+        const rotuloCanal = ROTULO_CANAL[selecionada.canal];
         try {
           const token = await auth?.currentUser?.getIdToken();
           const resp = await fetchComTimeout(
@@ -400,21 +412,19 @@ export function NeuralInbox() {
               headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` },
               body: JSON.stringify({ conversationId: selecionada.id, texto: resposta }),
             },
-            `Não foi possível entregar a mensagem por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} agora.`,
+            `Não foi possível entregar a mensagem por ${rotuloCanal} agora.`,
             15_000
           );
           if (!resp.ok) {
             const corpo = (await resp.json().catch(() => null)) as { erro?: { mensagem?: string } } | null;
             setErro(
               corpo?.erro?.mensagem ??
-                `A resposta foi registrada na conversa, mas não foi entregue por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} de verdade.`
+                `A resposta foi registrada na conversa, mas não foi entregue por ${rotuloCanal} de verdade.`
             );
           }
         } catch (e) {
           reportarErro(e, "inbox:enviar-externo");
-          setErro(
-            `A resposta foi registrada na conversa, mas não foi entregue por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} de verdade.`
-          );
+          setErro(`A resposta foi registrada na conversa, mas não foi entregue por ${rotuloCanal} de verdade.`);
         }
       }
     } catch (e) {

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { subscribeConnectors, createConnector, deleteConnector } from "@/lib/firestore";
+import { subscribeConnectors, createConnector, updateConnector, deleteConnector } from "@/lib/firestore";
+import { armazenarCredencial } from "@/lib/credentials";
 import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { auth } from "@/lib/firebase";
@@ -17,9 +18,14 @@ import { Modal } from "@/components/ui/Modal";
 import { DeleteIconButton } from "@/components/ui/DeleteIconButton";
 import type { Connector } from "@/types";
 
-// Canais Globais (EUA/UK/Europa): os dois últimos tipos, além dos quatro já
-// existentes, são os novos adaptadores de mensageria — ver
-// `@/lib/inbox/channelAdapters`.
+// Canais Globais (EUA/UK/Europa + Expansão Enterprise Global): além dos
+// quatro originais, são os adaptadores de mensageria reais — ver
+// `@/lib/inbox/channelAdapters`, `@/lib/server/metaMessagingAdmin` e
+// `@/lib/server/telegramBotAdmin`. Os nomes aqui têm de bater EXATAMENTE com
+// as constantes `TIPO_CONECTOR_*` exportadas por aqueles módulos — não
+// importamos as constantes direto porque esses módulos são SERVER-ONLY
+// (puxam o Admin SDK), e importar deles aqui bundlaria código de servidor no
+// cliente.
 const CONNECTOR_TYPES = [
   "Webhook",
   "E-mail",
@@ -28,13 +34,33 @@ const CONNECTOR_TYPES = [
   "SMS / Twilio Gateway",
   "Web Widget Corporativo (Embed)",
   "WhatsApp Business (Cloud API)",
+  "Instagram Direct (Meta Graph API)",
+  "Facebook Messenger (Meta Graph API)",
+  "Telegram Bot API",
 ];
 
 const TIPO_WIDGET = "Web Widget Corporativo (Embed)";
 const TIPO_WHATSAPP = "WhatsApp Business (Cloud API)";
 const TIPO_SMS = "SMS / Twilio Gateway";
-const TIPOS_COM_INGESTAO_REAL = new Set([TIPO_WIDGET, TIPO_WHATSAPP, TIPO_SMS]);
+const TIPO_INSTAGRAM = "Instagram Direct (Meta Graph API)";
+const TIPO_FACEBOOK = "Facebook Messenger (Meta Graph API)";
+const TIPO_TELEGRAM = "Telegram Bot API";
+const TIPOS_COM_INGESTAO_REAL = new Set([
+  TIPO_WIDGET,
+  TIPO_WHATSAPP,
+  TIPO_SMS,
+  TIPO_INSTAGRAM,
+  TIPO_FACEBOOK,
+  TIPO_TELEGRAM,
+]);
 const TIPOS_SEM_INGESTAO_REAL = new Set(CONNECTOR_TYPES.filter((t) => !TIPOS_COM_INGESTAO_REAL.has(t)));
+
+/** Gera um segredo de webhook aleatório (papel equivalente a `META_WEBHOOK_SECRET`, só prova "isto veio do meu webhook registrado"). */
+function gerarSegredoAleatorio(): string {
+  return typeof globalThis.crypto?.randomUUID === "function"
+    ? globalThis.crypto.randomUUID().replace(/-/g, "")
+    : `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+}
 
 export default function ConnectorsPage() {
   const { workspaceId } = useWorkspace();
@@ -44,6 +70,8 @@ export default function ConnectorsPage() {
   const [tipo, setTipo] = useState(CONNECTOR_TYPES[0]);
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
   const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
+  const [metaPageId, setMetaPageId] = useState("");
+  const [telegramBotToken, setTelegramBotToken] = useState("");
   const [saving, setSaving] = useState(false);
   const [nomeError, setNomeError] = useState<string | null>(null);
   const [snippetExpandidoId, setSnippetExpandidoId] = useState<string | null>(null);
@@ -52,6 +80,8 @@ export default function ConnectorsPage() {
   const [excluindo, setExcluindo] = useState(false);
   const [whatsappFaltando, setWhatsappFaltando] = useState<string[] | null>(null);
   const [twilioFaltando, setTwilioFaltando] = useState<string[] | null>(null);
+  const [metaMessagingFaltando, setMetaMessagingFaltando] = useState<string[] | null>(null);
+  const [telegramDetalhesId, setTelegramDetalhesId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -60,15 +90,21 @@ export default function ConnectorsPage() {
 
   const temConectorWhatsapp = connectors.some((c) => c.tipo === TIPO_WHATSAPP);
   const temConectorSms = connectors.some((c) => c.tipo === TIPO_SMS);
+  const temConectorMetaMessaging = connectors.some((c) => c.tipo === TIPO_INSTAGRAM || c.tipo === TIPO_FACEBOOK);
 
   // Aviso real, não suposição: um conector "conectado" na tela não significa
   // que o servidor tem as credenciais do provedor — ver `diagnosticoWhatsapp`/
-  // `diagnosticoTwilio` em `@/lib/server/env`. Só checa quando existe pelo
-  // menos um conector de algum desses tipos, pra não gastar uma chamada à toa.
+  // `diagnosticoTwilio`/`diagnosticoMetaMessaging` em `@/lib/server/env`.
+  // Telegram fica de fora desta checagem de propósito: seu token é
+  // vaultado por conector (Cofre Zero-Trust), não uma variável global única
+  // pra diagnosticar — o próprio Cofre já mostra se a credencial existe.
+  // Só checa quando existe pelo menos um conector de algum desses tipos,
+  // pra não gastar uma chamada à toa.
   useEffect(() => {
-    if (!temConectorWhatsapp && !temConectorSms) {
+    if (!temConectorWhatsapp && !temConectorSms && !temConectorMetaMessaging) {
       setWhatsappFaltando(null);
       setTwilioFaltando(null);
+      setMetaMessagingFaltando(null);
       return;
     }
     let cancelado = false;
@@ -86,10 +122,14 @@ export default function ConnectorsPage() {
         const dados = (await resposta.json()) as {
           whatsapp?: { pronto: boolean; faltando: string[] };
           twilio?: { pronto: boolean; faltando: string[] };
+          metaMessaging?: { pronto: boolean; faltando: string[] };
         };
         if (cancelado) return;
         if (temConectorWhatsapp) setWhatsappFaltando(dados.whatsapp?.pronto ? null : (dados.whatsapp?.faltando ?? []));
         if (temConectorSms) setTwilioFaltando(dados.twilio?.pronto ? null : (dados.twilio?.faltando ?? []));
+        if (temConectorMetaMessaging) {
+          setMetaMessagingFaltando(dados.metaMessaging?.pronto ? null : (dados.metaMessaging?.faltando ?? []));
+        }
       } catch {
         // Silencioso de propósito: isto é um aviso de conveniência, não uma
         // ação crítica — uma falha de rede aqui não pode virar outro erro
@@ -99,7 +139,7 @@ export default function ConnectorsPage() {
     return () => {
       cancelado = true;
     };
-  }, [temConectorWhatsapp, temConectorSms]);
+  }, [temConectorWhatsapp, temConectorSms, temConectorMetaMessaging]);
 
   async function copiarSnippet(texto: string) {
     try {
@@ -147,28 +187,70 @@ export default function ConnectorsPage() {
       setNomeError("Informe o número Twilio (formato E.164, ex.: +15551234567) para este conector.");
       return;
     }
+    if ((tipo === TIPO_INSTAGRAM || tipo === TIPO_FACEBOOK) && metaPageId.trim().length === 0) {
+      setNomeError("Informe o Page ID / Instagram-scoped ID do Meta for Developers para este conector.");
+      return;
+    }
+    if (tipo === TIPO_TELEGRAM && telegramBotToken.trim().length < 8) {
+      setNomeError("Informe o token do bot (gerado pelo @BotFather no Telegram) — pelo menos 8 caracteres.");
+      return;
+    }
 
     setNomeError(null);
     setSaving(true);
     try {
-      // Web Widget, WhatsApp e SMS/Twilio são os tipos de conector com
-      // ingestão real implementada ponta a ponta nesta versão (ver
-      // `widgetHabilitado` em `@/lib/server/inboxWidgetAdmin`,
-      // `resolverConectorPorPhoneNumberId` em `@/lib/server/whatsappCloudApiAdmin`
-      // e `resolverConectorPorNumeroTwilio` em `@/lib/server/twilioSmsAdmin`).
-      // Os demais tipos (Webhook, E-mail, API externa) ainda não têm o
-      // provedor real ligado — "não configurado" é honesto para eles.
+      // Web Widget, WhatsApp, SMS/Twilio, Instagram, Facebook Messenger e
+      // Telegram são os tipos de conector com ingestão real implementada
+      // ponta a ponta nesta versão (ver `widgetHabilitado` em
+      // `@/lib/server/inboxWidgetAdmin`, `resolverConectorPorPhoneNumberId`
+      // em `@/lib/server/whatsappCloudApiAdmin`, `resolverConectorPorNumeroTwilio`
+      // em `@/lib/server/twilioSmsAdmin`, `resolverConectorPorPageId` em
+      // `@/lib/server/metaMessagingAdmin` e `resolverConectorTelegram` em
+      // `@/lib/server/telegramBotAdmin`). Os demais tipos (Webhook, E-mail,
+      // API externa) ainda não têm o provedor real ligado — "não
+      // configurado" é honesto para eles.
       const status = TIPOS_COM_INGESTAO_REAL.has(validado.data.tipo) ? "conectado" : "nao-configurado";
-      await createConnector(workspaceId, {
-        ...validado.data,
-        status,
-        ...(validado.data.tipo === TIPO_WHATSAPP ? { metaPhoneNumberId: metaPhoneNumberId.trim() } : {}),
-        ...(validado.data.tipo === TIPO_SMS ? { twilioPhoneNumber: twilioPhoneNumber.trim() } : {}),
-      });
+
+      if (validado.data.tipo === TIPO_TELEGRAM) {
+        // Telegram é o único canal cujo segredo de autenticação (o token do
+        // bot) precisa passar pelo Cofre Zero-Trust, não um campo em claro —
+        // isso exige 3 passos em ordem: (1) criar o conector pra existir um
+        // id ao qual vincular a credencial, (2) selar o token vinculado a
+        // esse id, (3) gravar o id da credencial de volta no conector.
+        const webhookSecret = gerarSegredoAleatorio();
+        const connectorId = await createConnector(workspaceId, {
+          ...validado.data,
+          status,
+          telegramWebhookSecret: webhookSecret,
+        });
+        const credencial = await armazenarCredencial({
+          nome: `Bot Telegram — ${validado.data.nome}`,
+          tipo: "bearer-token",
+          segredo: telegramBotToken.trim(),
+          conectorId: connectorId,
+          workspaceId,
+        });
+        await updateConnector(connectorId, { telegramBotTokenCredentialId: credencial.id });
+        setTelegramDetalhesId(connectorId);
+      } else {
+        await createConnector(workspaceId, {
+          ...validado.data,
+          status,
+          ...(validado.data.tipo === TIPO_WHATSAPP ? { metaPhoneNumberId: metaPhoneNumberId.trim() } : {}),
+          ...(validado.data.tipo === TIPO_SMS ? { twilioPhoneNumber: twilioPhoneNumber.trim() } : {}),
+          ...(validado.data.tipo === TIPO_INSTAGRAM || validado.data.tipo === TIPO_FACEBOOK
+            ? { metaPageId: metaPageId.trim() }
+            : {}),
+        });
+      }
       setNome("");
       setMetaPhoneNumberId("");
       setTwilioPhoneNumber("");
+      setMetaPageId("");
+      setTelegramBotToken("");
       setShowForm(false);
+    } catch (erro) {
+      setNomeError(erro instanceof Error ? erro.message : "Não foi possível criar o conector agora.");
     } finally {
       setSaving(false);
     }
@@ -209,6 +291,21 @@ export default function ConnectorsPage() {
             Falta configurar no servidor: <span className="mono">{twilioFaltando.join(", ")}</span> — e registrar a
             URL do webhook na conta Twilio (Messaging → número → &quot;A message comes in&quot;). Peça ajuda técnica;
             sem isso, nenhuma mensagem chega de verdade.
+          </p>
+        </div>
+      )}
+
+      {metaMessagingFaltando && metaMessagingFaltando.length > 0 && (
+        <div className="rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
+          <p className="text-xs font-semibold text-ink-900">
+            ⚠️ Instagram/Facebook aparecem &quot;conectados&quot; aqui, mas o servidor ainda não está pronto para
+            receber/enviar mensagem real.
+          </p>
+          <p className="mt-1 text-[11px] text-ink-600">
+            Falta configurar no servidor: <span className="mono">{metaMessagingFaltando.join(", ")}</span> — e
+            registrar a URL do webhook no mesmo app Meta usado pelo WhatsApp (Meta for Developers → Webhooks →
+            assinar os campos &quot;messages&quot; de Instagram/Messenger). Peça ajuda técnica; sem isso, nenhuma
+            mensagem chega de verdade.
           </p>
         </div>
       )}
@@ -284,6 +381,43 @@ export default function ConnectorsPage() {
         </div>
       )}
 
+      {showForm && (tipo === TIPO_INSTAGRAM || tipo === TIPO_FACEBOOK) && (
+        <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
+          <Field
+            label={tipo === TIPO_INSTAGRAM ? "Instagram-scoped ID (Meta for Developers)" : "Page ID (Meta for Developers)"}
+            value={metaPageId}
+            onChange={(e) => setMetaPageId(e.target.value)}
+            placeholder="Ex.: 178xxxxxxxxxxxx"
+            helpText='Fica no painel do Meta for Developers, dentro do seu app → Messenger/Instagram → configuração de webhook. É o id que chega em "recipient.id" em todo webhook real, não o @usuário nem a URL da página.'
+          />
+          <p className="text-[11px] text-ink-400">
+            Pra mensagens reais chegarem, falta configurar <span className="mono">META_WEBHOOK_SECRET</span> (o
+            mesmo já usado pelo WhatsApp — é o mesmo app Meta) e <span className="mono">META_PAGE_ACCESS_TOKEN</span>{" "}
+            no ambiente, e assinar o campo &quot;messages&quot; deste produto no painel do Meta. Peça ajuda técnica
+            pra esse passo — é configuração fora do AgentFlow, feita uma única vez.
+          </p>
+        </div>
+      )}
+
+      {showForm && tipo === TIPO_TELEGRAM && (
+        <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
+          <Field
+            label="Token do bot (@BotFather)"
+            type="password"
+            value={telegramBotToken}
+            onChange={(e) => setTelegramBotToken(e.target.value)}
+            placeholder="Ex.: 123456789:AAH...xyz"
+            helpText="Gerado no Telegram conversando com @BotFather → /newbot. Este token fica cifrado no Cofre Zero-Trust — ninguém, nem o AgentFlow, consegue lê-lo de novo depois de salvo."
+          />
+          <p className="text-[11px] text-ink-400">
+            Diferente de WhatsApp/Instagram/Facebook, o Telegram não tem um app compartilhado — cada bot é
+            independente, por isso o token vai pro Cofre em vez de uma variável de ambiente global. Depois de criar,
+            você vai receber a URL do webhook e um segredo pra registrar no Telegram (via API <span className="mono">setWebhook</span>)
+            — isso é feito uma única vez, fora do AgentFlow.
+          </p>
+        </div>
+      )}
+
       {showForm && tipo === TIPO_WIDGET && workspaceId && (
         <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
           <div className="flex items-center justify-between">
@@ -317,12 +451,14 @@ export default function ConnectorsPage() {
             Este tipo ainda não recebe mensagens reais nesta versão.
           </p>
           <p className="text-[11px] text-ink-500">
-            O registro salva o nome do canal para planejamento, mas a ligação com o provedor de verdade (Instagram/
-            Facebook via Meta) ainda não está disponível — a rota de recebimento existe e valida a assinatura do
-            provedor, mas responde que a ingestão não está pronta. Os canais que já funcionam de ponta a ponta hoje
-            são <span className="font-medium">Web Widget Corporativo</span>,{" "}
-            <span className="font-medium">WhatsApp Business (Cloud API)</span> e{" "}
-            <span className="font-medium">SMS / Twilio Gateway</span>.
+            O registro salva o nome do canal para planejamento, mas a ligação com o provedor de verdade (Webhook
+            genérico, E-mail, API externa) ainda não está disponível — a rota de recebimento existe e valida a
+            assinatura do provedor quando aplicável, mas responde que a ingestão não está pronta. Os canais que já
+            funcionam de ponta a ponta hoje são <span className="font-medium">Web Widget Corporativo</span>,{" "}
+            <span className="font-medium">WhatsApp Business</span>,{" "}
+            <span className="font-medium">SMS / Twilio</span>,{" "}
+            <span className="font-medium">Instagram Direct</span>,{" "}
+            <span className="font-medium">Facebook Messenger</span> e <span className="font-medium">Telegram</span>.
           </p>
         </div>
       )}
@@ -363,6 +499,29 @@ export default function ConnectorsPage() {
                     <pre className="mono overflow-x-auto rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-2.5 text-[10px] text-ink-700">
                       {gerarWidgetEmbedSnippet({ workspaceId, baseUrl: window.location.origin })}
                     </pre>
+                  )}
+                </>
+              )}
+              {c.tipo === TIPO_TELEGRAM && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setTelegramDetalhesId((atual) => (atual === c.id ? null : c.id))}
+                    className="self-start text-[11px] font-medium text-signal-600 hover:text-signal-700"
+                  >
+                    {telegramDetalhesId === c.id ? "ocultar dados do webhook" : "ver dados do webhook"}
+                  </button>
+                  {telegramDetalhesId === c.id && (
+                    <div className="rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-2.5 text-[11px] text-ink-700">
+                      <p>
+                        Registre isso UMA VEZ na API do Telegram (<span className="mono">setWebhook</span>), com o
+                        token do bot:
+                      </p>
+                      <p className="mono mt-1 break-all">
+                        URL: {typeof window !== "undefined" ? window.location.origin : ""}/api/inbox/webhook/telegram/{c.id}
+                      </p>
+                      <p className="mono mt-1 break-all">secret_token: {c.telegramWebhookSecret ?? "—"}</p>
+                    </div>
                   )}
                 </>
               )}

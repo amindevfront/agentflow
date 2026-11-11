@@ -337,6 +337,20 @@ export async function createConnector(
 }
 
 /**
+ * Atualiza campos de um conector já existente — usado hoje só pelo fluxo de
+ * criação do Telegram Bot API: o conector precisa existir (pra ter um id)
+ * ANTES de `armazenarCredencial` poder vincular `conectorId`, então o id da
+ * credencial selada só é conhecido DEPOIS da criação — este patch fecha esse
+ * ciclo (ver `connectors/page.tsx`).
+ */
+export async function updateConnector(connectorId: string, patch: Partial<Connector>): Promise<void> {
+  return enfileirarEscrita("Atualizar conector", async () => {
+    const database = requireDb();
+    await updateDoc(doc(database, "connectors", connectorId), { ...patch, atualizadoEm: new Date().toISOString() });
+  });
+}
+
+/**
  * Remove um conector (ex.: cadastrado com o Phone Number ID errado, ou um
  * canal de teste que não deve mais receber mensagem nenhuma). Não apaga as
  * conversas já recebidas por ele — mesmo princípio de `deleteFlow`: conversa

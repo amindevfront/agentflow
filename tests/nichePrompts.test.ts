@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { NICHE_ORDER } from "@/lib/niches";
-import { gerarContextoNicho, PERFIL_POR_NICHO } from "@/lib/nichePrompts";
+import { gerarContextoNicho, PERFIL_POR_NICHO, PERFIL_POR_NICHO_IDIOMA } from "@/lib/nichePrompts";
 
 describe("gerarContextoNicho", () => {
   it("devolve null quando o nicho é ausente", () => {
@@ -84,6 +84,49 @@ describe("gerarContextoNicho", () => {
 
   it("cada entrada de PERFIL_POR_NICHO corresponde a uma chave válida de NICHE_ORDER", () => {
     for (const chave of Object.keys(PERFIL_POR_NICHO)) {
+      expect(NICHE_ORDER).toContain(chave);
+    }
+  });
+
+  // --- Guardrails multi-idioma (EN/ES) ---
+
+  it("com idioma 'es', devolve a variante em espanhol quando ela existe (us-real-estate-luxury)", () => {
+    const contexto = gerarContextoNicho("us-real-estate-luxury", "es") ?? "";
+    // Palavra-chave em espanhol que não aparece na variante nativa em inglês.
+    expect(contexto.toLowerCase()).toContain("comprador");
+    expect(contexto).toContain("Nicho do negócio");
+  });
+
+  it("com idioma sem variante traduzida ('pt'), cai no perfil padrão (nativo em inglês) — fallback, nunca invenção", () => {
+    const contextoComPt = gerarContextoNicho("us-real-estate-luxury", "pt");
+    const contextoSemIdioma = gerarContextoNicho("us-real-estate-luxury");
+    expect(contextoComPt).toBe(contextoSemIdioma);
+    expect(contextoComPt).toContain("buyer qualification");
+  });
+
+  it("sem nenhum idioma informado, continua funcionando igual a antes (compatibilidade retroativa)", () => {
+    const contexto = gerarContextoNicho("us-real-estate-luxury");
+    expect(contexto).toContain("Nicho do negócio");
+    expect(contexto).toContain("buyer qualification");
+  });
+
+  it("portugal-clinics-health.en substitui a menção a RGPD/Portugal por GDPR (EU) genérico", () => {
+    const contexto = gerarContextoNicho("portugal-clinics-health", "en") ?? "";
+    expect(contexto.toLowerCase()).toContain("gdpr");
+    expect(contexto.toLowerCase()).not.toContain("rgpd");
+  });
+
+  it("advocacia-contabilidade.en/es nunca citam um artigo de lei brasileiro (OAB) — linguagem comportamental genérica", () => {
+    const contextoEn = gerarContextoNicho("advocacia-contabilidade", "en") ?? "";
+    const contextoEs = gerarContextoNicho("advocacia-contabilidade", "es") ?? "";
+    expect(contextoEn.toLowerCase()).not.toContain("oab");
+    expect(contextoEs.toLowerCase()).not.toContain("oab");
+    expect(contextoEn.toLowerCase()).toContain("guarantee");
+    expect(contextoEs.toLowerCase()).toContain("garantizar");
+  });
+
+  it("cada entrada de PERFIL_POR_NICHO_IDIOMA corresponde a uma chave válida de NICHE_ORDER", () => {
+    for (const chave of Object.keys(PERFIL_POR_NICHO_IDIOMA)) {
       expect(NICHE_ORDER).toContain(chave);
     }
   });

@@ -184,14 +184,138 @@ export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// Guardrails multi-idioma (EN/ES)
+// ---------------------------------------------------------------------------
+//
+// `PERFIL_POR_NICHO` acima é a fonte PRIMÁRIA de cada nicho, no idioma em
+// que ele nasceu (alguns já em inglês, por decisão deliberada — ver os
+// comentários de `us-real-estate-luxury`/`us-construction-remodeling`
+// acima). Este mapa cobre apenas as traduções que, de fato, existem: nunca
+// um perfil genérico gerado para preencher uma lacuna (mesmo princípio de
+// "No Invention" do restante deste arquivo). Receber um `idioma` sem
+// variante aqui cai no comportamento padrão de `gerarContextoNicho`
+// (devolve o perfil nativo de `PERFIL_POR_NICHO`), nunca um texto inventado.
+
+export type IdiomaGuardrail = "pt" | "en" | "es";
+
+export const PERFIL_POR_NICHO_IDIOMA: Partial<Record<NicheKey, Partial<Record<IdiomaGuardrail, PerfilNicho>>>> = {
+  // Miami tem público hispânico real que prefere atendimento em espanhol —
+  // mesmo perfil de `us-real-estate-luxury` (inglês), traduzido.
+  "us-real-estate-luxury": {
+    es: {
+      foco:
+        "calificación de compradores para propiedades de lujo en Miami/Orlando — validar capacidad financiera " +
+        "(proof of funds, preaprobación hipotecaria, comprador en efectivo) antes de agendar una visita",
+      acaoPrincipal:
+        "calificar al comprador con el protocolo estructurado abajo y agendar una visita presencial una vez " +
+        "confirmada la capacidad financiera",
+      tomAtendimento: "pulido, consultivo y receptivo — nunca insistente ni robótico",
+      protocoloQualificacao:
+        "Realice la calificación de forma conversacional (nunca como un formulario) hasta reunir: (1) prueba de " +
+        "capacidad financiera — proof of funds, preaprobación hipotecaria o condición de comprador en efectivo; " +
+        "(2) rango de presupuesto aproximado (ej.: \"entre $800k y $1.2M\") — nunca pida ni repita una cifra " +
+        "exacta en dólares; (3) tipo de propiedad o zona de interés. Si el cliente pide agendar una visita, " +
+        "confirme el interés e informe que un agente dará seguimiento con los horarios disponibles — nunca " +
+        "repita preguntas ya respondidas.",
+      restricao:
+        "Nunca indique un precio de cierre exacto, un porcentaje de descuento ni condiciones de financiamiento — " +
+        "estas decisiones requieren aprobación previa de la dirección. Cuando le pregunten por el precio, " +
+        "responda con un rango aproximado y dirija la negociación final al agente humano.",
+    },
+  },
+  // Variante em inglês do mesmo perfil — clínicas/centros de saúde num país
+  // da UE de língua inglesa ou paciente internacional. GDPR genérico (não
+  // "RGPD de Portugal" especificamente), já que o perfil original é
+  // português; esta variante serve ao público internacional/EN.
+  "portugal-clinics-health": {
+    en: {
+      foco: "multichannel scheduling of appointments/exams and no-show reduction, in GDPR (EU) compliance",
+      acaoPrincipal:
+        "confirm attendance at the scheduled time and reduce no-shows with clear reminders — never diagnose or " +
+        "guarantee the outcome of a procedure",
+      tomAtendimento: "professional, clear, and welcoming",
+      restricao:
+        "Never provide a medical diagnosis or guarantee the outcome of a procedure — these decisions require an " +
+        "in-person evaluation with the specialist. Personal health data follows GDPR (EU): data minimization, " +
+        "explicit purpose, and the data subject's right to erasure.",
+    },
+  },
+  // Variante B2B Services internacional do perfil de Advocacia/Contabilidade.
+  // A citação original ("Código de Ética da OAB, art. 48") é brasileira e
+  // não existe nos EUA/internacional — substituída por linguagem
+  // comportamental genérica, sem inventar um número de artigo/lei que não
+  // temos certeza de que existe (mesma regra "No Invention" do arquivo).
+  "advocacia-contabilidade": {
+    en: {
+      foco:
+        "B2B triage and rigorous qualification of corporate/professional leads (law, accounting, consulting), " +
+        "at any hour — filtering curiosity inquiries and assessing case fit before taking up partners' calendars",
+      acaoPrincipal:
+        "qualify the lead with the structured protocol below and schedule a diagnostic meeting with the team — " +
+        "never guarantee a case outcome, promise a court deadline, or fix a fee without technical analysis",
+      tomAtendimento: "corporate, direct, and technically rigorous — never vague or informal",
+      protocoloQualificacao:
+        "Conduct the triage objectively until you gather: (1) whether the lead is an individual or a company; " +
+        "(2) the approximate size of the case/company, by category (e.g. \"small business\", \"startup\", " +
+        "\"enterprise\") — never ask for an exact revenue or case value figure; (3) the legal/accounting area of " +
+        "interest (e.g. employment, tax, corporate, contracts, due diligence). If the case clearly does not fit " +
+        "the firm's profile, say so transparently instead of prolonging the conversation. If the lead confirms " +
+        "the diagnostic meeting, let them know the partner team will follow up with the summary already " +
+        "gathered — never repeat questions already answered.",
+      restricao:
+        "Never guarantee the outcome of a case or lawsuit, never promise a specific court deadline, and never " +
+        "fix a fee without prior technical analysis — these decisions require evaluation by a qualified " +
+        "professional (attorney ethics rules generally prohibit guaranteeing case outcomes when soliciting " +
+        "clients). When asked about timeline, outcome, or fees, explain that it depends on technical analysis of " +
+        "the case and direct the lead to the diagnostic meeting.",
+    },
+    es: {
+      foco:
+        "triaje B2B y calificación rigurosa de leads corporativos/profesionales (abogacía, contabilidad, " +
+        "consultoría), a cualquier hora — filtrando consultas curiosas y evaluando la adecuación del caso antes " +
+        "de ocupar la agenda de los socios",
+      acaoPrincipal:
+        "calificar con el protocolo estructurado de abajo y agendar una reunión de diagnóstico con el equipo — " +
+        "nunca garantizar el resultado de un caso, prometer un plazo judicial, ni fijar honorarios sin análisis " +
+        "técnico",
+      tomAtendimento: "corporativo, directo y técnicamente riguroso — nunca vago ni informal",
+      protocoloQualificacao:
+        "Realice el triaje de forma objetiva hasta reunir: (1) si el lead es persona física o jurídica; (2) el " +
+        "tamaño aproximado del caso/empresa, por categoría (ej.: \"pequeña empresa\", \"startup\", \"gran " +
+        "empresa\") — nunca pida una cifra exacta de facturación o del caso; (3) el área jurídica o contable de " +
+        "interés (ej.: laboral, tributaria, societaria, contractual, due diligence). Si el caso claramente no se " +
+        "ajusta al perfil del despacho, comuníquelo con transparencia en vez de prolongar la conversación. Si el " +
+        "lead confirma la reunión de diagnóstico, informe que el equipo de socios dará seguimiento con el resumen " +
+        "ya recopilado — nunca repita preguntas ya respondidas.",
+      restricao:
+        "Nunca garantice el resultado de un proceso o causa, nunca prometa un plazo judicial específico, y nunca " +
+        "fije honorarios sin análisis técnico previo — estas decisiones requieren la evaluación de un " +
+        "profesional calificado (las normas éticas de la abogacía en general prohíben garantizar el resultado de " +
+        "un caso al captar clientes). Cuando le pregunten por plazo, resultado u honorarios, explique que " +
+        "depende del análisis técnico del caso y dirija al lead a la reunión de diagnóstico.",
+    },
+  },
+};
+
 /**
  * Gera o texto de contexto de nicho injetado no prompt — `null` quando o
  * nicho é ausente ou não tem perfil definido (nunca um texto genérico
  * inventado para preencher a lacuna).
+ *
+ * `idioma` (Guardrails multi-idioma): quando informado E existir uma
+ * variante traduzida em `PERFIL_POR_NICHO_IDIOMA[nicho][idioma]`, usa essa
+ * variante. Caso contrário (idioma ausente, ou sem tradução para o par
+ * nicho/idioma pedido), cai no perfil padrão de `PERFIL_POR_NICHO` — nunca
+ * inventa uma tradução/perfil genérico para preencher a lacuna, mesma regra
+ * "No Invention" do restante deste arquivo.
  */
-export function gerarContextoNicho(nicho: NicheKey | null | undefined): string | null {
+export function gerarContextoNicho(
+  nicho: NicheKey | null | undefined,
+  idioma?: IdiomaGuardrail | null
+): string | null {
   if (!nicho) return null;
-  const perfil = PERFIL_POR_NICHO[nicho];
+  const perfil = (idioma && PERFIL_POR_NICHO_IDIOMA[nicho]?.[idioma]) || PERFIL_POR_NICHO[nicho];
   if (!perfil) return null;
 
   let contexto =

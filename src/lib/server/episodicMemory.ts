@@ -52,6 +52,7 @@ const ROTULO_CANAL: Record<Canal, string> = {
   facebook: "Facebook",
   email: "E-mail",
   sms: "SMS",
+  telegram: "Telegram",
 };
 
 export interface EpisodioResumo {

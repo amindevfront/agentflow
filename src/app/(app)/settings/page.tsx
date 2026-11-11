@@ -16,6 +16,8 @@ import { patchWorkspace } from "@/lib/firestore";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { auth } from "@/lib/firebase";
 import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { cn } from "@/lib/utils";
+import type { IdiomaGuardrail } from "@/lib/nichePrompts";
 import type { Moeda, NicheKey, RegimeEncargos } from "@/types";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
@@ -49,6 +51,7 @@ interface RespostaSaudeSistema {
   transcricaoAudio?: DiagnosticoCapacidade;
   whatsapp?: DiagnosticoCapacidade;
   twilio?: DiagnosticoCapacidade;
+  metaMessaging?: DiagnosticoCapacidade;
   erro?: { codigo: string; mensagem: string };
 }
 
@@ -59,6 +62,7 @@ const ROTULO_CAPACIDADE: Record<keyof Omit<RespostaSaudeSistema, "erro">, string
   transcricaoAudio: "Transcrição de áudio",
   whatsapp: "WhatsApp Business (Cloud API)",
   twilio: "SMS / Twilio Gateway",
+  metaMessaging: "Instagram Direct / Facebook Messenger (Meta Graph API)",
 };
 
 /**
@@ -83,6 +87,13 @@ const ROTULO_REGIME: Record<RegimeEncargos, string> = {
   "seguranca-social-pt": "Segurança Social (Portugal)",
 };
 
+/** Guardrails multi-idioma — rótulos dos 3 idiomas suportados (ver `@/lib/nichePrompts`). */
+const ROTULO_IDIOMA_GUARDRAIL: Record<IdiomaGuardrail, string> = {
+  pt: "Português",
+  en: "English",
+  es: "Español",
+};
+
 export default function SettingsPage() {
   const router = useRouter();
   const { user, signOut } = useAuth();
@@ -100,6 +111,8 @@ export default function SettingsPage() {
   const [moedaAtual, setMoedaAtual] = useState<Moeda | null>(null);
   const [regimeAtual, setRegimeAtual] = useState<RegimeEncargos | null>(null);
   const [gavetaErro, setGavetaErro] = useState<string | null>(null);
+  const [idiomaErro, setIdiomaErro] = useState<string | null>(null);
+  const [idiomaSalvando, setIdiomaSalvando] = useState(false);
 
   // Zona de risco — Resetar ambiente de testes (ver `@/lib/server/testEnvironmentResetAdmin`).
   const [resetModalAberto, setResetModalAberto] = useState(false);
@@ -198,6 +211,22 @@ export default function SettingsPage() {
       // Firestore, "Failed to fetch") vai só para o log de diagnóstico.
       reportarErro(erro, "settings:gaveta-extra");
       setGavetaErro("Não foi possível salvar esta gaveta agora. Tente novamente em alguns instantes.");
+    }
+  }
+
+  /** Guardrails multi-idioma: idioma em que `gerarContextoNicho` deve gerar o contexto de nicho injetado no prompt. */
+  async function handleAlterarIdiomaGuardrail(valor: IdiomaGuardrail | null) {
+    if (!workspaceId) return;
+    setIdiomaErro(null);
+    setIdiomaSalvando(true);
+    try {
+      await patchWorkspace(workspaceId, { idiomaGuardrail: valor });
+      invalidarWorkspace(workspaceId);
+    } catch (erro) {
+      reportarErro(erro, "settings:idioma-guardrail");
+      setIdiomaErro("Não foi possível salvar o idioma agora. Tente novamente em alguns instantes.");
+    } finally {
+      setIdiomaSalvando(false);
     }
   }
 
@@ -318,6 +347,47 @@ export default function SettingsPage() {
                 Trocar nicho
               </Button>
             )}
+          </div>
+        )}
+        {appUser?.papel === "admin" && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-ink-500">Idioma dos guardrails de IA</p>
+            <p className="mt-0.5 text-xs text-ink-400">
+              Idioma em que a IA aplica o contexto e as restrições do nicho ativo — útil quando o público atendido
+              fala outro idioma (ex.: leads hispânicos em Miami).
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={idiomaSalvando}
+                onClick={() => handleAlterarIdiomaGuardrail(null)}
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                  !workspace?.idiomaGuardrail
+                    ? "border-signal-500 bg-signal-50 text-signal-700"
+                    : "border-ink-100 bg-white text-ink-500 hover:bg-mist-50"
+                )}
+              >
+                Automático (conforme a região)
+              </button>
+              {(Object.entries(ROTULO_IDIOMA_GUARDRAIL) as Array<[IdiomaGuardrail, string]>).map(([valor, rotulo]) => (
+                <button
+                  key={valor}
+                  type="button"
+                  disabled={idiomaSalvando}
+                  onClick={() => handleAlterarIdiomaGuardrail(valor)}
+                  className={cn(
+                    "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                    workspace?.idiomaGuardrail === valor
+                      ? "border-signal-500 bg-signal-50 text-signal-700"
+                      : "border-ink-100 bg-white text-ink-500 hover:bg-mist-50"
+                  )}
+                >
+                  {rotulo}
+                </button>
+              ))}
+            </div>
+            {idiomaErro && <p className="mt-1.5 text-xs text-state-error">{idiomaErro}</p>}
           </div>
         )}
       </section>

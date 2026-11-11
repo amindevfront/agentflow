@@ -1,20 +1,22 @@
 // POST /api/inbox/webhook — ingestão de mensagens do WhatsApp Business Cloud
-// API (Meta Graph API).
+// API, Instagram Messaging e Facebook Messenger (todos Meta Graph API).
 //
 // Valida a assinatura HMAC do Meta (`X-Hub-Signature-256`) antes de
-// qualquer outra coisa, exatamente como a documentação do provedor exige.
-// Com a assinatura validada, resolve o workspace pelo `phone_number_id` do
-// payload (ver `resolverConectorPorPhoneNumberId` em
-// `@/lib/server/whatsappCloudApiAdmin` — é o único jeito de saber de quem é
-// a mensagem, já que o Meta não manda nenhuma credencial por conversa) e
-// registra via o mesmo pipeline Shield-Layer/Radar de Sentimento/Circuit
-// Breaker que todo outro canal já usa.
-//
-// Instagram e Facebook Messenger (também cobertos pela Meta Graph API) NÃO
-// são processados aqui ainda — o payload chega, mas a rota devolve o
-// diagnóstico de "ingestão não implementada para este provedor" em vez de
-// fingir que tratou. WhatsApp é o único provedor com o pipeline completo
-// nesta versão.
+// qualquer outra coisa, exatamente como a documentação do provedor exige —
+// os três produtos compartilham o MESMO Meta App/segredo de assinatura
+// (`META_WEBHOOK_SECRET`). Com a assinatura validada, o `object` de topo do
+// payload diferencia o provedor:
+//   - `"whatsapp_business_account"`: resolve o workspace pelo
+//     `phone_number_id` (ver `resolverConectorPorPhoneNumberId` em
+//     `@/lib/server/whatsappCloudApiAdmin`);
+//   - `"instagram"` / `"page"` (Instagram Direct / Facebook Messenger):
+//     resolve o workspace pelo `recipient.id` (Page/IG-ID — ver
+//     `resolverConectorPorPageId` em `@/lib/server/metaMessagingAdmin`).
+// Em todos os casos, é o único jeito de saber de quem é a mensagem, já que o
+// Meta não manda nenhuma credencial por conversa — e todos registram via o
+// mesmo pipeline Shield-Layer/Radar de Sentimento/Circuit Breaker que todo
+// outro canal já usa. Qualquer outro `object` devolve o diagnóstico de
+// "ingestão não implementada para este provedor" em vez de fingir que tratou.
 //
 // DELIBERADAMENTE NÃO usa `comGuarda`: aquele wrapper exige um ID token do
 // Firebase em `Authorization: Bearer`, e um webhook real do Meta nunca envia
@@ -22,6 +24,11 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { registrarMensagemWhatsappAdmin, resolverConectorPorPhoneNumberId } from "@/lib/server/whatsappCloudApiAdmin";
+import {
+  registrarMensagemMetaAdmin,
+  resolverConectorPorPageId,
+  type CanalMetaMessaging,
+} from "@/lib/server/metaMessagingAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,10 +70,24 @@ interface ValorWebhookWhatsapp {
   messages?: MensagemWhatsappBruta[];
 }
 
+/**
+ * Instagram Messaging/Facebook Messenger (Meta Graph API): mesmo app Meta do
+ * WhatsApp, payload diferente — `entry[].messaging[]`, não `entry[].changes[]`.
+ * `is_echo: true` é o próprio bot/página ecoando a mensagem que ELE mandou —
+ * nunca pode ser ingerido como mensagem do cliente, senão o sistema responde
+ * a si mesmo em loop.
+ */
+interface MensagemMetaMessagingBruta {
+  sender?: { id?: string };
+  recipient?: { id?: string };
+  message?: { mid?: string; text?: string; is_echo?: boolean };
+}
+
 interface PayloadWebhookMeta {
   object?: string;
   entry?: Array<{
     changes?: Array<{ field?: string; value?: ValorWebhookWhatsapp }>;
+    messaging?: MensagemMetaMessagingBruta[];
   }>;
 }
 
@@ -107,48 +128,87 @@ export async function POST(requisicao: Request): Promise<Response> {
       return respostaJson({ erro: { codigo: "json_invalido", mensagem: "Corpo do webhook não é JSON válido." } }, 400);
     }
 
-    if (payload.object !== "whatsapp_business_account") {
-      // Instagram/Facebook Messenger chegam com outro `object` — reconhecidos,
-      // mas ainda não processados (ver cabeçalho do arquivo).
-      return respostaJson(
-        { erro: { codigo: "ingestao_nao_implementada", mensagem: "Assinatura validada, mas este provedor ainda não tem ingestão implementada." } },
-        501
-      );
-    }
-
     const resultados: Array<{ conversationId: string; messageId: string }> = [];
-    for (const entry of payload.entry ?? []) {
-      for (const change of entry.changes ?? []) {
-        if (change.field !== "messages") continue;
-        const valor = change.value;
-        const phoneNumberId = valor?.metadata?.phone_number_id;
-        if (!phoneNumberId || !valor?.messages?.length) continue;
 
-        const conector = await resolverConectorPorPhoneNumberId(phoneNumberId);
-        if (!conector) {
-          console.error(`[inbox/webhook] phone_number_id "${phoneNumberId}" sem conector cadastrado — mensagem descartada.`);
-          continue;
-        }
+    if (payload.object === "whatsapp_business_account") {
+      for (const entry of payload.entry ?? []) {
+        for (const change of entry.changes ?? []) {
+          if (change.field !== "messages") continue;
+          const valor = change.value;
+          const phoneNumberId = valor?.metadata?.phone_number_id;
+          if (!phoneNumberId || !valor?.messages?.length) continue;
 
-        const nomeContato = valor.contacts?.[0]?.profile?.name ?? "";
-
-        for (const mensagem of valor.messages) {
-          if (mensagem.type !== "text" || !mensagem.text?.body || !mensagem.from) {
-            // Áudio/imagem/documento/figurinha: fora do escopo desta v1 —
-            // registrado em log, nunca descartado silenciosamente.
-            console.error(`[inbox/webhook] mensagem do tipo "${mensagem.type}" ainda não suportada — ignorada.`);
+          const conector = await resolverConectorPorPhoneNumberId(phoneNumberId);
+          if (!conector) {
+            console.error(`[inbox/webhook] phone_number_id "${phoneNumberId}" sem conector cadastrado — mensagem descartada.`);
             continue;
           }
-          const resultado = await registrarMensagemWhatsappAdmin({
+
+          const nomeContato = valor.contacts?.[0]?.profile?.name ?? "";
+
+          for (const mensagem of valor.messages) {
+            if (mensagem.type !== "text" || !mensagem.text?.body || !mensagem.from) {
+              // Áudio/imagem/documento/figurinha: fora do escopo desta v1 —
+              // registrado em log, nunca descartado silenciosamente.
+              console.error(`[inbox/webhook] mensagem do tipo "${mensagem.type}" ainda não suportada — ignorada.`);
+              continue;
+            }
+            const resultado = await registrarMensagemWhatsappAdmin({
+              workspaceId: conector.workspaceId,
+              telefoneCliente: mensagem.from,
+              nomeCliente: nomeContato,
+              texto: mensagem.text.body,
+              idExterno: mensagem.id,
+            });
+            resultados.push(resultado);
+          }
+        }
+      }
+    } else if (payload.object === "instagram" || payload.object === "page") {
+      // Instagram Messaging (`"instagram"`) e Facebook Messenger (`"page"`)
+      // compartilham o mesmo formato de payload (`entry[].messaging[]`) — só
+      // o `object` de topo e o tipo de conector mudam.
+      const canal: CanalMetaMessaging = payload.object === "instagram" ? "instagram" : "facebook";
+      for (const entry of payload.entry ?? []) {
+        for (const evento of entry.messaging ?? []) {
+          if (evento.message?.is_echo) {
+            // Eco da própria página/bot respondendo — nunca ingerir, senão o
+            // sistema acaba respondendo a si mesmo em loop.
+            continue;
+          }
+          const texto = evento.message?.text;
+          const remetenteId = evento.sender?.id;
+          const pageId = evento.recipient?.id;
+          if (!texto || !remetenteId || !pageId) {
+            // Eventos sem texto (reações, anexos, read receipts, etc.):
+            // fora do escopo desta v1 — registrado em log, nunca descartado
+            // silenciosamente.
+            console.error(`[inbox/webhook] evento "${canal}" sem mensagem de texto de cliente — ignorado.`);
+            continue;
+          }
+
+          const conector = await resolverConectorPorPageId(pageId, canal);
+          if (!conector) {
+            console.error(`[inbox/webhook] pageId "${pageId}" (${canal}) sem conector cadastrado — mensagem descartada.`);
+            continue;
+          }
+
+          const resultado = await registrarMensagemMetaAdmin({
             workspaceId: conector.workspaceId,
-            telefoneCliente: mensagem.from,
-            nomeCliente: nomeContato,
-            texto: mensagem.text.body,
-            idExterno: mensagem.id,
+            canal,
+            remetenteId,
+            texto,
+            idExterno: evento.message?.mid,
           });
           resultados.push(resultado);
         }
       }
+    } else {
+      // Nenhum dos três `object` reconhecidos pela Meta para mensageria.
+      return respostaJson(
+        { erro: { codigo: "ingestao_nao_implementada", mensagem: "Assinatura validada, mas este provedor ainda não tem ingestão implementada." } },
+        501
+      );
     }
 
     return respostaJson({ processadas: resultados.length }, 200);

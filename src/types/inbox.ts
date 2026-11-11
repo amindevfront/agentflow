@@ -14,8 +14,14 @@ import type { RunCostMetrics } from "./roi";
 // Canais e conversas
 // ---------------------------------------------------------------------------
 
-/** `sms` cobre o adaptador Twilio (Canais Globais — EUA/UK/Europa, ver `@/lib/inbox/channelAdapters`). */
-export type Canal = "whatsapp" | "webchat" | "instagram" | "facebook" | "email" | "sms";
+/**
+ * `sms` cobre o adaptador Twilio (Canais Globais — EUA/UK/Europa, ver
+ * `@/lib/inbox/channelAdapters`). `telegram` cobre o Telegram Bot API (ver
+ * `@/lib/server/telegramBotAdmin`) — diferente dos demais canais Meta
+ * (whatsapp/instagram/facebook), cada bot tem seu próprio token, guardado no
+ * Cofre Zero-Trust, nunca em claro no conector.
+ */
+export type Canal = "whatsapp" | "webchat" | "instagram" | "facebook" | "email" | "sms" | "telegram";
 
 export type ConversationStatus =
   | "aberta"
@@ -143,6 +149,25 @@ export interface Conversation {
    * quando, coincidência, o número do cliente é o mesmo).
    */
   smsTelefone?: string | null;
+
+  /**
+   * Id do remetente (sender/recipient id da Meta Graph API) no Instagram
+   * Direct ou Facebook Messenger — usado para reencontrar a mesma conversa
+   * entre mensagens, mesmo papel de `whatsappTelefone`/`smsTelefone` para
+   * estes dois canais (ver `@/lib/server/metaMessagingAdmin`). Canal
+   * separado na consulta (nunca só o id): o mesmo id numérico da Meta não
+   * tem significado cruzado entre Instagram e Facebook, então uma consulta
+   * sem o `canal` poderia colidir duas conversas de clientes diferentes.
+   */
+  metaSenderId?: string | null;
+
+  /**
+   * Chat id do Telegram Bot API — mesmo papel de `whatsappTelefone` para o
+   * canal Telegram (ver `@/lib/server/telegramBotAdmin`). Numérico no
+   * protocolo do Telegram, mas persistido como string pelo mesmo motivo de
+   * `smsTelefone`/`metaSenderId`: nunca usado em aritmética, só em consulta.
+   */
+  telegramChatId?: string | null;
 
   /**
    * Auto-Feedback de Conversão: desfecho comercial registrado pelo operador

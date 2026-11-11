@@ -190,6 +190,18 @@ export interface Workspace {
    */
   insightsConversaoTexto?: string | null;
   insightsConversaoAtualizadoEm?: string | null;
+
+  /**
+   * Guardrails multi-idioma: idioma em que o Engine Auto-Moldável por Nicho
+   * (`@/lib/nichePrompts`) deve gerar o contexto de nicho injetado no
+   * prompt, quando existir uma variante traduzida (`PERFIL_POR_NICHO_IDIOMA`).
+   * `undefined`/`null` = comportamento herdado ("Automático (conforme a
+   * região)"): usa o idioma nativo em que o perfil do nicho já foi escrito
+   * (ver `PERFIL_POR_NICHO`). Redeclarado aqui como união literal (em vez de
+   * importar `IdiomaGuardrail` de `@/lib/nichePrompts`) para evitar import
+   * circular — `@/lib/nichePrompts` já importa `NicheKey` deste módulo.
+   */
+  idiomaGuardrail?: "pt" | "en" | "es" | null;
 }
 
 export type InviteStatus = "pendente" | "aceito" | "expirado";
@@ -284,6 +296,41 @@ export interface Connector {
    * WhatsApp — ver `resolverConectorPorNumeroTwilio` em `@/lib/server/twilioSmsAdmin`).
    */
   twilioPhoneNumber?: string;
+  /**
+   * Page ID (Meta Graph API) — só usado quando `tipo` é "Instagram Direct
+   * (Meta Graph API)" ou "Facebook Messenger (Meta Graph API)". Mesmo papel
+   * de `metaPhoneNumberId` para estes dois canais: é o `recipient.id` que a
+   * Meta inclui em todo webhook de mensagem recebida (ver
+   * `resolverConectorPorPageId` em `@/lib/server/metaMessagingAdmin`). Em
+   * claro, de propósito: é um identificador de roteamento público, nunca um
+   * segredo — o segredo de assinatura (`META_WEBHOOK_SECRET`) e o token de
+   * envio (`META_PAGE_ACCESS_TOKEN`) continuam vivendo só em variável de
+   * ambiente do servidor, mesmo padrão do WhatsApp Cloud API.
+   */
+  metaPageId?: string;
+  /**
+   * Referência ao cofre Zero-Trust (`credentials/{id}`) do token do bot do
+   * Telegram — só usado quando `tipo` é "Telegram Bot API". Diferente do
+   * WhatsApp/Meta (um único app/segredo global compartilhado por todos os
+   * workspaces), cada bot do Telegram tem seu PRÓPRIO token: gravá-lo em
+   * claro aqui reintroduziria a mesma falha real já corrigida uma vez neste
+   * projeto para `Flow.apiTokenCredentialId` (ver o comentário naquele
+   * campo) — por isso o valor em claro nunca atravessa este documento, só o
+   * id da credencial selada (ver `obterTokenTelegram` em
+   * `@/lib/server/telegramBotAdmin`).
+   */
+  telegramBotTokenCredentialId?: string | null;
+  /**
+   * Segredo de webhook do Telegram (string aleatória gerada no cliente ao
+   * criar o conector) — papel equivalente a `META_WEBHOOK_SECRET`, mas por
+   * conector em vez de global, porque o Telegram valida a chamada de
+   * webhook via o header `X-Telegram-Bot-Api-Secret-Token` configurado por
+   * bot (parâmetro `secret_token` da chamada `setWebhook`, feita manualmente
+   * pelo implementador fora do AgentFlow). Em claro de propósito — não é o
+   * token de autenticação da API, só prova "esta chamada veio do webhook
+   * registrado para este bot", mesmo papel de `META_WEBHOOK_SECRET`.
+   */
+  telegramWebhookSecret?: string;
 }
 
 export interface TeamMember {

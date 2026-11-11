@@ -17,6 +17,7 @@
 import { diagnosticoAdmin, firestoreAdmin } from "@/lib/server/firebaseAdmin";
 import {
   diagnosticoCripto,
+  diagnosticoMetaMessaging,
   diagnosticoOrquestrador,
   diagnosticoTranscricao,
   diagnosticoTwilio,
@@ -46,5 +47,6 @@ export const GET = comGuarda(async ({ usuario }) => {
     transcricaoAudio: diagnosticoTranscricao(),
     whatsapp: diagnosticoWhatsapp(),
     twilio: diagnosticoTwilio(),
+    metaMessaging: diagnosticoMetaMessaging(),
   });
 }, {});

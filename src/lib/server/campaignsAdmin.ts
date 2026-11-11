@@ -36,6 +36,10 @@ const VARIAVEL_POR_CANAL: Record<Canal, string> = {
   webchat: "", // webchat não tem provedor externo — a entrega é interna ao app
   email: "EMAIL_PROVIDER_API_KEY",
   sms: "TWILIO_AUTH_TOKEN",
+  // Telegram não tem UMA variável global: o token é por-bot, vaultado por
+  // conector (ver `@/lib/server/telegramBotAdmin`) — mesmo motivo de
+  // `webchat` não ter uma única variável que "indique provedor configurado".
+  telegram: "",
 };
 
 export type EnviarCanalReal = (

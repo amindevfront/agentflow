@@ -32,7 +32,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { Flow, FlowRun, GuardrailPolicy, HandoffTicket, NicheKey } from "@/types";
 import type { ExecutorLlm } from "@/lib/guardrails";
 import { PRECOS_REFERENCIA, estimarCustoModeloUsd } from "@/lib/pricing";
-import { gerarContextoNicho } from "@/lib/nichePrompts";
+import { gerarContextoNicho, type IdiomaGuardrail } from "@/lib/nichePrompts";
 import { retryWithTimeout } from "@/lib/promiseUtils";
 import { chaveAnthropic, modeloOrquestrador } from "./env";
 import { obterResumoUnificadoCliente } from "./episodicMemory";
@@ -266,13 +266,19 @@ export async function executarFluxoReal(
           insightsConversaoTexto?: unknown;
           setor?: unknown;
           guardrailOverrides?: unknown;
+          idiomaGuardrail?: unknown;
         })
       : null;
     if (typeof dados?.insightsConversaoTexto === "string") {
       contextoConversao = dados.insightsConversaoTexto;
     }
     const setor = typeof dados?.setor === "string" ? (dados.setor as NicheKey) : undefined;
-    contextoNicho = gerarContextoNicho(setor);
+    // Guardrails multi-idioma: lido do mesmo documento, best-effort — ausente
+    // ou malformado nunca impede a execução, apenas cai no comportamento
+    // padrão de `gerarContextoNicho` (idioma nativo do perfil do nicho).
+    const idiomaGuardrail =
+      typeof dados?.idiomaGuardrail === "string" ? (dados.idiomaGuardrail as IdiomaGuardrail) : undefined;
+    contextoNicho = gerarContextoNicho(setor, idiomaGuardrail);
     if (setor === "construtora-imobiliaria") {
       politicaBase = "imobiliario-alto-padrao";
     } else if (setor === "clinica-alto-padrao") {
