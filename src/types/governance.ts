@@ -375,7 +375,19 @@ export type AuditEventType =
    */
   | "equipe.membro.removido"
   /** Revogação de um convite ainda pendente (Configurações → Equipe) — ver `@/lib/server/teamAdmin`. */
-  | "equipe.convite.revogado";
+  | "equipe.convite.revogado"
+  /**
+   * Exclusão de um fluxo individual (lixeira em Fluxos). Diferente do reset
+   * de ambiente, esta é uma escrita direta do CLIENTE (`firestore.rules` já
+   * permite `write` em `flows/{id}` para qualquer membro do workspace) — o
+   * selo de auditoria é gerado À PARTE, via `/api/audit/seal`
+   * (`registrarEventoAuditoriaSilencioso`), para que toda exclusão no
+   * sistema passe pela mesma trilha verificável, não só as que já exigiam
+   * uma rota admin dedicada.
+   */
+  | "fluxo.excluido"
+  /** Exclusão de um conector (lixeira em Canais & Integrações) — mesmo raciocínio de `fluxo.excluido`. */
+  | "conector.excluido";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

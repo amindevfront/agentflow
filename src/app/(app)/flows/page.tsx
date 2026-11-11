@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { subscribeFlows, subscribeFlowRuns, deleteFlow } from "@/lib/firestore";
+import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { formatRelativeTime } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
@@ -84,6 +85,12 @@ export default function FlowsPage() {
     setExcluindo(true);
     try {
       await deleteFlow(fluxoParaExcluir.id);
+      registrarEventoAuditoriaSilencioso({
+        tipo: "fluxo.excluido",
+        recurso: `flows/${fluxoParaExcluir.id}`,
+        workspaceId: fluxoParaExcluir.workspaceId,
+        detalhes: { nome: fluxoParaExcluir.nome },
+      });
       if (selectedId === fluxoParaExcluir.id) setSelectedId(null);
       setFluxoParaExcluir(null);
     } finally {

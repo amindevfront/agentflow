@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { subscribeConnectors, createConnector, deleteConnector } from "@/lib/firestore";
+import { registrarEventoAuditoriaSilencioso } from "@/lib/auditLog";
 import { useWorkspace } from "@/lib/workspace";
 import { connectorSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
 import { gerarWidgetEmbedSnippet } from "@/lib/inbox/channelAdapters";
@@ -68,6 +69,12 @@ export default function ConnectorsPage() {
     setExcluindo(true);
     try {
       await deleteConnector(conectorParaExcluir.id);
+      registrarEventoAuditoriaSilencioso({
+        tipo: "conector.excluido",
+        recurso: `connectors/${conectorParaExcluir.id}`,
+        workspaceId: conectorParaExcluir.workspaceId,
+        detalhes: { nome: conectorParaExcluir.nome, tipo: conectorParaExcluir.tipo },
+      });
       setConectorParaExcluir(null);
     } finally {
       setExcluindo(false);

@@ -325,4 +325,6 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "ambiente.teste.resetado": "Ambiente de testes resetado (conversas e fluxos de teste apagados)",
   "equipe.membro.removido": "Membro removido da equipe",
   "equipe.convite.revogado": "Convite pendente revogado",
+  "fluxo.excluido": "Fluxo excluído",
+  "conector.excluido": "Conector excluído",
 };
