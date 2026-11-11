@@ -320,6 +320,11 @@ export function FlowSettingsForm({ flow, onSaved }: FlowSettingsFormProps) {
             usar URL de teste do AgentFlow
           </button>
         )}
+        <p className="text-[11px] text-ink-400">
+          Este campo é só registro, pra documentar de onde o lead viria — ainda não existe um endpoint real que
+          receba este payload automaticamente. Pra reproduzir o que esse gatilho faria, use o Simulador de Payload
+          (Sandbox, abaixo).
+        </p>
       </div>
 
       <div className="flex flex-col gap-1.5">
