@@ -387,7 +387,19 @@ export type AuditEventType =
    */
   | "fluxo.excluido"
   /** Exclusão de um conector (lixeira em Canais & Integrações) — mesmo raciocínio de `fluxo.excluido`. */
-  | "conector.excluido";
+  | "conector.excluido"
+  /**
+   * Desfecho comercial de uma conversa registrado na Neural Inbox (ex.:
+   * "Fechado / Venda Concretizada") — ver `registrarDesfechoConversao` em
+   * `@/lib/inbox/firestore`. Bug real corrigido aqui: esta ação usava
+   * indevidamente o tipo `config.alterada` (nenhuma configuração do
+   * workspace muda quando um operador marca o desfecho de UM atendimento),
+   * o que fazia a trilha de Auditoria mostrar "Configuração alterada" para
+   * cada venda/perda fechada — confuso para o dono do negócio revisando a
+   * tela de Governança, que lê isso como alguém mexendo nos parâmetros do
+   * sistema.
+   */
+  | "conversa.desfecho.registrado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

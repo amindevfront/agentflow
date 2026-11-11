@@ -68,6 +68,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "equipe.convite.revogado",
   "fluxo.excluido",
   "conector.excluido",
+  "conversa.desfecho.registrado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

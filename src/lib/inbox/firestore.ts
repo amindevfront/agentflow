@@ -760,7 +760,7 @@ export async function registrarDesfechoConversao(entrada: RegistrarDesfechoConve
     });
 
     await registrarEventoAuditoriaSilencioso({
-      tipo: "config.alterada",
+      tipo: "conversa.desfecho.registrado",
       recurso: `${COLECAO_CONVERSAS}/${entrada.conversationId}`,
       workspaceId,
       detalhes: { desfechoConversao: entrada.desfecho },

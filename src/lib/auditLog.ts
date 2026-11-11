@@ -327,4 +327,5 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "equipe.convite.revogado": "Convite pendente revogado",
   "fluxo.excluido": "Fluxo excluído",
   "conector.excluido": "Conector excluído",
+  "conversa.desfecho.registrado": "Desfecho de atendimento registrado",
 };
