@@ -356,7 +356,17 @@ export type AuditEventType =
    * egresso de dados a um sistema de terceiros é auditado, mesmo quando o
    * payload já está mascarado (rastreabilidade LGPD de ponta a ponta).
    */
-  | "connecthub.webhook.despachado";
+  | "connecthub.webhook.despachado"
+  /**
+   * Ação "Resetar ambiente de testes" (Configurações → Zona de risco):
+   * apagou todas as conversas e fluxos de teste do workspace antes do
+   * go-live com um cliente real — ver `@/lib/server/testEnvironmentResetAdmin`.
+   * Gerado SEMPRE que a ação roda (não há "resultado negado" silencioso):
+   * é o próprio registro de que o reset aconteceu, quem pediu e quando —
+   * a cadeia de confiança da auditoria não pode ter um buraco exatamente no
+   * momento em que o ambiente de testes é zerado.
+   */
+  | "ambiente.teste.resetado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

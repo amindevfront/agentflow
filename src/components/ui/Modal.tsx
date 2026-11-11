@@ -8,11 +8,13 @@ interface ModalProps {
   titleId: string;
   title: string;
   body: string;
+  /** Conteúdo extra entre o corpo e as ações — ex.: campo de confirmação por texto digitado. */
+  children?: ReactNode;
   actions: ReactNode;
 }
 
 /** Modal de confirmação destrutiva, conforme design-system.html (ex.: "Parar tudo"). */
-export function Modal({ open, onClose, titleId, title, body, actions }: ModalProps) {
+export function Modal({ open, onClose, titleId, title, body, children, actions }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
@@ -36,6 +38,7 @@ export function Modal({ open, onClose, titleId, title, body, actions }: ModalPro
           {title}
         </h3>
         <p className="mt-2 text-sm text-ink-500">{body}</p>
+        {children && <div className="mt-4">{children}</div>}
         <div className="mt-6 flex justify-end gap-2">{actions}</div>
       </div>
     </div>

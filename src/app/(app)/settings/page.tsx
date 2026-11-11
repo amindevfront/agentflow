@@ -14,10 +14,27 @@ import { workspaceNameSchema } from "@/lib/validation/schemas";
 import { obterModulo } from "@/modules/registry";
 import { patchWorkspace } from "@/lib/firestore";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
+import { auth } from "@/lib/firebase";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import type { Moeda, NicheKey, RegimeEncargos } from "@/types";
 import { Field } from "@/components/ui/Field";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { Modal } from "@/components/ui/Modal";
+
+/** Ação rara e cara (lotes de exclusão no Firestore) — mais lenta que o resto da API, nunca pendurada para sempre numa rede instável. */
+const TIMEOUT_RESET_MS = 30_000;
+
+/** Palavra exigida no campo de confirmação — o botão "Resetar" só habilita quando o texto digitado é exatamente este. */
+const PALAVRA_CONFIRMACAO_RESET = "RESETAR";
+
+interface RespostaResetAmbienteTeste {
+  conversasExcluidas?: number;
+  mensagensExcluidas?: number;
+  fluxosExcluidos?: number;
+  entradaAuditoriaId?: string;
+  erro?: { codigo: string; mensagem: string };
+}
 
 /**
  * Gavetas de back-office — funcionam JUNTO do nicho principal, nunca no
@@ -57,6 +74,13 @@ export default function SettingsPage() {
   const [moedaAtual, setMoedaAtual] = useState<Moeda | null>(null);
   const [regimeAtual, setRegimeAtual] = useState<RegimeEncargos | null>(null);
   const [gavetaErro, setGavetaErro] = useState<string | null>(null);
+
+  // Zona de risco — Resetar ambiente de testes (ver `@/lib/server/testEnvironmentResetAdmin`).
+  const [resetModalAberto, setResetModalAberto] = useState(false);
+  const [resetConfirmTexto, setResetConfirmTexto] = useState("");
+  const [resetando, setResetando] = useState(false);
+  const [resetErro, setResetErro] = useState<string | null>(null);
+  const [resetResultado, setResetResultado] = useState<RespostaResetAmbienteTeste | null>(null);
 
   useEffect(() => {
     if (workspace) setWorkspaceName(workspace.nome);
@@ -137,6 +161,45 @@ export default function SettingsPage() {
       setNameError("Não foi possível salvar o nome agora. Tente novamente em alguns instantes.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleResetarAmbienteTeste() {
+    setResetErro(null);
+    setResetando(true);
+    try {
+      const usuarioAtual = auth?.currentUser;
+      if (!usuarioAtual) throw new Error("Sessão expirada. Entre novamente para resetar o ambiente de testes.");
+
+      const resposta = await fetchComTimeout(
+        "/api/workspace/reset-ambiente-teste",
+        {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: `Bearer ${await usuarioAtual.getIdToken()}`,
+          },
+          body: JSON.stringify({}),
+        },
+        "Não foi possível conectar ao servidor para resetar o ambiente de testes. Verifique sua conexão e tente novamente.",
+        TIMEOUT_RESET_MS
+      );
+
+      const dados = (await resposta.json().catch(() => ({}))) as RespostaResetAmbienteTeste;
+      if (!resposta.ok) {
+        throw new Error(
+          dados.erro?.mensagem ?? "Falha ao resetar o ambiente de testes. Tente novamente em alguns instantes."
+        );
+      }
+
+      setResetResultado(dados);
+      setResetModalAberto(false);
+      setResetConfirmTexto("");
+    } catch (erro) {
+      reportarErro(erro, "settings:resetar-ambiente-teste");
+      setResetErro(erro instanceof Error ? erro.message : "Não foi possível resetar o ambiente de testes.");
+    } finally {
+      setResetando(false);
     }
   }
 
@@ -256,6 +319,41 @@ export default function SettingsPage() {
         </>
       )}
 
+      {appUser?.papel === "admin" && (
+        <section className="rounded-[var(--radius-md)] border border-state-error bg-state-error-bg p-4">
+          <h2 className="text-sm font-semibold text-state-error">Zona de risco</h2>
+          <p className="mt-1 text-xs text-ink-700">
+            Zerar conversas e fluxos de teste antes de abrir pro cliente. Use isto depois de aprender ou demonstrar o
+            produto no Sandbox/Fluxos/Neural Inbox — e antes do primeiro contato de verdade chegar a este workspace.
+          </p>
+          <ul className="mt-2 list-disc pl-4 text-xs text-ink-500">
+            <li>Apaga todas as conversas da Neural Inbox (de teste e manuais) e todos os fluxos deste workspace.</li>
+            <li>Não toca em configuração do workspace, credenciais do Cofre, conectores já plugados nem na auditoria existente.</li>
+            <li>Fica registrado na trilha de auditoria: quem resetou e quando.</li>
+          </ul>
+          {resetResultado && !resetErro && (
+            <p className="mt-2 text-xs text-state-done">
+              Resetado: {resetResultado.conversasExcluidas ?? 0} conversa(s), {resetResultado.mensagensExcluidas ?? 0}{" "}
+              mensagem(ns) e {resetResultado.fluxosExcluidos ?? 0} fluxo(s) excluídos.
+            </p>
+          )}
+          {resetErro && <p className="mt-2 text-xs text-state-error">{resetErro}</p>}
+          <Button
+            variant="danger-solid"
+            size="sm"
+            className="mt-3"
+            onClick={() => {
+              setResetErro(null);
+              setResetResultado(null);
+              setResetConfirmTexto("");
+              setResetModalAberto(true);
+            }}
+          >
+            Zerar conversas e fluxos de teste
+          </Button>
+        </section>
+      )}
+
       <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
         <h2 className="text-sm font-semibold text-ink-950">Conta</h2>
         <p className="mt-2 text-sm text-ink-500">{user?.email}</p>
@@ -268,6 +366,51 @@ export default function SettingsPage() {
         <h2 className="mb-3 text-sm font-semibold text-ink-950">Notificações e segurança</h2>
         <EmptyState title="Em breve" description="Preferências de notificação e segurança avançada ainda não foram especificadas no design system — aguardando definição." />
       </section>
+
+      <Modal
+        open={resetModalAberto}
+        onClose={() => {
+          if (resetando) return;
+          setResetModalAberto(false);
+          setResetConfirmTexto("");
+        }}
+        titleId="reset-ambiente-teste-title"
+        title="Zerar conversas e fluxos de teste?"
+        body={`Todas as conversas da Neural Inbox (de teste e manuais) e todos os fluxos deste workspace serão apagados permanentemente. Configuração do workspace, credenciais do Cofre, conectores e a trilha de auditoria existente não são afetados. Para confirmar, digite ${PALAVRA_CONFIRMACAO_RESET} abaixo.`}
+        actions={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={resetando}
+              onClick={() => {
+                setResetModalAberto(false);
+                setResetConfirmTexto("");
+              }}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="danger-solid"
+              size="sm"
+              loading={resetando}
+              disabled={resetConfirmTexto !== PALAVRA_CONFIRMACAO_RESET}
+              onClick={handleResetarAmbienteTeste}
+            >
+              Sim, resetar
+            </Button>
+          </>
+        }
+      >
+        <Field
+          label={`Digite "${PALAVRA_CONFIRMACAO_RESET}" para confirmar`}
+          value={resetConfirmTexto}
+          onChange={(e) => setResetConfirmTexto(e.target.value)}
+          placeholder={PALAVRA_CONFIRMACAO_RESET}
+          autoFocus
+          disabled={resetando}
+        />
+      </Modal>
     </div>
   );
 }
