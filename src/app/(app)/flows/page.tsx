@@ -214,7 +214,7 @@ export default function FlowsPage() {
         onClose={() => setFluxoParaExcluir(null)}
         titleId="excluir-fluxo-title"
         title={`Excluir "${fluxoParaExcluir?.nome ?? ""}"?`}
-        body="O fluxo é apagado permanentemente, junto com seu histórico de execuções. Útil para remover um fluxo de teste/demonstração antes de abrir o workspace para um cliente real. Isso não afeta conversas da Neural Inbox nem outros fluxos."
+        body="O fluxo é apagado permanentemente — mas os números que ele já gerou no painel de ROI (Governança) continuam lá, sem associação visível a este fluxo depois da exclusão. Isto também NÃO apaga as conversas que ele já gerou na Neural Inbox — conversa de cliente é registro permanente, nunca some como efeito colateral de outra ação."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setFluxoParaExcluir(null)}>
@@ -225,7 +225,15 @@ export default function FlowsPage() {
             </Button>
           </>
         }
-      />
+      >
+        <p className="mt-3 text-xs text-ink-500">
+          Quer zerar as conversas e os números de ROI de teste também, de uma vez? Use{" "}
+          <a href="/settings#zona-de-risco" className="font-semibold text-signal-700 underline">
+            Configurações → Zona de risco
+          </a>
+          .
+        </p>
+      </Modal>
     </div>
   );
 }

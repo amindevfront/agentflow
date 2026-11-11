@@ -74,6 +74,7 @@ export const POST = comGuarda(
         conversasExcluidas: resultado.conversasExcluidas,
         mensagensExcluidas: resultado.mensagensExcluidas,
         fluxosExcluidos: resultado.fluxosExcluidos,
+        execucoesExcluidas: resultado.execucoesExcluidas,
         entradaAuditoriaId: resultado.entradaAuditoria.id,
       });
     } catch (erro) {

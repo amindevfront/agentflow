@@ -143,20 +143,22 @@ describe("resetarAmbienteDeTeste", () => {
   beforeEach(() => {
     armazenamento.clear();
 
-    // Workspace A: 2 conversas (uma com 2 mensagens) + 1 fluxo — tudo dado de teste a ser apagado.
+    // Workspace A: 2 conversas (uma com 2 mensagens) + 1 fluxo + 1 execução — tudo dado de teste a ser apagado.
     semear("conversations/conv-a1", { workspaceId: "ws-a", assunto: "Teste 1" });
     semear("conversations/conv-a1/mensagens/m1", { texto: "oi" });
     semear("conversations/conv-a1/mensagens/m2", { texto: "tudo bem?" });
     semear("conversations/conv-a2", { workspaceId: "ws-a", assunto: "Teste 2" });
     semear("flows/flow-a1", { workspaceId: "ws-a", nome: "Fluxo de teste" });
+    semear("flowRuns/run-a1", { workspaceId: "ws-a", flowId: "flow-a1" });
 
     // Workspace B: dado real de outro tenant — NUNCA deve ser tocado.
     semear("conversations/conv-b1", { workspaceId: "ws-b", assunto: "Cliente real" });
     semear("conversations/conv-b1/mensagens/mb1", { texto: "mensagem real" });
     semear("flows/flow-b1", { workspaceId: "ws-b", nome: "Fluxo real" });
+    semear("flowRuns/run-b1", { workspaceId: "ws-b", flowId: "flow-b1" });
   });
 
-  it("apaga todas as conversas (e suas mensagens) e todos os fluxos do workspace alvo", async () => {
+  it("apaga todas as conversas (e suas mensagens), fluxos e execuções do workspace alvo", async () => {
     const { resetarAmbienteDeTeste } = await import("@/lib/server/testEnvironmentResetAdmin");
 
     const resultado = await resetarAmbienteDeTeste("ws-a", { uid: "admin-1", email: "admin@exemplo.com" });
@@ -164,15 +166,17 @@ describe("resetarAmbienteDeTeste", () => {
     expect(resultado.conversasExcluidas).toBe(2);
     expect(resultado.mensagensExcluidas).toBe(2);
     expect(resultado.fluxosExcluidos).toBe(1);
+    expect(resultado.execucoesExcluidas).toBe(1);
 
     expect(armazenamento.has("conversations/conv-a1")).toBe(false);
     expect(armazenamento.has("conversations/conv-a1/mensagens/m1")).toBe(false);
     expect(armazenamento.has("conversations/conv-a1/mensagens/m2")).toBe(false);
     expect(armazenamento.has("conversations/conv-a2")).toBe(false);
     expect(armazenamento.has("flows/flow-a1")).toBe(false);
+    expect(armazenamento.has("flowRuns/run-a1")).toBe(false);
   });
 
-  it("isolamento multi-tenant: NÃO apaga conversas nem fluxos de outro workspace", async () => {
+  it("isolamento multi-tenant: NÃO apaga conversas, fluxos nem execuções de outro workspace", async () => {
     const { resetarAmbienteDeTeste } = await import("@/lib/server/testEnvironmentResetAdmin");
 
     await resetarAmbienteDeTeste("ws-a", { uid: "admin-1", email: "admin@exemplo.com" });
@@ -180,6 +184,7 @@ describe("resetarAmbienteDeTeste", () => {
     expect(armazenamento.has("conversations/conv-b1")).toBe(true);
     expect(armazenamento.has("conversations/conv-b1/mensagens/mb1")).toBe(true);
     expect(armazenamento.has("flows/flow-b1")).toBe(true);
+    expect(armazenamento.has("flowRuns/run-b1")).toBe(true);
     expect(armazenamento.get("conversations/conv-b1")).toEqual({ workspaceId: "ws-b", assunto: "Cliente real" });
   });
 
@@ -198,6 +203,7 @@ describe("resetarAmbienteDeTeste", () => {
       conversasExcluidas: 2,
       mensagensExcluidas: 2,
       fluxosExcluidos: 1,
+      execucoesExcluidas: 1,
     });
 
     // A entrada foi de fato persistida na trilha (não só devolvida em memória).
@@ -214,6 +220,7 @@ describe("resetarAmbienteDeTeste", () => {
     expect(resultado.conversasExcluidas).toBe(0);
     expect(resultado.mensagensExcluidas).toBe(0);
     expect(resultado.fluxosExcluidos).toBe(0);
+    expect(resultado.execucoesExcluidas).toBe(0);
     expect(resultado.entradaAuditoria.corpo.tipo).toBe("ambiente.teste.resetado");
   });
 });

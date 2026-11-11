@@ -46,6 +46,7 @@ import { firestoreAdmin } from "./firebaseAdmin";
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
 const COLECAO_FLOWS = "flows";
+const COLECAO_FLOW_RUNS = "flowRuns";
 
 /** Margem de segurança sobre o teto real (500) do Firestore por lote de escrita. */
 const TAMANHO_LOTE = 450;
@@ -54,6 +55,16 @@ export interface ResultadoResetAmbienteTeste {
   conversasExcluidas: number;
   mensagensExcluidas: number;
   fluxosExcluidos: number;
+  /**
+   * `flowRuns` órfãos (de fluxos de teste já excluídos, ou de fluxos que
+   * seguem existindo) tinham ficado de fora da v1 deste reset — eles
+   * alimentam o painel de ROI/Governança (`BusinessROIWidget`,
+   * `calcularRoi`) sem nenhum filtro de "é teste", diferente de
+   * `Conversation.origemSandbox`. Sem apagá-los aqui, o número de horas/custo
+   * de uma execução real de teste ("Executar agora") sobrevivia ao reset para
+   * sempre, contaminando o mesmo painel usado pra provar valor ao cliente.
+   */
+  execucoesExcluidas: number;
   entradaAuditoria: AuditEntry;
 }
 
@@ -112,10 +123,10 @@ async function apagarReferenciasEmLotes(
 
 /**
  * Executa o reset completo: apaga conversas (+ subcoleção `mensagens` de
- * cada uma) e fluxos do workspace, depois sela uma entrada de auditoria
- * registrando a ação — sempre, mesmo quando não havia nada para apagar (o
- * registro "o reset rodou, aqui está a contagem, foi zero" também é prova
- * válida para a cadeia de confiança).
+ * cada uma), fluxos e execuções (`flowRuns`) do workspace, depois sela uma
+ * entrada de auditoria registrando a ação — sempre, mesmo quando não havia
+ * nada para apagar (o registro "o reset rodou, aqui está a contagem, foi
+ * zero" também é prova válida para a cadeia de confiança).
  */
 export async function resetarAmbienteDeTeste(
   workspaceId: string,
@@ -137,7 +148,13 @@ export async function resetarAmbienteDeTeste(
   const flowsSnap = await db.collection(COLECAO_FLOWS).where("workspaceId", "==", workspaceId).get();
   const fluxosExcluidos = await apagarReferenciasEmLotes(db, flowsSnap.docs.map((d) => d.ref));
 
-  // 3. Entrada de auditoria do próprio reset — mesma transação atômica
+  // 3. Execuções (flowRuns) do workspace — independe de o fluxo que as
+  // gerou ainda existir: são sempre dados de PRÁTICA até o go-live, mesma
+  // regra já aplicada a conversas e fluxos acima.
+  const flowRunsSnap = await db.collection(COLECAO_FLOW_RUNS).where("workspaceId", "==", workspaceId).get();
+  const execucoesExcluidas = await apagarReferenciasEmLotes(db, flowRunsSnap.docs.map((d) => d.ref));
+
+  // 4. Entrada de auditoria do próprio reset — mesma transação atômica
   // ler-ponteiro+selar+gravar usada por `/api/audit/seal` e demais módulos
   // admin (ver `./auditChainStore`), nunca o caminho do cliente.
   const chaveHmac = await chaveAuditoria();
@@ -152,6 +169,7 @@ export async function resetarAmbienteDeTeste(
       conversasExcluidas,
       mensagensExcluidas,
       fluxosExcluidos,
+      execucoesExcluidas,
     },
     ocorridoEm: new Date().toISOString(),
   };
@@ -159,5 +177,5 @@ export async function resetarAmbienteDeTeste(
     executarTransacaoDeSelo(tx, db, workspaceId, corpo, chaveHmac)
   );
 
-  return { conversasExcluidas, mensagensExcluidas, fluxosExcluidos, entradaAuditoria };
+  return { conversasExcluidas, mensagensExcluidas, fluxosExcluidos, execucoesExcluidas, entradaAuditoria };
 }

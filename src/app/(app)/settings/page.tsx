@@ -32,6 +32,7 @@ interface RespostaResetAmbienteTeste {
   conversasExcluidas?: number;
   mensagensExcluidas?: number;
   fluxosExcluidos?: number;
+  execucoesExcluidas?: number;
   entradaAuditoriaId?: string;
   erro?: { codigo: string; mensagem: string };
 }
@@ -320,21 +321,26 @@ export default function SettingsPage() {
       )}
 
       {appUser?.papel === "admin" && (
-        <section className="rounded-[var(--radius-md)] border border-state-error bg-state-error-bg p-4">
+        <section id="zona-de-risco" className="rounded-[var(--radius-md)] border border-state-error bg-state-error-bg p-4 scroll-mt-20">
           <h2 className="text-sm font-semibold text-state-error">Zona de risco</h2>
           <p className="mt-1 text-xs text-ink-700">
             Zerar conversas e fluxos de teste antes de abrir pro cliente. Use isto depois de aprender ou demonstrar o
             produto no Sandbox/Fluxos/Neural Inbox — e antes do primeiro contato de verdade chegar a este workspace.
           </p>
           <ul className="mt-2 list-disc pl-4 text-xs text-ink-500">
-            <li>Apaga todas as conversas da Neural Inbox (de teste e manuais) e todos os fluxos deste workspace.</li>
+            <li>
+              Apaga todas as conversas da Neural Inbox (de teste e manuais), todos os fluxos e todas as execuções
+              (incluindo as do botão &quot;Executar agora&quot;) deste workspace — inclusive os números que elas já
+              tinham somado ao painel de ROI em Governança.
+            </li>
             <li>Não toca em configuração do workspace, credenciais do Cofre, conectores já plugados nem na auditoria existente.</li>
             <li>Fica registrado na trilha de auditoria: quem resetou e quando.</li>
           </ul>
           {resetResultado && !resetErro && (
             <p className="mt-2 text-xs text-state-done">
               Resetado: {resetResultado.conversasExcluidas ?? 0} conversa(s), {resetResultado.mensagensExcluidas ?? 0}{" "}
-              mensagem(ns) e {resetResultado.fluxosExcluidos ?? 0} fluxo(s) excluídos.
+              mensagem(ns), {resetResultado.fluxosExcluidos ?? 0} fluxo(s) e {resetResultado.execucoesExcluidas ?? 0}{" "}
+              execução(ões) excluídos.
             </p>
           )}
           {resetErro && <p className="mt-2 text-xs text-state-error">{resetErro}</p>}
@@ -376,7 +382,7 @@ export default function SettingsPage() {
         }}
         titleId="reset-ambiente-teste-title"
         title="Zerar conversas e fluxos de teste?"
-        body={`Todas as conversas da Neural Inbox (de teste e manuais) e todos os fluxos deste workspace serão apagados permanentemente. Configuração do workspace, credenciais do Cofre, conectores e a trilha de auditoria existente não são afetados. Para confirmar, digite ${PALAVRA_CONFIRMACAO_RESET} abaixo.`}
+        body={`Todas as conversas da Neural Inbox (de teste e manuais) e todos os fluxos deste workspace serão apagados permanentemente. Configuração do workspace, credenciais do Cofre, conectores e a trilha de auditoria existente não são afetados — e os números já somados ao painel de ROI por execuções reais de teste também não são zerados. Para confirmar, digite ${PALAVRA_CONFIRMACAO_RESET} abaixo.`}
         actions={
           <>
             <Button
