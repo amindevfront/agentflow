@@ -327,7 +327,13 @@ export default function ConnectorsPage() {
         onClose={() => setConectorParaExcluir(null)}
         titleId="excluir-conector-title"
         title={`Excluir "${conectorParaExcluir?.nome ?? ""}"?`}
-        body="O conector é removido permanentemente. Mensagens que ele já recebeu continuam na Neural Inbox — isto não apaga conversas, só desliga este canal para novas mensagens."
+        body={
+          conectorParaExcluir &&
+          (conectorParaExcluir.tipo === TIPO_WIDGET || conectorParaExcluir.tipo === TIPO_WHATSAPP) &&
+          connectors.filter((c) => c.tipo === conectorParaExcluir.tipo).length <= 1
+            ? `Este é o ÚNICO conector "${conectorParaExcluir.tipo}" deste workspace, e é um canal REAL. Ao excluir, qualquer mensagem nova por este canal passa a falhar na hora — o widget já embedado no site do cliente mostra erro, ou o número de WhatsApp para de receber. Mensagens já recebidas continuam na Neural Inbox; isto não apaga conversas.`
+            : "O conector é removido permanentemente. Mensagens que ele já recebeu continuam na Neural Inbox — isto não apaga conversas, só desliga este canal para novas mensagens."
+        }
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={() => setConectorParaExcluir(null)}>
