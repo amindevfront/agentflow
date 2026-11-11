@@ -366,7 +366,16 @@ export type AuditEventType =
    * a cadeia de confiança da auditoria não pode ter um buraco exatamente no
    * momento em que o ambiente de testes é zerado.
    */
-  | "ambiente.teste.resetado";
+  | "ambiente.teste.resetado"
+  /**
+   * Remoção de um membro da equipe (Configurações → Equipe, exclusivo de
+   * admin) — ver `@/lib/server/teamAdmin`. Apaga `users/{uid}` do removido
+   * via Admin SDK (as regras do Firestore negam esse delete a qualquer
+   * cliente, de propósito — só um admin autorizado nesta rota consegue).
+   */
+  | "equipe.membro.removido"
+  /** Revogação de um convite ainda pendente (Configurações → Equipe) — ver `@/lib/server/teamAdmin`. */
+  | "equipe.convite.revogado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

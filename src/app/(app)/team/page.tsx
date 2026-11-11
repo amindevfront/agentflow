@@ -5,11 +5,19 @@ import { subscribeTeamMembers, subscribePendingInvites, createInvite } from "@/l
 import { useAuth } from "@/lib/auth";
 import { useWorkspace } from "@/lib/workspace";
 import { inviteSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+import { auth } from "@/lib/firebase";
 import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
+import { DeleteIconButton } from "@/components/ui/DeleteIconButton";
 import type { Invite, TeamMember, UserRole } from "@/types";
+
+const TIMEOUT_EQUIPE_MS = 15_000;
+
+type AlvoExclusao = { tipo: "membro"; item: TeamMember } | { tipo: "convite"; item: Invite };
 
 const ROLE_LABEL: Record<UserRole, string> = {
   operacoes: "operações",
@@ -18,7 +26,7 @@ const ROLE_LABEL: Record<UserRole, string> = {
 
 export default function TeamPage() {
   const { user } = useAuth();
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, appUser } = useWorkspace();
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invites, setInvites] = useState<Invite[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -27,6 +35,9 @@ export default function TeamPage() {
   const [saving, setSaving] = useState(false);
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [alvoExclusao, setAlvoExclusao] = useState<AlvoExclusao | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
+  const [exclusaoErro, setExclusaoErro] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -57,6 +68,42 @@ export default function TeamPage() {
       setEmail("");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function confirmarExclusao() {
+    if (!alvoExclusao) return;
+    setExclusaoErro(null);
+    setExcluindo(true);
+    try {
+      const usuarioAtual = auth?.currentUser;
+      if (!usuarioAtual) throw new Error("Sessão expirada. Entre novamente para continuar.");
+
+      const rota = alvoExclusao.tipo === "membro" ? "/api/team/remove-member" : "/api/team/revoke-invite";
+      const corpo =
+        alvoExclusao.tipo === "membro" ? { uid: alvoExclusao.item.id } : { inviteId: alvoExclusao.item.id };
+
+      const resposta = await fetchComTimeout(
+        rota,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${await usuarioAtual.getIdToken()}` },
+          body: JSON.stringify(corpo),
+        },
+        "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+        TIMEOUT_EQUIPE_MS
+      );
+
+      const dados = (await resposta.json().catch(() => ({}))) as { erro?: { mensagem: string } };
+      if (!resposta.ok) {
+        throw new Error(dados.erro?.mensagem ?? "Não foi possível concluir esta ação agora.");
+      }
+
+      setAlvoExclusao(null);
+    } catch (erro) {
+      setExclusaoErro(erro instanceof Error ? erro.message : "Não foi possível concluir esta ação agora.");
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -131,6 +178,12 @@ export default function TeamPage() {
                 <p className="truncate text-xs text-ink-500">{m.email}</p>
               </div>
               <span className="mono text-xs text-ink-400">{ROLE_LABEL[m.papel]}</span>
+              {appUser?.papel === "admin" && m.id !== user?.uid && (
+                <DeleteIconButton
+                  label={`Remover ${m.nome} da equipe`}
+                  onClick={() => setAlvoExclusao({ tipo: "membro", item: m })}
+                />
+              )}
             </div>
           ))}
           {invites.map((i) => (
@@ -141,10 +194,47 @@ export default function TeamPage() {
                 <p className="truncate text-xs text-ink-500">convite pendente</p>
               </div>
               <span className="mono text-xs text-ink-400">{ROLE_LABEL[i.papel]}</span>
+              {appUser?.papel === "admin" && (
+                <DeleteIconButton
+                  label={`Revogar convite de ${i.email}`}
+                  onClick={() => setAlvoExclusao({ tipo: "convite", item: i })}
+                />
+              )}
             </div>
           ))}
         </div>
       )}
+
+      <Modal
+        open={alvoExclusao !== null}
+        onClose={() => {
+          setAlvoExclusao(null);
+          setExclusaoErro(null);
+        }}
+        titleId="excluir-membro-equipe-title"
+        title={
+          alvoExclusao?.tipo === "membro"
+            ? `Remover "${alvoExclusao.item.nome}" da equipe?`
+            : `Revogar convite de "${alvoExclusao?.item.email ?? ""}"?`
+        }
+        body={
+          alvoExclusao?.tipo === "membro"
+            ? "A pessoa perde acesso a este workspace imediatamente. Se ela logar de novo, começa um workspace próprio do zero — não existe acesso parcial nem recuperação automática."
+            : "O link do convite deixa de funcionar. A pessoa pode ser convidada de novo a qualquer momento."
+        }
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setAlvoExclusao(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger-solid" size="sm" loading={excluindo} onClick={confirmarExclusao}>
+              {alvoExclusao?.tipo === "membro" ? "Sim, remover" : "Sim, revogar"}
+            </Button>
+          </>
+        }
+      >
+        {exclusaoErro && <p className="text-xs text-state-error">{exclusaoErro}</p>}
+      </Modal>
     </div>
   );
 }

@@ -336,6 +336,21 @@ export async function createConnector(
   });
 }
 
+/**
+ * Remove um conector (ex.: cadastrado com o Phone Number ID errado, ou um
+ * canal de teste que não deve mais receber mensagem nenhuma). Não apaga as
+ * conversas já recebidas por ele — mesmo princípio de `deleteFlow`: conversa
+ * de cliente é registro permanente, nunca some como efeito colateral de
+ * outra ação. `firestore.rules` já permite `write` (inclui delete) em
+ * `connectors/{id}` para qualquer membro do workspace dono do documento.
+ */
+export async function deleteConnector(connectorId: string): Promise<void> {
+  return enfileirarEscrita("Excluir conector", async () => {
+    const database = requireDb();
+    await deleteDoc(doc(database, "connectors", connectorId));
+  });
+}
+
 // ---------- Team ----------
 
 export function subscribeTeamMembers(

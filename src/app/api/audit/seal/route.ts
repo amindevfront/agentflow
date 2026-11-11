@@ -64,6 +64,8 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "relatorio.lgpd.gerado",
   "connecthub.webhook.despachado",
   "ambiente.teste.resetado",
+  "equipe.membro.removido",
+  "equipe.convite.revogado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

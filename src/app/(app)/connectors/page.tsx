@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { subscribeConnectors, createConnector } from "@/lib/firestore";
+import { subscribeConnectors, createConnector, deleteConnector } from "@/lib/firestore";
 import { useWorkspace } from "@/lib/workspace";
 import { connectorSchema, primeiraMensagemZod } from "@/lib/validation/schemas";
 import { gerarWidgetEmbedSnippet } from "@/lib/inbox/channelAdapters";
@@ -10,6 +10,8 @@ import { Avatar } from "@/components/ui/Avatar";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
+import { Modal } from "@/components/ui/Modal";
+import { DeleteIconButton } from "@/components/ui/DeleteIconButton";
 import type { Connector } from "@/types";
 
 // Canais Globais (EUA/UK/Europa): os dois últimos tipos, além dos quatro já
@@ -42,6 +44,8 @@ export default function ConnectorsPage() {
   const [nomeError, setNomeError] = useState<string | null>(null);
   const [snippetExpandidoId, setSnippetExpandidoId] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
+  const [conectorParaExcluir, setConectorParaExcluir] = useState<Connector | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -56,6 +60,17 @@ export default function ConnectorsPage() {
     } catch {
       // Clipboard pode estar indisponível (permissão negada, contexto não seguro) —
       // o snippet continua selecionável/copiável manualmente no <pre>.
+    }
+  }
+
+  async function confirmarExclusaoConector() {
+    if (!conectorParaExcluir) return;
+    setExcluindo(true);
+    try {
+      await deleteConnector(conectorParaExcluir.id);
+      setConectorParaExcluir(null);
+    } finally {
+      setExcluindo(false);
     }
   }
 
@@ -226,6 +241,7 @@ export default function ConnectorsPage() {
                   <p className="truncate text-xs text-ink-500">{c.tipo}</p>
                 </div>
                 <Pill status={c.status} />
+                <DeleteIconButton label={`Excluir conector ${c.nome}`} onClick={() => setConectorParaExcluir(c)} />
               </div>
               {c.tipo === TIPO_WIDGET && workspaceId && (
                 <>
@@ -247,6 +263,24 @@ export default function ConnectorsPage() {
           ))}
         </div>
       )}
+
+      <Modal
+        open={conectorParaExcluir !== null}
+        onClose={() => setConectorParaExcluir(null)}
+        titleId="excluir-conector-title"
+        title={`Excluir "${conectorParaExcluir?.nome ?? ""}"?`}
+        body="O conector é removido permanentemente. Mensagens que ele já recebeu continuam na Neural Inbox — isto não apaga conversas, só desliga este canal para novas mensagens."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setConectorParaExcluir(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger-solid" size="sm" loading={excluindo} onClick={confirmarExclusaoConector}>
+              Sim, excluir
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

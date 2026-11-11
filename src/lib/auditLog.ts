@@ -323,4 +323,6 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "sacshield.evidencia.pacote-gerado": "SAC Shield: pacote de evidência de conformidade gerado",
   "connecthub.webhook.despachado": "AgentFlow Connect Hub: evento despachado ao webhook de saída",
   "ambiente.teste.resetado": "Ambiente de testes resetado (conversas e fluxos de teste apagados)",
+  "equipe.membro.removido": "Membro removido da equipe",
+  "equipe.convite.revogado": "Convite pendente revogado",
 };

@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Avatar } from "./Avatar";
+import { DeleteIconButton } from "./DeleteIconButton";
 import { Pill } from "./Pill";
 import type { ConnectorStatus, RunStatus } from "@/types";
 
@@ -85,25 +86,13 @@ export function ListRow({
       {time && <span className="mono flex-none text-xs text-ink-400">{time}</span>}
       <Pill status={status} />
       {onDelete && (
-        <button
-          type="button"
-          aria-label={deleteLabel ?? `Excluir ${title}`}
+        <DeleteIconButton
+          label={deleteLabel ?? `Excluir ${title}`}
           onClick={(e) => {
             e.stopPropagation();
             onDelete();
           }}
-          className="flex-none rounded-[var(--radius-sm)] p-1.5 text-ink-400 transition-colors hover:bg-state-error-bg hover:text-state-error"
-        >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path
-              d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5l.5 8a1 1 0 0 0 1 .95h3a1 1 0 0 0 1-.95l.5-8"
-              stroke="currentColor"
-              strokeWidth="1.3"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          </svg>
-        </button>
+        />
       )}
     </div>
   );
