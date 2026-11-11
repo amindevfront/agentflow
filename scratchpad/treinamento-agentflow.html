@@ -1,0 +1,198 @@
+<title>Guia Fácil AgentFlow</title>
+<style>
+  :root {
+    --ink-950:#0b1220; --ink-700:#33415a; --ink-500:#5b6b85; --ink-200:#c7d0dc; --ink-100:#e3e8ef;
+    --mist-50:#f6f8fb; --white:#fff;
+    --signal-700:#1f3fd1; --signal-600:#2a4df0; --signal-100:#e3e9ff; --signal-50:#f1f4ff;
+    --done-ink:#167a53; --done-bg:#e1f5eb;
+    --run-ink:#b36b00; --run-bg:#fff3dc;
+    --radius-md:10px; --radius-lg:16px; --shadow-sm:0 1px 2px rgba(11,18,32,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink-950:#eef2f8; --ink-700:#c7d0dc; --ink-500:#9aa8bd; --ink-200:#2a3344; --ink-100:#202838;
+      --mist-50:#10151f; --white:#161d2b;
+      --signal-700:#9db2ff; --signal-600:#7d96ff; --signal-100:#22305e; --signal-50:#1a2544;
+      --done-ink:#6fe0ae; --done-bg:#10342a; --run-ink:#ffcb7a; --run-bg:#3a2d10;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink-950:#eef2f8; --ink-700:#c7d0dc; --ink-500:#9aa8bd; --ink-200:#2a3344; --ink-100:#202838;
+    --mist-50:#10151f; --white:#161d2b;
+    --signal-700:#9db2ff; --signal-600:#7d96ff; --signal-100:#22305e; --signal-50:#1a2544;
+    --done-ink:#6fe0ae; --done-bg:#10342a; --run-ink:#ffcb7a; --run-bg:#3a2d10;
+  }
+  * { box-sizing:border-box; }
+  body { background:var(--mist-50); color:var(--ink-950); font-family:"Archivo",system-ui,sans-serif; padding:24px 16px 60px; }
+  main { max-width:760px; margin:0 auto; display:flex; flex-direction:column; gap:28px; }
+  h1 { font-size:clamp(26px,5vw,34px); line-height:1.15; margin:4px 0; }
+  .lead { color:var(--ink-500); font-size:15px; line-height:1.6; }
+  .hero {
+    background:linear-gradient(135deg,var(--signal-50),var(--white));
+    border:1px solid var(--signal-100); border-radius:var(--radius-lg); padding:20px 22px;
+  }
+  .card {
+    background:var(--white); border:1px solid var(--ink-100); border-radius:var(--radius-lg);
+    padding:20px 22px; box-shadow:var(--shadow-sm); break-inside:avoid;
+  }
+  .num {
+    display:inline-flex; align-items:center; justify-content:center; width:34px; height:34px;
+    border-radius:50%; background:var(--signal-600); color:#fff; font-weight:800; font-size:16px; flex:none;
+  }
+  .card-head { display:flex; align-items:center; gap:12px; margin-bottom:10px; }
+  .card-head h2 { font-size:18px; margin:0; }
+  .passo {
+    display:flex; gap:10px; align-items:flex-start; padding:10px 0; border-top:1px solid var(--ink-100);
+  }
+  .passo:first-of-type { border-top:none; }
+  .chk {
+    width:20px; height:20px; border:2px solid var(--signal-600); border-radius:5px; flex:none; margin-top:1px;
+  }
+  .passo p { margin:0; font-size:14.5px; line-height:1.55; }
+  .btn {
+    display:inline-block; font-weight:700; font-size:13.5px; color:var(--signal-700);
+    background:var(--signal-50); border:1px solid var(--signal-600); border-radius:7px; padding:2px 8px;
+  }
+  .dica {
+    margin-top:10px; background:var(--signal-50); border-left:3px solid var(--signal-600);
+    border-radius:0 8px 8px 0; padding:10px 14px; font-size:13.5px; color:var(--ink-700); line-height:1.55;
+  }
+  .atencao {
+    margin-top:10px; background:var(--run-bg); border-left:3px solid var(--run-ink);
+    border-radius:0 8px 8px 0; padding:10px 14px; font-size:13.5px; color:var(--ink-700); line-height:1.55;
+  }
+  .vitoria {
+    background:var(--done-bg); border:1px solid var(--done-ink); border-radius:var(--radius-lg);
+    padding:22px; text-align:center;
+  }
+  .vitoria h2 { color:var(--done-ink); margin:0 0 8px; font-size:22px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th,td { text-align:left; padding:9px 10px; border-bottom:1px solid var(--ink-100); }
+  th { color:var(--ink-500); font-size:11.5px; text-transform:uppercase; }
+  .print-note {
+    text-align:center; font-size:13px; color:var(--ink-500); border-top:1px dashed var(--ink-200); padding-top:14px;
+  }
+  @media print {
+    body { background:#fff; }
+    .hero, .card, .vitoria, .dica, .atencao { -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .print-note { display:none; }
+  }
+</style>
+
+<main>
+  <header class="hero">
+    <div class="lead" style="font-weight:700; color:var(--signal-700); text-transform:uppercase; font-size:12px; letter-spacing:.06em;">Guia fácil · passo a passo</div>
+    <h1>Você consegue implementar o AgentFlow</h1>
+    <p class="lead">Este guia usa só os nomes de botão que existem de verdade no sistema — eu confirmei cada um, um por um, direto no código. Siga na ordem. Marque cada caixinha. No final, você terá implementado uma empresa de verdade, do zero.</p>
+  </header>
+
+  <section class="card" style="border-color:var(--signal-600);">
+    <div class="card-head"><h2 style="margin:0;">O que é o AgentFlow, em palavras simples</h2></div>
+    <p class="lead" style="margin:0;">É um atendente de IA que conversa no lugar do cliente com o público dele, segue regras pra nunca prometer coisa errada (preço, diagnóstico, garantia), e mostra em dinheiro quanto isso gerou. Hoje ele conversa por um <b>chat no site do cliente</b> (o "Web Widget", explicado na Etapa 7) e, pra você testar sem custo, por mensagens simuladas aqui dentro mesmo.</p>
+    <div class="atencao" style="margin-top:10px;">⚠️ <b>WhatsApp já é real — mas precisa de uma configuração única no Meta antes de funcionar.</b> O conector "WhatsApp Business (Cloud API)" recebe e responde mensagem de verdade, porém só depois que alguém configurar as credenciais do Meta for Developers (token de acesso e segredo do webhook) e registrar a URL do webhook lá. Sem isso, ele fica fora do ar. SMS/Twilio e Webhook/E-mail/API externa continuam sendo apenas preparação, sem receber nada ainda. Veja a Etapa 7 pra entender exatamente o que já funciona.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">0</span><h2>Antes de tudo: dizer qual é o negócio do cliente</h2></div>
+    <div class="passo"><span class="chk"></span><p>Vá em <b>Configurações</b>. Se a conta é nova, uma janela abre sozinha perguntando o nicho — você não precisa clicar em nada pra abrir.</p></div>
+    <div class="passo"><span class="chk"></span><p>Se a conta já tem nicho e você quer trocar: clique no botão <span class="btn">Trocar nicho</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Escolha o tipo de negócio do cliente (ex.: Clínica, Imobiliária, Salão) e clique <span class="btn">Continuar</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Escolha o maior problema do cliente hoje e clique <span class="btn">Continuar</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Confirme a região e clique <span class="btn">Concluir configuração</span>.</p></div>
+    <div class="dica">🎉 Pronto. Em menos de 1 minuto, o sistema já ajustou moeda, idioma e as regras de segurança certas pra esse tipo de negócio — sozinho.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">1</span><h2>Criar o primeiro fluxo de atendimento</h2></div>
+    <div class="passo"><span class="chk"></span><p>Vá em <b>Fluxos</b> e clique <span class="btn">Novo fluxo</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Preencher com Dados de Demonstração</span> — o formulário se preenche sozinho, não precisa inventar nada.</p></div>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Salvar configurações</span>.</p></div>
+    <div class="dica">Isso é tudo. Você acabou de criar o cérebro do atendimento do cliente.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">2</span><h2>Testar sem nenhum risco (Sandbox)</h2></div>
+    <p class="lead" style="margin:-4px 0 6px;">Ainda na tela de Fluxos, role a página até a parte chamada "Sandbox".</p>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Carregar Payload de Exemplo</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Executar teste</span> — aparece uma resposta na tela. Isso não gasta nada e não é real.</p></div>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Enviar como lead de teste para a Neural Inbox</span> e depois no link <span class="btn">abrir na Neural Inbox →</span>.</p></div>
+    <div class="dica">Fale assim pro cliente: "Isso que você viu entrar agora passou pelas mesmas travas de segurança de um atendimento de verdade — e não custou nada pra testar."</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">3</span><h2>Ver o atendimento acontecendo (Neural Inbox)</h2></div>
+    <div class="atencao" style="margin-bottom:4px;">⚠️ O botão <b>Assumir</b> só aparece DEPOIS que uma conversa já existe e está selecionada — ele não aparece na tela de "Selecione uma conversa" nem no formulário de criar conversa ainda vazio. Se você clicou em "Nova conversa" e só vê campos pra preencher (Nome do cliente, Telefone ou e-mail, Assunto), ainda falta um clique: preencha e clique em <span class="btn">Criar conversa</span> primeiro.</div>
+    <div class="passo"><span class="chk"></span><p>Clique na conversa que você acabou de enviar — ela aparece na <b>lista do meio</b> da tela, não no formulário.</p></div>
+    <div class="passo"><span class="chk"></span><p>Se ninguém pegou essa conversa ainda, clique <span class="btn">Assumir</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Escreva uma resposta no campo "Responder" e clique <span class="btn">Enviar</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Quando o atendimento terminar em venda, clique <span class="btn">Fechado / Venda Concretizada</span>.</p></div>
+    <div class="dica">Esse clique final é o que alimenta o resultado financeiro que você vai mostrar na Etapa 5.</div>
+    <div class="atencao" style="margin-top:8px;">⚠️ Honestidade pro cliente: quando o canal real é o Web Widget (Etapa 7), a resposta que você escreve aqui fica salva e registrada — mas ainda não aparece sozinha, em tempo real, dentro do chat do site do visitante. Hoje essa resposta chega até ele por fora (ex.: e-mail/telefone que ele deixou). Não prometa "ele vê na hora" ainda.</div>
+    <div class="dica" style="margin-top:8px;">💡 O cartão "Receita recuperada de madrugada" no topo da tela: o número grande é uma <b>contagem de conversas</b> atendidas fora do horário comercial, não um valor em R$. Do lado aparece o valor em dinheiro seguido da palavra <b>"evitados"</b> (horas de atendimento humano que não precisaram existir), não "venda fechada". Explique assim pro cliente, pra não parecer que o número é faturamento.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">4</span><h2 style="display:flex;align-items:center;gap:8px;">Execução real <span style="font-size:11px; font-weight:700; color:var(--run-ink); background:var(--run-bg); padding:2px 8px; border-radius:999px;">opcional</span></h2></div>
+    <p class="lead" style="margin:-4px 0 6px;">Só apareça aqui com o fluxo já salvo. Esse botão usa IA de verdade — use só quando quiser provar com 100% de realismo.</p>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn" style="border-color:var(--run-ink); color:var(--run-ink); background:var(--run-bg);">Executar agora</span>.</p></div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">5</span><h2>Mostrar o resultado pro cliente (Governança)</h2></div>
+    <div class="passo"><span class="chk"></span><p>Vá em <b>Cofre & Blindagem Jurídica</b> no menu (essa é a Governança) e abra a aba <b>"Oportunidade & Pipeline"</b>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Se aparecer um aviso dizendo que o nicho não está configurado, clique no link <span class="btn">ir para Configurações</span> e volte pra Etapa 0.</p></div>
+    <div class="dica">Essa tela mostra, em dinheiro, quanto o AgentFlow já recuperou. É o número que fecha a venda.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">6</span><h2>Entregar o painel pro dono do negócio</h2></div>
+    <p class="lead" style="margin:-4px 0 6px;">Esse card fica logo no topo da tela de <b>Fluxos</b> — mas só aparece depois que você já salvou pelo menos 1 fluxo (Etapa 1), e só pra quem é admin.</p>
+    <div class="passo"><span class="chk"></span><p>Na tela de <b>Fluxos</b>, procure "Link Único do Cliente" e clique <span class="btn">Gerar link do portal</span>.</p></div>
+    <div class="passo"><span class="chk"></span><p>Clique <span class="btn">Copiar link para o cliente</span> e mande esse link pro dono do negócio.</p></div>
+    <div class="atencao">⚠️ Esse link não é público: quem clicar precisa fazer login na mesma conta. É o painel do DONO do negócio, não do cliente final dele.</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">7</span><h2>Canais: qual número de WhatsApp eu cadastro?</h2></div>
+    <p class="lead" style="margin:-4px 0 6px;">Vá em <b>Canais &amp; Integrações</b> no menu lateral, clique <span class="btn">Novo conector</span>. A tabela abaixo é a verdade de cada opção do menu — testada direto no código, não suposição.</p>
+    <table>
+      <thead><tr><th>Tipo no menu</th><th>Funciona de verdade hoje?</th></tr></thead>
+      <tbody>
+        <tr><td>Web Widget Corporativo (Embed)</td><td>✅ <b>Sim.</b> Gera um código pra colar no site do cliente — o chat já entra na Neural Inbox de verdade.</td></tr>
+        <tr><td>WhatsApp Business (Cloud API)</td><td>✅ <b>Sim</b> — recebe e responde mensagem de verdade pelo número real do cliente. Mas só depois de uma configuração única feita no Meta for Developers (token de acesso e segredo do webhook, mais o registro da URL do webhook lá). Peça o "Phone Number ID" do cliente pra criar o conector. Sem essa configuração, o webhook fica fora do ar.</td></tr>
+        <tr><td>SMS / Twilio Gateway</td><td>⏳ Não ainda. O registro fica salvo, mas nenhuma mensagem de nenhum número chega.</td></tr>
+        <tr><td>Webhook / E-mail / API externa</td><td>⏳ Não ainda. Mesma situação — é planejamento, não conexão real.</td></tr>
+      </tbody>
+    </table>
+    <div class="dica">Pra WhatsApp, o campo "número do cliente" não existe porque o Meta não funciona assim: você cadastra o <b>Phone Number ID</b> (vem do Meta for Developers) e precisa que alguém técnico já tenha configurado o token de acesso e o webhook uma vez. Se isso ainda não foi feito pro cliente, o caminho que funciona hoje sem nenhuma configuração extra é o Web Widget (chat no site) + as simulações daqui de dentro (Etapas 2 e 3).</div>
+  </section>
+
+  <section class="card">
+    <div class="card-head"><span class="num">+</span><h2>Bônus: prova de confiança pro cliente (Cofre, Auditoria, Transbordo)</h2></div>
+    <p class="lead" style="margin:-4px 0 6px;">Essas 3 telas ficam dentro de <b>Cofre &amp; Blindagem Jurídica</b> (menu lateral) — são o que separa um chatbot qualquer de um sistema que uma empresa de verdade pode confiar.</p>
+    <div class="passo"><span class="chk"></span><p>Aba <b>Cofre</b>: mostra as credenciais guardadas (sem nunca exibir a senha/chave de novo — só rotacionar ou revogar). Fale pro cliente: "sua chave fica cifrada, nem eu consigo ler ela de novo depois de salva."</p></div>
+    <div class="passo"><span class="chk"></span><p>Aba <b>Auditoria</b>: clique <span class="btn">Verificar integridade</span> — prova que o histórico não foi alterado (cadeia de hash). É a prova técnica que você mostra se o cliente perguntar "como eu sei que vocês não mexeram nos dados?".</p></div>
+    <div class="passo"><span class="chk"></span><p>Aba <b>Transbordo</b>: fila de decisões que a IA não tomou sozinha — mostra que ela sabe pedir ajuda humana em vez de inventar resposta.</p></div>
+  </section>
+
+  <div class="vitoria">
+    <h2>✅ Você implementou uma empresa real.</h2>
+    <p class="lead" style="color:var(--ink-700);">Configurou o nicho, criou o fluxo, testou sem risco, viu o atendimento rodando, entregou o painel de resultado pro dono do negócio e sabe exatamente qual canal já está pronto pra receber cliente de verdade. Esse é exatamente o trabalho de um implementador — e você acabou de fazer, do início ao fim, clicando nos botões certos.</p>
+  </div>
+
+  <section class="card">
+    <div class="card-head"><h2 style="margin:0;">Troca de nicho rápida — não muda nada no passo a passo</h2></div>
+    <p class="lead" style="margin:-2px 0 10px;">Os 6 passos acima são SEMPRE os mesmos. Só muda o que você escolhe na Etapa 0.</p>
+    <table>
+      <thead><tr><th>Negócio do cliente</th><th>O que a IA evita prometer</th></tr></thead>
+      <tbody>
+        <tr><td>Imobiliária / Construtora</td><td>Preço sem autorização</td></tr>
+        <tr><td>Clínica</td><td>Diagnóstico médico</td></tr>
+        <tr><td>Advocacia / Contabilidade</td><td>Garantia de resultado no processo</td></tr>
+        <tr><td>Loja / E-commerce</td><td>— (foco é rastreio e trocas)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <p class="print-note">Para guardar este guia em PDF: aperte <b>Ctrl+P</b> (no Mac, <b>Cmd+P</b>) e escolha "Salvar como PDF".</p>
+</main>
