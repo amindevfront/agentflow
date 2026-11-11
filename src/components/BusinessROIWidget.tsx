@@ -21,6 +21,7 @@ import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
 import {
+  OPCOES_MOEDA,
   ROI_CONFIG_PADRAO,
   cambioParaMoeda,
   calcularRoi,
@@ -43,13 +44,6 @@ const OPCOES_PERIODO: Array<{ valor: JanelaPeriodo; label: string }> = [
   { valor: "mes", label: "Mês atual" },
   { valor: "30d", label: "30 dias" },
   { valor: "7d", label: "7 dias" },
-];
-
-const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
-  { valor: "BRL", label: "R$" },
-  { valor: "USD", label: "US$" },
-  { valor: "GBP", label: "£" },
-  { valor: "EUR", label: "€" },
 ];
 
 function resolverPeriodo(janela: JanelaPeriodo, referencia: Date): RoiPeriodo {

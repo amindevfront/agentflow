@@ -15,6 +15,7 @@ import { AuditTrailPanel } from "@/components/governance/AuditTrailPanel";
 import { CompliancePreventivoPanel } from "@/components/governance/CompliancePreventivoPanel";
 import { CredentialVaultPanel } from "@/components/governance/CredentialVaultPanel";
 import { ExecutiveReportPanel } from "@/components/governance/ExecutiveReportPanel";
+import { GlobalComplianceReadinessPanel } from "@/components/governance/GlobalComplianceReadinessPanel";
 import { GuardrailInspectorPanel } from "@/components/governance/GuardrailInspectorPanel";
 import { HandoffQueuePanel } from "@/components/governance/HandoffQueuePanel";
 import { HealthScorePanel } from "@/components/governance/HealthScorePanel";
@@ -45,6 +46,7 @@ type Aba =
   | "saude"
   | "ai-act"
   | "lgpd"
+  | "global"
   | "backoffice";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
@@ -59,6 +61,7 @@ const ABAS: Array<{ valor: Aba; label: string }> = [
   { valor: "saude", label: "Health Score" },
   { valor: "ai-act", label: "EU AI Act" },
   { valor: "lgpd", label: "LGPD" },
+  { valor: "global", label: "Global (GDPR/EUA)" },
   { valor: "backoffice", label: "Back-office" },
 ];
 
@@ -141,6 +144,7 @@ export default function GovernancePage() {
       {aba === "saude" && <HealthScorePanel />}
       {aba === "ai-act" && <AiActReadinessPanel />}
       {aba === "lgpd" && <LgpdReadinessPanel />}
+      {aba === "global" && <GlobalComplianceReadinessPanel />}
       {aba === "backoffice" && (
         <div className="flex flex-col gap-4">
           {documentAiVaultAtivo ? (

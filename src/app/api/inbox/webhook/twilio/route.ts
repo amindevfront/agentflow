@@ -2,23 +2,24 @@
 //
 // Mesmo padrão de diagnóstico do webhook do Meta
 // (`src/app/api/inbox/webhook/route.ts`): valida a assinatura do provedor e
-// o formato do payload, e devolve exatamente o que faltaria para processá-lo
-// de verdade, em vez de fingir sucesso. Nenhuma conta Twilio real está
-// configurada neste ambiente — não há como exercitar a ingestão de ponta a
-// ponta sem o Auth Token real do projeto Twilio do cliente.
+// o formato do payload antes de tocar em qualquer dado.
 //
 // DELIBERADAMENTE NÃO usa `comGuarda`: a Twilio nunca envia um ID token do
 // Firebase — ela autentica por assinatura HMAC-SHA1 no cabeçalho
 // `X-Twilio-Signature`, calculada sobre a URL completa + parâmetros POST
 // ordenados (ver `validarAssinaturaTwilio` em `@/lib/inbox/channelAdapters`).
 //
-// O pipeline de processamento em si — Shield-Layer, Radar de Sentimento,
-// Circuit Breaker — é real e já está implementado em
-// `@/lib/inbox/firestore` (`registrarMensagemCliente`). Esta rota está
-// pronta para chamá-lo assim que `TWILIO_AUTH_TOKEN` estiver configurado.
+// Ingestão real: o pipeline (Shield-Layer, Radar de Sentimento, Circuit
+// Breaker) roda via `registrarMensagemSmsAdmin` (Admin SDK — a Twilio não
+// tem sessão Firebase, então o caminho client de `@/lib/inbox/firestore` não
+// se aplica aqui, mesmo racional do WhatsApp Cloud API). O workspace é
+// resolvido pelo número `To` cadastrado no conector "SMS / Twilio Gateway" —
+// sem conector cadastrado com esse número, a ingestão é recusada, nunca
+// gravada às cegas.
 
 import { normalizarMensagemTwilioSms } from "@/lib/inbox/channelAdapters";
 import { validarAssinaturaTwilio } from "@/lib/inbox/twilioSignature";
+import { registrarMensagemSmsAdmin, resolverConectorPorNumeroTwilio } from "@/lib/server/twilioSmsAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,29 +73,46 @@ export async function POST(requisicao: Request): Promise<Response> {
       return respostaJson({ erro: { codigo: "assinatura_invalida", mensagem: "Assinatura do webhook inválida." } }, 401);
     }
 
+    let normalizada;
     try {
-      normalizarMensagemTwilioSms(parametros);
+      normalizada = normalizarMensagemTwilioSms(parametros);
     } catch (erro) {
       const mensagem = erro instanceof Error ? erro.message : "Payload inválido.";
       return respostaJson({ erro: { codigo: "payload_invalido", mensagem } }, 400);
     }
 
-    // A partir daqui, com a assinatura validada e o payload normalizado, o
-    // processamento real seria resolver o workspace pelo número `To` (a
-    // Twilio não informa o workspace — isso exige um mapeamento número↔
-    // workspace, hoje inexistente) e chamar `registrarMensagemCliente`.
-    // Trabalho futuro assim que uma conta Twilio real estiver configurada e
-    // este caminho puder ser exercitado de ponta a ponta — ver
-    // `src/lib/inbox/firestore.ts`.
-    return respostaJson(
-      {
-        erro: {
-          codigo: "ingestao_nao_implementada",
-          mensagem: "Assinatura validada, mas a ingestão real ainda não está implementada para este canal.",
+    const numeroDestino = parametros.To?.trim();
+    if (!numeroDestino) {
+      return respostaJson(
+        { erro: { codigo: "payload_invalido", mensagem: 'Payload da Twilio sem o campo "To".' } },
+        400
+      );
+    }
+
+    const conector = await resolverConectorPorNumeroTwilio(numeroDestino);
+    if (!conector) {
+      // Assinatura válida (é a Twilio de verdade), mas nenhum conector deste
+      // workspace reivindica este número — nunca grava às cegas num
+      // workspace desconhecido.
+      return respostaJson(
+        {
+          erro: {
+            codigo: "conector_nao_encontrado",
+            mensagem: `Nenhum conector "SMS / Twilio Gateway" cadastrado para o número ${numeroDestino}.`,
+          },
         },
-      },
-      501
-    );
+        404
+      );
+    }
+
+    const resultado = await registrarMensagemSmsAdmin({
+      workspaceId: conector.workspaceId,
+      telefoneCliente: normalizada.identificadorRemetente,
+      texto: normalizada.texto,
+      idExterno: normalizada.idExterno,
+    });
+
+    return respostaJson({ ingerido: true, conversationId: resultado.conversationId }, 200);
   } catch (erro) {
     console.error("[inbox/webhook/twilio] erro não tratado:", erro);
     return respostaJson({ erro: { codigo: "erro_interno", mensagem: "Erro interno ao processar o webhook." } }, 500);

@@ -220,3 +220,26 @@ export function diagnosticoWhatsapp(): { pronto: boolean; faltando: string[] } {
   }
   return { pronto: faltando.length === 0, faltando };
 }
+
+/**
+ * Diagnóstico do SMS/Twilio Gateway (Canais Globais — EUA/UK/Europa) — mesma
+ * filosofia de `diagnosticoWhatsapp`. `TWILIO_AUTH_TOKEN` já era checado
+ * isoladamente dentro da rota de webhook; esta função o traz pro mesmo
+ * painel agregado das demais capacidades, e soma as duas variáveis extras
+ * exigidas apenas para o ENVIO (resposta do atendente): `TWILIO_ACCOUNT_SID`
+ * e `TWILIO_PHONE_NUMBER` (ver `enviarMensagemSmsTwilio`).
+ */
+export function diagnosticoTwilio(): { pronto: boolean; faltando: string[] } {
+  assertServidor();
+  const faltando: string[] = [];
+  if (!process.env.TWILIO_AUTH_TOKEN?.trim()) {
+    faltando.push("TWILIO_AUTH_TOKEN");
+  }
+  if (!process.env.TWILIO_ACCOUNT_SID?.trim()) {
+    faltando.push("TWILIO_ACCOUNT_SID");
+  }
+  if (!process.env.TWILIO_PHONE_NUMBER?.trim()) {
+    faltando.push("TWILIO_PHONE_NUMBER");
+  }
+  return { pronto: faltando.length === 0, faltando };
+}

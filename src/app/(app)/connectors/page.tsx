@@ -32,9 +32,9 @@ const CONNECTOR_TYPES = [
 
 const TIPO_WIDGET = "Web Widget Corporativo (Embed)";
 const TIPO_WHATSAPP = "WhatsApp Business (Cloud API)";
-const TIPOS_SEM_INGESTAO_REAL = new Set(
-  CONNECTOR_TYPES.filter((t) => t !== TIPO_WIDGET && t !== TIPO_WHATSAPP)
-);
+const TIPO_SMS = "SMS / Twilio Gateway";
+const TIPOS_COM_INGESTAO_REAL = new Set([TIPO_WIDGET, TIPO_WHATSAPP, TIPO_SMS]);
+const TIPOS_SEM_INGESTAO_REAL = new Set(CONNECTOR_TYPES.filter((t) => !TIPOS_COM_INGESTAO_REAL.has(t)));
 
 export default function ConnectorsPage() {
   const { workspaceId } = useWorkspace();
@@ -43,6 +43,7 @@ export default function ConnectorsPage() {
   const [nome, setNome] = useState("");
   const [tipo, setTipo] = useState(CONNECTOR_TYPES[0]);
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
+  const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [nomeError, setNomeError] = useState<string | null>(null);
   const [snippetExpandidoId, setSnippetExpandidoId] = useState<string | null>(null);
@@ -50,6 +51,7 @@ export default function ConnectorsPage() {
   const [conectorParaExcluir, setConectorParaExcluir] = useState<Connector | null>(null);
   const [excluindo, setExcluindo] = useState(false);
   const [whatsappFaltando, setWhatsappFaltando] = useState<string[] | null>(null);
+  const [twilioFaltando, setTwilioFaltando] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -57,14 +59,16 @@ export default function ConnectorsPage() {
   }, [workspaceId]);
 
   const temConectorWhatsapp = connectors.some((c) => c.tipo === TIPO_WHATSAPP);
+  const temConectorSms = connectors.some((c) => c.tipo === TIPO_SMS);
 
-  // Aviso real, não suposição: um conector WhatsApp "conectado" na tela não
-  // significa que o servidor tem as credenciais do Meta — ver
-  // `diagnosticoWhatsapp` em `@/lib/server/env`. Só checa quando existe pelo
-  // menos um conector desse tipo, pra não gastar uma chamada à toa.
+  // Aviso real, não suposição: um conector "conectado" na tela não significa
+  // que o servidor tem as credenciais do provedor — ver `diagnosticoWhatsapp`/
+  // `diagnosticoTwilio` em `@/lib/server/env`. Só checa quando existe pelo
+  // menos um conector de algum desses tipos, pra não gastar uma chamada à toa.
   useEffect(() => {
-    if (!temConectorWhatsapp) {
+    if (!temConectorWhatsapp && !temConectorSms) {
       setWhatsappFaltando(null);
+      setTwilioFaltando(null);
       return;
     }
     let cancelado = false;
@@ -79,8 +83,13 @@ export default function ConnectorsPage() {
           10_000
         );
         if (!resposta.ok || cancelado) return;
-        const dados = (await resposta.json()) as { whatsapp?: { pronto: boolean; faltando: string[] } };
-        if (!cancelado) setWhatsappFaltando(dados.whatsapp?.pronto ? null : (dados.whatsapp?.faltando ?? []));
+        const dados = (await resposta.json()) as {
+          whatsapp?: { pronto: boolean; faltando: string[] };
+          twilio?: { pronto: boolean; faltando: string[] };
+        };
+        if (cancelado) return;
+        if (temConectorWhatsapp) setWhatsappFaltando(dados.whatsapp?.pronto ? null : (dados.whatsapp?.faltando ?? []));
+        if (temConectorSms) setTwilioFaltando(dados.twilio?.pronto ? null : (dados.twilio?.faltando ?? []));
       } catch {
         // Silencioso de propósito: isto é um aviso de conveniência, não uma
         // ação crítica — uma falha de rede aqui não pode virar outro erro
@@ -90,7 +99,7 @@ export default function ConnectorsPage() {
     return () => {
       cancelado = true;
     };
-  }, [temConectorWhatsapp]);
+  }, [temConectorWhatsapp, temConectorSms]);
 
   async function copiarSnippet(texto: string) {
     try {
@@ -134,24 +143,31 @@ export default function ConnectorsPage() {
       setNomeError('Informe o "Phone Number ID" do Meta for Developers para este conector.');
       return;
     }
+    if (tipo === TIPO_SMS && twilioPhoneNumber.trim().length === 0) {
+      setNomeError("Informe o número Twilio (formato E.164, ex.: +15551234567) para este conector.");
+      return;
+    }
 
     setNomeError(null);
     setSaving(true);
     try {
-      // Web Widget e WhatsApp são os únicos tipos de conector com ingestão
-      // real implementada ponta a ponta nesta versão (ver `widgetHabilitado`
-      // em `@/lib/server/inboxWidgetAdmin` e `resolverConectorPorPhoneNumberId`
-      // em `@/lib/server/whatsappCloudApiAdmin`). Os demais tipos (Webhook,
-      // SMS/Twilio, E-mail, API externa) ainda não têm o provedor real ligado
-      // — "não configurado" é honesto para eles.
-      const status = validado.data.tipo === TIPO_WIDGET || validado.data.tipo === TIPO_WHATSAPP ? "conectado" : "nao-configurado";
+      // Web Widget, WhatsApp e SMS/Twilio são os tipos de conector com
+      // ingestão real implementada ponta a ponta nesta versão (ver
+      // `widgetHabilitado` em `@/lib/server/inboxWidgetAdmin`,
+      // `resolverConectorPorPhoneNumberId` em `@/lib/server/whatsappCloudApiAdmin`
+      // e `resolverConectorPorNumeroTwilio` em `@/lib/server/twilioSmsAdmin`).
+      // Os demais tipos (Webhook, E-mail, API externa) ainda não têm o
+      // provedor real ligado — "não configurado" é honesto para eles.
+      const status = TIPOS_COM_INGESTAO_REAL.has(validado.data.tipo) ? "conectado" : "nao-configurado";
       await createConnector(workspaceId, {
         ...validado.data,
         status,
         ...(validado.data.tipo === TIPO_WHATSAPP ? { metaPhoneNumberId: metaPhoneNumberId.trim() } : {}),
+        ...(validado.data.tipo === TIPO_SMS ? { twilioPhoneNumber: twilioPhoneNumber.trim() } : {}),
       });
       setNome("");
       setMetaPhoneNumberId("");
+      setTwilioPhoneNumber("");
       setShowForm(false);
     } finally {
       setSaving(false);
@@ -180,6 +196,19 @@ export default function ConnectorsPage() {
           <p className="mt-1 text-[11px] text-ink-600">
             Falta configurar no servidor: <span className="mono">{whatsappFaltando.join(", ")}</span> — e registrar a
             URL do webhook no Meta for Developers. Peça ajuda técnica; sem isso, nenhuma mensagem chega de verdade.
+          </p>
+        </div>
+      )}
+
+      {twilioFaltando && twilioFaltando.length > 0 && (
+        <div className="rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
+          <p className="text-xs font-semibold text-ink-900">
+            ⚠️ O SMS aparece &quot;conectado&quot; aqui, mas o servidor ainda não está pronto para receber/enviar mensagem real.
+          </p>
+          <p className="mt-1 text-[11px] text-ink-600">
+            Falta configurar no servidor: <span className="mono">{twilioFaltando.join(", ")}</span> — e registrar a
+            URL do webhook na conta Twilio (Messaging → número → &quot;A message comes in&quot;). Peça ajuda técnica;
+            sem isso, nenhuma mensagem chega de verdade.
           </p>
         </div>
       )}
@@ -236,6 +265,25 @@ export default function ConnectorsPage() {
         </div>
       )}
 
+      {showForm && tipo === TIPO_SMS && (
+        <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
+          <Field
+            label="Número Twilio (formato E.164)"
+            value={twilioPhoneNumber}
+            onChange={(e) => setTwilioPhoneNumber(e.target.value)}
+            placeholder="Ex.: +15551234567"
+            helpText="O número de SMS da conta Twilio do cliente — é o campo To que a Twilio envia em todo webhook."
+          />
+          <p className="text-[11px] text-ink-400">
+            Pra mensagens reais chegarem, falta configurar <span className="mono">TWILIO_ACCOUNT_SID</span>,{" "}
+            <span className="mono">TWILIO_AUTH_TOKEN</span> e <span className="mono">TWILIO_PHONE_NUMBER</span> no
+            ambiente, e apontar o webhook deste número (Twilio Console → Messaging → número → &quot;A message comes
+            in&quot;) para <span className="mono">/api/inbox/webhook/twilio</span>. Peça ajuda técnica pra esse
+            passo — é configuração fora do AgentFlow, feita uma única vez.
+          </p>
+        </div>
+      )}
+
       {showForm && tipo === TIPO_WIDGET && workspaceId && (
         <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 p-3">
           <div className="flex items-center justify-between">
@@ -263,17 +311,18 @@ export default function ConnectorsPage() {
         </div>
       )}
 
-      {showForm && tipo !== TIPO_WIDGET && tipo !== TIPO_WHATSAPP && (
+      {showForm && TIPOS_SEM_INGESTAO_REAL.has(tipo) && (
         <div className="flex flex-col gap-1 rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
           <p className="text-xs font-medium text-ink-700">
             Este tipo ainda não recebe mensagens reais nesta versão.
           </p>
           <p className="text-[11px] text-ink-500">
             O registro salva o nome do canal para planejamento, mas a ligação com o provedor de verdade (Instagram/
-            Facebook via Meta, SMS via Twilio) ainda não está disponível — a rota de recebimento existe e valida a
-            assinatura do provedor, mas responde que a ingestão não está pronta. Os canais que já funcionam de ponta
-            a ponta hoje são <span className="font-medium">Web Widget Corporativo</span> e{" "}
-            <span className="font-medium">WhatsApp Business (Cloud API)</span>.
+            Facebook via Meta) ainda não está disponível — a rota de recebimento existe e valida a assinatura do
+            provedor, mas responde que a ingestão não está pronta. Os canais que já funcionam de ponta a ponta hoje
+            são <span className="font-medium">Web Widget Corporativo</span>,{" "}
+            <span className="font-medium">WhatsApp Business (Cloud API)</span> e{" "}
+            <span className="font-medium">SMS / Twilio Gateway</span>.
           </p>
         </div>
       )}
@@ -329,7 +378,7 @@ export default function ConnectorsPage() {
         title={`Excluir "${conectorParaExcluir?.nome ?? ""}"?`}
         body={
           conectorParaExcluir &&
-          (conectorParaExcluir.tipo === TIPO_WIDGET || conectorParaExcluir.tipo === TIPO_WHATSAPP) &&
+          TIPOS_COM_INGESTAO_REAL.has(conectorParaExcluir.tipo) &&
           connectors.filter((c) => c.tipo === conectorParaExcluir.tipo).length <= 1
             ? `Este é o ÚNICO conector "${conectorParaExcluir.tipo}" deste workspace, e é um canal REAL. Ao excluir, qualquer mensagem nova por este canal passa a falhar na hora — o widget já embedado no site do cliente mostra erro, ou o número de WhatsApp para de receber. Mensagens já recebidas continuam na Neural Inbox; isto não apaga conversas.`
             : "O conector é removido permanentemente. Mensagens que ele já recebeu continuam na Neural Inbox — isto não apaga conversas, só desliga este canal para novas mensagens."

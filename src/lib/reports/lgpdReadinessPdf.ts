@@ -12,6 +12,28 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage, type RGB } from "pdf-lib";
 import type { ItemProntidaoLgpd, ProntidaoLgpdResultado, StatusItemProntidaoLgpd } from "@/lib/lgpdReadiness";
 
+/**
+ * Forma estrutural genérica de um checklist de prontidão regulatória —
+ * `ProntidaoLgpdResultado` (LGPD) e `ProntidaoInternacionalResultado`
+ * (GDPR/US Privacy, `@/lib/internationalReadiness`) já têm exatamente este
+ * formato, então este desenhador de PDF é reaproveitado por ambos em vez de
+ * duplicado — mesmo racional de `OPCOES_MOEDA` centralizado em `@/lib/roi`:
+ * uma única fonte de verdade para o desenho, nunca um segundo arquivo quase
+ * idêntico por regime regulatório.
+ */
+export interface ItemProntidaoGenerico {
+  id: string;
+  titulo: string;
+  baseLegal: string | null;
+  status: StatusItemProntidaoLgpd;
+  detalhe: string;
+}
+export interface ProntidaoGenericaResultado {
+  itens: ItemProntidaoGenerico[];
+  totalAtende: number;
+  totalAvaliavelPorSoftware: number;
+}
+
 /** Espelha os tokens de cor de `globals.css` — nenhuma cor nova é introduzida. */
 const TOKEN = {
   ink950: hexParaRgb("#0A0F1A"),
@@ -53,6 +75,23 @@ export interface RelatorioProntidaoLgpdInput {
   geradoPor: string;
 }
 
+/** Versão genérica de `RelatorioProntidaoLgpdInput` — aceita qualquer regime regulatório, não só LGPD. */
+export interface RelatorioProntidaoGenericoInput {
+  workspaceId: string;
+  resultado: ProntidaoGenericaResultado;
+  geradoEm: string;
+  geradoPor: string;
+  /** Ex.: "Relatório de Prontidão — GDPR (União Europeia)". */
+  tituloRelatorio: string;
+  /** Linha curta sob o título, ex.: "GDPR — Regulamento (UE) 2016/679 · workspace {id}" (sem o workspaceId, que é concatenado automaticamente). */
+  subtituloRegime: string;
+  /** Texto completo do aviso "isto não é um certificado de conformidade", já adaptado ao regime. */
+  textoAviso: string;
+  /** Metadados do PDF (título/assunto do documento, não o texto desenhado). */
+  tituloDocumento: string;
+  assuntoDocumento: string;
+}
+
 const LARGURA = 595.28; // A4 retrato, em pontos.
 const ALTURA = 841.89;
 const MARGEM = 40;
@@ -87,20 +126,25 @@ function novaPagina(ctx: Pick<ContextoDesenho, "documento" | "fonteRegular" | "f
   return { ...ctx, page };
 }
 
-function desenharCabecalho(ctx: ContextoDesenho, input: RelatorioProntidaoLgpdInput): number {
+function desenharCabecalho(
+  ctx: ContextoDesenho,
+  input: { workspaceId: string; geradoEm: string },
+  tituloRelatorio: string,
+  subtituloRegime: string
+): number {
   const { page, fonteRegular, fonteNegrito, fonteMono } = ctx;
   const alturaFaixa = 92;
 
   page.drawRectangle({ x: 0, y: ALTURA - alturaFaixa, width: LARGURA, height: alturaFaixa, color: TOKEN.ink950 });
   page.drawText("AgentFlow", { x: MARGEM, y: ALTURA - 34, size: 12, font: fonteNegrito, color: TOKEN.signal100 });
-  page.drawText("Relatório de Prontidão para Regulação Brasileira", {
+  page.drawText(tituloRelatorio, {
     x: MARGEM,
     y: ALTURA - 56,
     size: 18,
     font: fonteNegrito,
     color: TOKEN.white,
   });
-  page.drawText(`LGPD — Lei 13.709/2018 · workspace ${input.workspaceId}`, {
+  page.drawText(`${subtituloRegime} · workspace ${input.workspaceId}`, {
     x: MARGEM,
     y: ALTURA - 76,
     size: 10,
@@ -115,12 +159,8 @@ function desenharCabecalho(ctx: ContextoDesenho, input: RelatorioProntidaoLgpdIn
   return ALTURA - alturaFaixa - 24;
 }
 
-function desenharAviso(ctx: ContextoDesenho, topoY: number): number {
+function desenharAviso(ctx: ContextoDesenho, topoY: number, texto: string): number {
   const { page, fonteNegrito, fonteRegular } = ctx;
-  const texto =
-    "Isto não é um certificado de conformidade. É um checklist técnico dos controles que o AgentFlow já oferece, " +
-    "mapeados a obrigações da LGPD (registro de operações, segurança, minimização de dados). Itens fora do escopo " +
-    "do software continuam sendo decisão e responsabilidade do controlador — o cliente.";
   const linhas = quebrarLinhas(texto, fonteRegular, 9.5, LARGURA - MARGEM * 2 - 28);
   const altura = 26 + linhas.length * 13;
   const y = topoY - altura;
@@ -148,7 +188,7 @@ function desenharAviso(ctx: ContextoDesenho, topoY: number): number {
   return y - 16;
 }
 
-function desenharResumo(ctx: ContextoDesenho, topoY: number, resultado: ProntidaoLgpdResultado): number {
+function desenharResumo(ctx: ContextoDesenho, topoY: number, resultado: ProntidaoGenericaResultado): number {
   const { page, fonteRegular, fonteNegrito } = ctx;
   const alturaCartao = 56;
   const x = MARGEM;
@@ -177,7 +217,7 @@ function desenharResumo(ctx: ContextoDesenho, topoY: number, resultado: Prontida
 
 const ALTURA_LINHA_ESTIMADA = 60;
 
-function desenharItem(ctx: ContextoDesenho, topoY: number, item: ItemProntidaoLgpd): { proximoY: number } {
+function desenharItem(ctx: ContextoDesenho, topoY: number, item: ItemProntidaoGenerico): { proximoY: number } {
   const { page, fonteRegular, fonteNegrito, fonteMono } = ctx;
   const cor = CORES_STATUS[item.status];
   const larguraTexto = LARGURA - MARGEM * 2 - 110;
@@ -223,16 +263,17 @@ function desenharItem(ctx: ContextoDesenho, topoY: number, item: ItemProntidaoLg
 }
 
 /**
- * Gera o PDF do Relatório de Prontidão para Regulação Brasileira (LGPD).
+ * Gera o PDF de um checklist de prontidão regulatória — núcleo genérico
+ * reaproveitado por LGPD, GDPR e US Privacy (`@/lib/internationalReadiness`).
  *
  * Função pura e assíncrona (pdf-lib é async). Quebra em múltiplas páginas
  * automaticamente quando os itens não cabem em uma só.
  */
-export async function gerarRelatorioProntidaoLgpdPdf(input: RelatorioProntidaoLgpdInput): Promise<Uint8Array> {
+export async function gerarRelatorioProntidaoPdf(input: RelatorioProntidaoGenericoInput): Promise<Uint8Array> {
   const documento = await PDFDocument.create();
-  documento.setTitle("AgentFlow — Relatório de Prontidão para Regulação Brasileira (LGPD)");
+  documento.setTitle(input.tituloDocumento);
   documento.setAuthor("AgentFlow");
-  documento.setSubject("LGPD — checklist de controles técnicos");
+  documento.setSubject(input.assuntoDocumento);
   documento.setProducer("AgentFlow Executive Board Report Engine");
 
   const fontes = {
@@ -242,8 +283,8 @@ export async function gerarRelatorioProntidaoLgpdPdf(input: RelatorioProntidaoLg
   };
 
   let ctx = novaPagina({ documento, ...fontes });
-  let y = desenharCabecalho(ctx, input);
-  y = desenharAviso(ctx, y);
+  let y = desenharCabecalho(ctx, input, input.tituloRelatorio, input.subtituloRegime);
+  y = desenharAviso(ctx, y, input.textoAviso);
   y = desenharResumo(ctx, y, input.resultado);
 
   for (const item of input.resultado.itens) {
@@ -259,4 +300,27 @@ export async function gerarRelatorioProntidaoLgpdPdf(input: RelatorioProntidaoLg
   ctx.page.drawText(rodape, { x: MARGEM, y: 24, size: 7.5, font: ctx.fonteRegular, color: TOKEN.ink400 });
 
   return documento.save();
+}
+
+const AVISO_LGPD =
+  "Isto não é um certificado de conformidade. É um checklist técnico dos controles que o AgentFlow já oferece, " +
+  "mapeados a obrigações da LGPD (registro de operações, segurança, minimização de dados). Itens fora do escopo " +
+  "do software continuam sendo decisão e responsabilidade do controlador — o cliente.";
+
+/**
+ * Gera o PDF do Relatório de Prontidão para Regulação Brasileira (LGPD).
+ *
+ * Wrapper fino sobre `gerarRelatorioProntidaoPdf` — mantém a assinatura e o
+ * conteúdo exatos de antes da generalização, para que nenhum chamador
+ * existente (`LgpdReadinessPanel`) precise mudar.
+ */
+export async function gerarRelatorioProntidaoLgpdPdf(input: RelatorioProntidaoLgpdInput): Promise<Uint8Array> {
+  return gerarRelatorioProntidaoPdf({
+    ...input,
+    tituloRelatorio: "Relatório de Prontidão para Regulação Brasileira",
+    subtituloRegime: "LGPD — Lei 13.709/2018",
+    textoAviso: AVISO_LGPD,
+    tituloDocumento: "AgentFlow — Relatório de Prontidão para Regulação Brasileira (LGPD)",
+    assuntoDocumento: "LGPD — checklist de controles técnicos",
+  });
 }

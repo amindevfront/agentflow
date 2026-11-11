@@ -69,6 +69,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "fluxo.excluido",
   "conector.excluido",
   "conversa.desfecho.registrado",
+  "relatorio.compliance-global.gerado",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

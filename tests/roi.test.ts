@@ -395,6 +395,10 @@ describe("formatarMoeda", () => {
     expect(formatarMoeda(590, "EUR", 5.9)).toBe("100,00 €");
   });
 
+  it("converte para MXN usando o câmbio informado (Expansão Global — América Latina)", () => {
+    expect(formatarMoeda(30, "MXN", 0.3)).toBe("$100.00");
+  });
+
   it("nunca propaga NaN/Infinity para a interface, em nenhuma moeda", () => {
     expect(formatarMoeda(Number.NaN, "USD", 5)).toBe("$0.00");
     expect(formatarMoeda(100, "GBP", 0)).not.toContain("NaN");
@@ -402,16 +406,17 @@ describe("formatarMoeda", () => {
 });
 
 describe("cambioParaMoeda", () => {
-  const configCambio = { cambioUsdBrl: 5, cambioGbpBrl: 6.9, cambioEurBrl: 5.9 };
+  const configCambio = { cambioUsdBrl: 5, cambioGbpBrl: 6.9, cambioEurBrl: 5.9, cambioMxnBrl: 0.3 };
 
   it("BRL nunca precisa de conversão", () => {
     expect(cambioParaMoeda(configCambio, "BRL")).toBe(1);
   });
 
-  it("devolve o câmbio correspondente para USD, GBP e EUR", () => {
+  it("devolve o câmbio correspondente para USD, GBP, EUR e MXN", () => {
     expect(cambioParaMoeda(configCambio, "USD")).toBe(5);
     expect(cambioParaMoeda(configCambio, "GBP")).toBe(6.9);
     expect(cambioParaMoeda(configCambio, "EUR")).toBe(5.9);
+    expect(cambioParaMoeda(configCambio, "MXN")).toBe(0.3);
   });
 });
 

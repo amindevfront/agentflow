@@ -399,7 +399,14 @@ export type AuditEventType =
    * tela de Governança, que lê isso como alguém mexendo nos parâmetros do
    * sistema.
    */
-  | "conversa.desfecho.registrado";
+  | "conversa.desfecho.registrado"
+  /**
+   * Download do Relatório de Prontidão Internacional (GDPR ou Privacidade
+   * EUA) — `@/components/governance/GlobalComplianceReadinessPanel`. Tipo
+   * PRÓPRIO, nunca reaproveita `relatorio.lgpd.gerado` (regime diferente —
+   * mesma lição do bug de `conversa.desfecho.registrado` acima).
+   */
+  | "relatorio.compliance-global.gerado";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

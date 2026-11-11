@@ -19,6 +19,7 @@ import {
   diagnosticoCripto,
   diagnosticoOrquestrador,
   diagnosticoTranscricao,
+  diagnosticoTwilio,
   diagnosticoWhatsapp,
 } from "@/lib/server/env";
 import { ErroApi, comGuarda, respostaJson } from "@/lib/server/http";
@@ -44,5 +45,6 @@ export const GET = comGuarda(async ({ usuario }) => {
     orquestradorIA: diagnosticoOrquestrador(),
     transcricaoAudio: diagnosticoTranscricao(),
     whatsapp: diagnosticoWhatsapp(),
+    twilio: diagnosticoTwilio(),
   });
 }, {});

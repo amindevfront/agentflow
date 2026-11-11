@@ -48,6 +48,7 @@ interface RespostaSaudeSistema {
   orquestradorIA?: DiagnosticoCapacidade;
   transcricaoAudio?: DiagnosticoCapacidade;
   whatsapp?: DiagnosticoCapacidade;
+  twilio?: DiagnosticoCapacidade;
   erro?: { codigo: string; mensagem: string };
 }
 
@@ -57,6 +58,7 @@ const ROTULO_CAPACIDADE: Record<keyof Omit<RespostaSaudeSistema, "erro">, string
   orquestradorIA: "IA de orquestração (execução real de fluxos)",
   transcricaoAudio: "Transcrição de áudio",
   whatsapp: "WhatsApp Business (Cloud API)",
+  twilio: "SMS / Twilio Gateway",
 };
 
 /**
@@ -72,6 +74,7 @@ const ROTULO_MOEDA: Record<Moeda, string> = {
   USD: "Dólar (US$)",
   GBP: "Libra (£)",
   EUR: "Euro (€)",
+  MXN: "Peso mexicano (MX$)",
 };
 const ROTULO_REGIME: Record<RegimeEncargos, string> = {
   "clt-br": "CLT (Brasil)",

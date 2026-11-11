@@ -276,6 +276,14 @@ export interface Connector {
    * envio usa para responder pelo número certo.
    */
   metaPhoneNumberId?: string;
+  /**
+   * Número Twilio (formato E.164, ex.: "+15551234567") — só usado quando
+   * `tipo` é o conector "SMS / Twilio Gateway". É o número `To` que a
+   * Twilio inclui em TODO webhook de SMS recebido, usado pra resolver qual
+   * workspace é dono da mensagem (mesmo papel de `metaPhoneNumberId` pro
+   * WhatsApp — ver `resolverConectorPorNumeroTwilio` em `@/lib/server/twilioSmsAdmin`).
+   */
+  twilioPhoneNumber?: string;
 }
 
 export interface TeamMember {

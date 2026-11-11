@@ -114,6 +114,7 @@ export const ROI_CONFIG_PADRAO: RoiConfig = {
   regimeEncargos: "clt-br",
   cambioGbpBrl: 6.9,
   cambioEurBrl: 5.9,
+  cambioMxnBrl: 0.32,
   minutosManuaisPorExecucao: 12,
   minutosRevisaoHumana: 8,
   // Uma conversa de chat manual típica (ler, entender, responder, registrar)
@@ -294,6 +295,7 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
     regimeEncargos: regimeEncargosValido(base.regimeEncargos),
     cambioGbpBrl: positivo(base.cambioGbpBrl, ROI_CONFIG_PADRAO.cambioGbpBrl, 1000),
     cambioEurBrl: positivo(base.cambioEurBrl, ROI_CONFIG_PADRAO.cambioEurBrl, 1000),
+    cambioMxnBrl: positivo(base.cambioMxnBrl, ROI_CONFIG_PADRAO.cambioMxnBrl, 1000),
     custoHoraOperadorBrl: positivo(base.custoHoraOperadorBrl, ROI_CONFIG_PADRAO.custoHoraOperadorBrl, 100_000),
     minutosManuaisPorExecucao: positivo(base.minutosManuaisPorExecucao, ROI_CONFIG_PADRAO.minutosManuaisPorExecucao, 10_080),
     minutosRevisaoHumana: positivo(base.minutosRevisaoHumana, ROI_CONFIG_PADRAO.minutosRevisaoHumana, 10_080),
@@ -309,10 +311,7 @@ function configuracaoValida(bruta: Partial<RoiConfig> | undefined): RoiConfig {
     ),
     cambioUsdBrl: positivo(base.cambioUsdBrl, ROI_CONFIG_PADRAO.cambioUsdBrl, 1000),
     custoPlataformaMensalBrl: positivo(base.custoPlataformaMensalBrl, 0, 10_000_000),
-    moedaExibicao:
-      base.moedaExibicao === "USD" || base.moedaExibicao === "GBP" || base.moedaExibicao === "EUR"
-        ? base.moedaExibicao
-        : "BRL",
+    moedaExibicao: MOEDAS_VALIDAS.has(base.moedaExibicao as Moeda) ? (base.moedaExibicao as Moeda) : "BRL",
     precoModeloPadrao: {
       modelo: base.precoModeloPadrao?.modelo ?? ROI_CONFIG_PADRAO.precoModeloPadrao.modelo,
       entradaUsdPorMilhao: positivo(
@@ -668,21 +667,45 @@ const LOCALE_POR_MOEDA: Record<Moeda, string> = {
   // pt-PT, não um locale genérico de zona do euro: Portugal é o mercado
   // explicitamente alvo desta expansão (ver @/lib/jurisdiction).
   EUR: "pt-PT",
+  MXN: "es-MX",
 };
+
+/**
+ * Única fonte de verdade de "quais moedas o produto exibe" — usada pelo
+ * seletor de moeda em TODO componente (BusinessROIWidget, OpexTaxShieldPanel,
+ * RoiSandbox, RoiConfigPanel) e pela validação de `moedaExibicao` acima.
+ *
+ * Bug real já documentado que isto corrige de vez: antes, cada componente
+ * duplicava sua própria lista de opções de moeda à mão — GBP chegou a ficar
+ * de fora de uma delas silenciosamente, e qualquer moeda sem `case` explícito
+ * em `cambioParaMoeda` herdava `cambioUsdBrl` por engano. Adicionar uma moeda
+ * nova agora é UMA linha aqui, nunca mais um "achar todo lugar que lista
+ * moeda" manual.
+ */
+export const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
+  { valor: "BRL", label: "R$" },
+  { valor: "USD", label: "US$" },
+  { valor: "GBP", label: "£" },
+  { valor: "EUR", label: "€" },
+  { valor: "MXN", label: "MX$" },
+];
+
+const MOEDAS_VALIDAS = new Set<Moeda>(OPCOES_MOEDA.map((o) => o.valor));
 
 /**
  * Taxa de conversão (1 unidade da moeda → BRL) a aplicar na exibição.
  * BRL é a moeda de cálculo interna — sempre 1. Centraliza a escolha entre
- * `cambioUsdBrl`/`cambioGbpBrl`/`cambioEurBrl` para que nenhum componente
- * repita a mesma ternária em cada card.
+ * `cambioUsdBrl`/`cambioGbpBrl`/`cambioEurBrl`/`cambioMxnBrl` para que
+ * nenhum componente repita a mesma ternária em cada card.
  */
 export function cambioParaMoeda(
-  config: Pick<RoiConfig, "cambioUsdBrl" | "cambioGbpBrl" | "cambioEurBrl">,
+  config: Pick<RoiConfig, "cambioUsdBrl" | "cambioGbpBrl" | "cambioEurBrl" | "cambioMxnBrl">,
   moeda: Moeda
 ): number {
   if (moeda === "USD") return config.cambioUsdBrl;
   if (moeda === "GBP") return config.cambioGbpBrl;
   if (moeda === "EUR") return config.cambioEurBrl;
+  if (moeda === "MXN") return config.cambioMxnBrl;
   return 1;
 }
 

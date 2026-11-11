@@ -228,6 +228,15 @@ export function RoiConfigPanel() {
           helpText="Aplicado quando a moeda de exibição é euro (€) — mercado Portugal."
         />
         <Field
+          label="Câmbio MXN → BRL"
+          type="number"
+          min={0}
+          step="0.01"
+          value={String(config.cambioMxnBrl)}
+          onChange={(e) => atualizarNumero("cambioMxnBrl", e.target.value)}
+          helpText="Aplicado quando a moeda de exibição é peso mexicano (MX$)."
+        />
+        <Field
           label="Custo mensal da plataforma (R$)"
           type="number"
           min={0}

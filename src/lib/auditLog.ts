@@ -328,4 +328,5 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "fluxo.excluido": "Fluxo excluído",
   "conector.excluido": "Conector excluído",
   "conversa.desfecho.registrado": "Desfecho de atendimento registrado",
+  "relatorio.compliance-global.gerado": "Relatório de prontidão internacional gerado (GDPR/Privacidade EUA)",
 };

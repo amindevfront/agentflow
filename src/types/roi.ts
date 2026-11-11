@@ -1,6 +1,6 @@
 // Tipos do motor de ROI e métricas financeiras.
 
-export type Moeda = "BRL" | "USD" | "GBP" | "EUR";
+export type Moeda = "BRL" | "USD" | "GBP" | "EUR" | "MXN";
 
 /**
  * Regime de encargos usado para decompor o custo humano evitado.
@@ -128,6 +128,8 @@ export interface RoiConfig {
   cambioGbpBrl: number;
   /** Taxa de conversão EUR → BRL, para exibição em euros. */
   cambioEurBrl: number;
+  /** Taxa de conversão MXN → BRL, para exibição em peso mexicano. */
+  cambioMxnBrl: number;
   /** Minutos que um humano gastaria para executar manualmente um fluxo. */
   minutosManuaisPorExecucao: number;
   /** Minutos consumidos por um operador em cada transbordo (custo da revisão). */

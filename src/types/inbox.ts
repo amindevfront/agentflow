@@ -136,6 +136,15 @@ export interface Conversation {
   whatsappTelefone?: string | null;
 
   /**
+   * Número de telefone (formato E.164) do contato via SMS/Twilio — mesmo
+   * papel de `whatsappTelefone`, canal separado porque o mesmo número de
+   * telefone pode legitimamente conversar pelos dois canais em paralelo
+   * (ex.: WhatsApp e SMS são provedores/credenciais diferentes mesmo
+   * quando, coincidência, o número do cliente é o mesmo).
+   */
+  smsTelefone?: string | null;
+
+  /**
    * Auto-Feedback de Conversão: desfecho comercial registrado pelo operador
    * ao concluir o atendimento. Alimenta `calcularInsightsConversao`
    * (`@/lib/inbox/conversionFeedback`), que por sua vez atualiza

@@ -36,6 +36,7 @@ import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { subscribeConversations } from "@/lib/inbox/firestore";
 import { subscribeCampaigns } from "@/lib/campaigns/firestore";
 import {
+  OPCOES_MOEDA,
   ROI_CONFIG_PADRAO,
   cambioParaMoeda,
   calcularRoi,
@@ -47,13 +48,6 @@ import {
 import { MetricCard } from "@/components/ui/MetricCard";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 import { EmptyState } from "@/components/ui/EmptyState";
-
-const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
-  { valor: "BRL", label: "R$" },
-  { valor: "USD", label: "US$" },
-  { valor: "GBP", label: "£" },
-  { valor: "EUR", label: "€" },
-];
 
 const OPCOES_REGIME: Array<{ valor: RegimeEncargos; label: string }> = [
   { valor: "clt-br", label: "CLT (Brasil)" },

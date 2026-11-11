@@ -379,33 +379,42 @@ export function NeuralInbox() {
       });
       setResposta("");
 
-      // WhatsApp é o único canal com entrega EXTERNA real nesta versão — a
-      // mensagem acima já ficou registrada na conversa independente disto;
+      // WhatsApp e SMS são os canais com entrega EXTERNA real nesta versão —
+      // a mensagem acima já ficou registrada na conversa independente disto;
       // uma falha aqui não desfaz o registro, só avisa que o cliente não
-      // recebeu de verdade (ex.: janela de 24h de atendimento fechada).
-      if (selecionada.canal === "whatsapp") {
+      // recebeu de verdade (ex.: janela de 24h de atendimento fechada no
+      // WhatsApp, ou credencial da Twilio ausente).
+      const rotaEnvioExterno =
+        selecionada.canal === "whatsapp"
+          ? "/api/inbox/whatsapp/send"
+          : selecionada.canal === "sms"
+            ? "/api/inbox/sms/send"
+            : null;
+      if (rotaEnvioExterno) {
         try {
           const token = await auth?.currentUser?.getIdToken();
           const resp = await fetchComTimeout(
-            "/api/inbox/whatsapp/send",
+            rotaEnvioExterno,
             {
               method: "POST",
               headers: { "content-type": "application/json", authorization: `Bearer ${token ?? ""}` },
               body: JSON.stringify({ conversationId: selecionada.id, texto: resposta }),
             },
-            "Não foi possível entregar a mensagem pelo WhatsApp agora.",
+            `Não foi possível entregar a mensagem por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} agora.`,
             15_000
           );
           if (!resp.ok) {
             const corpo = (await resp.json().catch(() => null)) as { erro?: { mensagem?: string } } | null;
             setErro(
               corpo?.erro?.mensagem ??
-                "A resposta foi registrada na conversa, mas não foi entregue pelo WhatsApp de verdade."
+                `A resposta foi registrada na conversa, mas não foi entregue por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} de verdade.`
             );
           }
         } catch (e) {
-          reportarErro(e, "inbox:enviar-whatsapp");
-          setErro("A resposta foi registrada na conversa, mas não foi entregue pelo WhatsApp de verdade.");
+          reportarErro(e, "inbox:enviar-externo");
+          setErro(
+            `A resposta foi registrada na conversa, mas não foi entregue por ${selecionada.canal === "whatsapp" ? "WhatsApp" : "SMS"} de verdade.`
+          );
         }
       }
     } catch (e) {

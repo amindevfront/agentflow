@@ -11,17 +11,10 @@
 
 import { useMemo, useState } from "react";
 import type { Moeda } from "@/types";
-import { ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda } from "@/lib/roi";
+import { OPCOES_MOEDA, ROI_CONFIG_PADRAO, cambioParaMoeda, formatarMoeda } from "@/lib/roi";
 import { SegmentedFilter } from "@/components/ui/SegmentedFilter";
 
 const DIAS_NO_MES = 26;
-
-const OPCOES_MOEDA: Array<{ valor: Moeda; label: string }> = [
-  { valor: "BRL", label: "R$" },
-  { valor: "USD", label: "US$" },
-  { valor: "GBP", label: "£" },
-  { valor: "EUR", label: "€" },
-];
 
 export function RoiSandbox() {
   const [leadsPerdidosNoite, setLeadsPerdidosNoite] = useState(12);
