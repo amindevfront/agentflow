@@ -63,7 +63,7 @@ function gerarSegredoAleatorio(): string {
 }
 
 export default function ConnectorsPage() {
-  const { workspaceId } = useWorkspace();
+  const { workspaceId, appUser } = useWorkspace();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [nome, setNome] = useState("");
@@ -195,6 +195,15 @@ export default function ConnectorsPage() {
       setNomeError("Informe o token do bot (gerado pelo @BotFather no Telegram) — pelo menos 8 caracteres.");
       return;
     }
+    if (tipo === TIPO_TELEGRAM && appUser?.papel !== "admin") {
+      // `armazenarCredencial` (Cofre Zero-Trust) exige admin na própria
+      // `firestore.rules` (`isAdminOf`) — diferente da criação do conector em
+      // si, que qualquer membro pode fazer. Sem esta checagem ANTES de
+      // tentar, um membro "operações" criaria o conector e só descobriria a
+      // recusa no passo seguinte, com um conector órfão sem token.
+      setNomeError("Só administradores do workspace podem cadastrar um bot do Telegram (o token vai pro Cofre Zero-Trust).");
+      return;
+    }
 
     setNomeError(null);
     setSaving(true);
@@ -223,14 +232,26 @@ export default function ConnectorsPage() {
           status,
           telegramWebhookSecret: webhookSecret,
         });
-        const credencial = await armazenarCredencial({
-          nome: `Bot Telegram — ${validado.data.nome}`,
-          tipo: "bearer-token",
-          segredo: telegramBotToken.trim(),
-          conectorId: connectorId,
-          workspaceId,
-        });
-        await updateConnector(connectorId, { telegramBotTokenCredentialId: credencial.id });
+        try {
+          const credencial = await armazenarCredencial({
+            nome: `Bot Telegram — ${validado.data.nome}`,
+            tipo: "bearer-token",
+            segredo: telegramBotToken.trim(),
+            conectorId: connectorId,
+            workspaceId,
+          });
+          await updateConnector(connectorId, { telegramBotTokenCredentialId: credencial.id });
+        } catch (erroCredencial) {
+          // O conector já foi criado (passo 1), mas selar o token falhou —
+          // nunca deixar um conector "Telegram" órfão, sem credencial
+          // vinculada, aparecendo como "conectado" na tela sem jamais poder
+          // funcionar. Desfaz o passo 1 e relança o erro original.
+          await deleteConnector(connectorId).catch(() => {
+            // Mesmo se o rollback falhar, o erro original (mais relevante
+            // pro usuário) ainda precisa aparecer — ver o throw abaixo.
+          });
+          throw erroCredencial;
+        }
         setTelegramDetalhesId(connectorId);
       } else {
         await createConnector(workspaceId, {
@@ -332,9 +353,10 @@ export default function ConnectorsPage() {
               className="h-10 rounded-[var(--radius-sm)] border border-ink-100 bg-white px-3 text-sm outline-none focus:border-signal-500 focus:ring-2 focus:ring-signal-100"
             >
               {CONNECTOR_TYPES.map((t) => (
-                <option key={t} value={t}>
+                <option key={t} value={t} disabled={t === TIPO_TELEGRAM && appUser?.papel !== "admin"}>
                   {t}
                   {TIPOS_SEM_INGESTAO_REAL.has(t) ? " — ainda não recebe mensagens reais" : ""}
+                  {t === TIPO_TELEGRAM && appUser?.papel !== "admin" ? " — exclusivo de admin" : ""}
                 </option>
               ))}
             </select>
