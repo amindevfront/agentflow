@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { subscribeFlows, subscribeFlowRuns } from "@/lib/firestore";
+import { subscribeFlows, subscribeFlowRuns, deleteFlow } from "@/lib/firestore";
 import { formatRelativeTime } from "@/lib/utils";
 import { useWorkspace } from "@/lib/workspace";
 import { useWorkspaceDoc } from "@/lib/queries/workspace";
@@ -9,6 +9,7 @@ import { useMedirCarregamentoRota } from "@/lib/telemetry/useRoutePerformance";
 import { ListRow } from "@/components/ui/ListRow";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { FlowRail } from "@/components/ui/FlowRail";
 import { FlowSettingsForm } from "@/components/flows/FlowSettingsForm";
 import { PayloadSimulator } from "@/components/flows/PayloadSimulator";
@@ -24,6 +25,8 @@ export default function FlowsPage() {
   const [runs, setRuns] = useState<FlowRun[]>([]);
   const [search, setSearch] = useState("");
   const [selectedId, setSelectedId] = useState<string | "new" | null>(null);
+  const [fluxoParaExcluir, setFluxoParaExcluir] = useState<Flow | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
   // Cacheado (ver `src/lib/queries/workspace.ts`) — sem isso, cada visita a
   // `/flows` pagava uma leitura nova de `workspaces/{id}` só para sugerir
   // playbooks, um valor que praticamente nunca muda após o onboarding.
@@ -76,6 +79,18 @@ export default function FlowsPage() {
   const selectedFlow = selectedId && selectedId !== "new" ? flows.find((f) => f.id === selectedId) ?? null : null;
   const activeRun = selectedFlow ? runs.find((r) => r.flowId === selectedFlow.id) ?? null : null;
 
+  async function confirmarExclusao() {
+    if (!fluxoParaExcluir) return;
+    setExcluindo(true);
+    try {
+      await deleteFlow(fluxoParaExcluir.id);
+      if (selectedId === fluxoParaExcluir.id) setSelectedId(null);
+      setFluxoParaExcluir(null);
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <PrimeirosPassosCard temNicho={Boolean(workspace?.setor)} temFluxo={flows.length > 0} ehAdmin={appUser?.papel === "admin"} />
@@ -126,6 +141,8 @@ export default function FlowsPage() {
                 totalSteps={flow.steps.length}
                 doneSteps={flow.status === "concluido" ? flow.steps.length : 0}
                 onClick={() => setSelectedId(flow.id)}
+                onDelete={() => setFluxoParaExcluir(flow)}
+                deleteLabel={`Excluir fluxo ${flow.nome}`}
               />
             ))}
           </div>
@@ -191,6 +208,24 @@ export default function FlowsPage() {
         </section>
       </div>
       </div>
+
+      <Modal
+        open={fluxoParaExcluir !== null}
+        onClose={() => setFluxoParaExcluir(null)}
+        titleId="excluir-fluxo-title"
+        title={`Excluir "${fluxoParaExcluir?.nome ?? ""}"?`}
+        body="O fluxo é apagado permanentemente, junto com seu histórico de execuções. Útil para remover um fluxo de teste/demonstração antes de abrir o workspace para um cliente real. Isso não afeta conversas da Neural Inbox nem outros fluxos."
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setFluxoParaExcluir(null)}>
+              Cancelar
+            </Button>
+            <Button variant="danger-solid" size="sm" loading={excluindo} onClick={confirmarExclusao}>
+              Sim, excluir
+            </Button>
+          </>
+        }
+      />
     </div>
   );
 }

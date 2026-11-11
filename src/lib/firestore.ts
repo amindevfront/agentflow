@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   getDocs,
@@ -257,6 +258,19 @@ export async function updateFlow(flowId: string, patch: Partial<Flow>): Promise<
       ...sanitizeFlowFields(patch),
       atualizadoEm: new Date().toISOString(),
     });
+  });
+}
+
+/**
+ * Exclui um fluxo (ex.: um fluxo de teste/demonstração criado ao aprender o
+ * produto, antes de abrir o workspace pra um cliente real). `firestore.rules`
+ * já permite `write` (que inclui delete) em `flows/{id}` para qualquer membro
+ * do workspace dono do documento — não é uma ação exclusiva de admin.
+ */
+export async function deleteFlow(flowId: string): Promise<void> {
+  return enfileirarEscrita("Excluir fluxo", async () => {
+    const database = requireDb();
+    await deleteDoc(doc(database, "flows", flowId));
   });
 }
 

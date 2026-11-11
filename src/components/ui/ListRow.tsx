@@ -28,6 +28,10 @@ interface ListRowProps {
   totalSteps?: number;
   doneSteps?: number;
   onClick?: () => void;
+  /** Quando presente, mostra um botão de lixeira ao fim da linha (ex.: excluir um fluxo de teste). */
+  onDelete?: () => void;
+  /** Texto de acessibilidade do botão de lixeira — padrão "Excluir {title}". */
+  deleteLabel?: string;
 }
 
 /** Linha de lista densa, reaproveitada em Fluxos, Execuções, Conectores e Equipe. */
@@ -40,14 +44,33 @@ export function ListRow({
   totalSteps,
   doneSteps,
   onClick,
+  onDelete,
+  deleteLabel,
 }: ListRowProps) {
-  const Comp = onClick ? "button" : "div";
+  // Quando há um botão de lixeira aninhado (`onDelete`), a linha não pode ser
+  // um <button> nativo — <button> dentro de <button> é HTML inválido e o
+  // navegador reordena/fecha a árvore sozinho, quebrando o clique de ambos.
+  // `div[role="button"]` com teclado equivalente mantém a mesma acessibilidade
+  // sem esse problema, então ele passa a ser o padrão sempre que há onClick.
+  const interativo = Boolean(onClick);
   return (
-    <Comp
-      type={onClick ? "button" : undefined}
+    <div
+      role={interativo ? "button" : undefined}
+      tabIndex={interativo ? 0 : undefined}
       onClick={onClick}
+      onKeyDown={
+        interativo
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
       className={cn(
         "flex w-full items-center gap-3 rounded-[var(--radius-sm)] border px-3 py-2.5 text-left transition-colors",
+        interativo && "cursor-pointer",
         active ? "border-signal-500 bg-signal-50" : "border-transparent hover:bg-mist-50"
       )}
     >
@@ -61,6 +84,27 @@ export function ListRow({
       )}
       {time && <span className="mono flex-none text-xs text-ink-400">{time}</span>}
       <Pill status={status} />
-    </Comp>
+      {onDelete && (
+        <button
+          type="button"
+          aria-label={deleteLabel ?? `Excluir ${title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          className="flex-none rounded-[var(--radius-sm)] p-1.5 text-ink-400 transition-colors hover:bg-state-error-bg hover:text-state-error"
+        >
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M2.5 4.5h11M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 4.5l.5 8a1 1 0 0 0 1 .95h3a1 1 0 0 0 1-.95l.5-8"
+              stroke="currentColor"
+              strokeWidth="1.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
