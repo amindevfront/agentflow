@@ -59,6 +59,13 @@ describe("webhookUrlSchema", () => {
     expect(webhookUrlSchema.safeParse("http://exemplo.com").success).toBe(false);
     expect(webhookUrlSchema.safeParse("https://").success).toBe(false);
   });
+
+  it("rejeita IP literal — primeira camada contra SSRF (loopback, privado, metadado de nuvem)", () => {
+    expect(webhookUrlSchema.safeParse("https://127.0.0.1/hook").success).toBe(false);
+    expect(webhookUrlSchema.safeParse("https://169.254.169.254/latest/meta-data").success).toBe(false);
+    expect(webhookUrlSchema.safeParse("https://10.0.0.5:8080/hook").success).toBe(false);
+    expect(webhookUrlSchema.safeParse("https://192.168.1.1/hook").success).toBe(false);
+  });
 });
 
 describe("schemas compostos", () => {

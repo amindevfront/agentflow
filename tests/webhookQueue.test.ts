@@ -6,6 +6,7 @@ import {
   calcularBackoffMs,
   decidirProximoEstadoEntrega,
   executarTransacaoRegistroEntrega,
+  ipEstaEmRedeBloqueada,
 } from "@/lib/server/connectors/webhookQueue";
 import { montarPayloadConnectHub } from "@/lib/server/connectors/webhookDispatcher";
 import { verificarCadeiaAuditoria } from "@/lib/crypto/auditChain";
@@ -153,5 +154,34 @@ describe("executarTransacaoRegistroEntrega (Resiliência de Fila — persistênc
 
     const verificacao = await verificarCadeiaAuditoria(entradas, CHAVE_HMAC);
     expect(verificacao.integra).toBe(true);
+  });
+});
+
+describe("ipEstaEmRedeBloqueada (Connect Hub — blindagem contra SSRF/DNS rebinding)", () => {
+  it("bloqueia loopback, redes privadas RFC 1918 e o metadado de nuvem (IPv4)", () => {
+    expect(ipEstaEmRedeBloqueada("127.0.0.1", 4)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("10.0.0.5", 4)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("172.16.0.1", 4)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("172.31.255.254", 4)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("192.168.1.1", 4)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("169.254.169.254", 4)).toBe(true); // metadado AWS/GCP/Azure
+    expect(ipEstaEmRedeBloqueada("0.0.0.0", 4)).toBe(true);
+  });
+
+  it("permite IPs públicos legítimos (IPv4)", () => {
+    expect(ipEstaEmRedeBloqueada("8.8.8.8", 4)).toBe(false);
+    expect(ipEstaEmRedeBloqueada("172.15.255.255", 4)).toBe(false); // fora do range 172.16-31
+    expect(ipEstaEmRedeBloqueada("172.32.0.1", 4)).toBe(false); // fora do range 172.16-31
+  });
+
+  it("bloqueia loopback, unique-local e link-local (IPv6)", () => {
+    expect(ipEstaEmRedeBloqueada("::1", 6)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("fe80::1", 6)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("fc00::1", 6)).toBe(true);
+    expect(ipEstaEmRedeBloqueada("fd12:3456::1", 6)).toBe(true);
+  });
+
+  it("permite IPv6 público legítimo", () => {
+    expect(ipEstaEmRedeBloqueada("2606:4700:4700::1111", 6)).toBe(false);
   });
 });

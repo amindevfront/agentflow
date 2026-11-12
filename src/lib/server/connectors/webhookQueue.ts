@@ -23,6 +23,7 @@
 // entrega (nunca um documento novo por tentativa) — `tentativas` é o
 // histórico de uma entrega, não uma contagem de entregas distintas.
 
+import { lookup as dnsLookup } from "node:dns/promises";
 import type { Transaction } from "firebase-admin/firestore";
 import type { AuditEventBody, ConnectHubDelivery, ConnectHubDeliveryStatus, ConnectHubPayload } from "@/types";
 import { executarTransacaoDeSelo } from "./../auditChainStore";
@@ -134,6 +135,60 @@ async function resolverConfigConnectHub(workspaceId: string): Promise<ConfigConn
   }
 }
 
+/**
+ * Faixas de IP que nenhum webhook de cliente tem motivo legítimo para
+ * resolver — loopback, redes privadas RFC 1918, link-local (inclui
+ * `169.254.169.254`, o endpoint de metadados de toda nuvem AWS/GCP/Azure) e
+ * o equivalente IPv6. `webhookUrlSchema` (`@/lib/validation/schemas.ts`) já
+ * rejeita um IP literal/`localhost` no MOMENTO EM QUE O ADMIN CONFIGURA a
+ * URL — mas isso não impede SSRF via DNS rebinding: um domínio público
+ * pode resolver para um IP válido na hora de salvar e para
+ * `169.254.169.254` na hora em que este tick realmente envia a requisição.
+ * Por isso a resolução é refeita a cada tentativa de envio, nunca só na
+ * validação de cadastro.
+ */
+export function ipEstaEmRedeBloqueada(ip: string, familia: number): boolean {
+  if (familia === 4) {
+    const octetos = ip.split(".").map(Number);
+    if (octetos.length !== 4 || octetos.some((o) => Number.isNaN(o))) return true; // formato inesperado — bloqueia por precaução
+    const [a, b] = octetos;
+    if (a === 127 || a === 10 || a === 0) return true;
+    if (a === 169 && b === 254) return true; // link-local, inclui o metadado de nuvem
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    return false;
+  }
+  const normalizado = ip.toLowerCase();
+  if (normalizado === "::1") return true; // loopback IPv6
+  if (normalizado.startsWith("fe80:") || normalizado.startsWith("fe8") || normalizado.startsWith("fe9")) return true; // link-local
+  if (/^f[cd][0-9a-f]{2}:/.test(normalizado)) return true; // unique local (fc00::/7)
+  return false;
+}
+
+/**
+ * Resolve o hostname da URL e recusa se QUALQUER IP resultante cair numa
+ * faixa bloqueada — `dns.lookup` com `all: true` retorna todos os
+ * endereços que o `fetch` real poderia escolher, não só o primeiro.
+ * Qualquer erro de resolução (domínio inexistente, DNS indisponível) também
+ * resulta em bloqueio: "não consigo confirmar que é seguro" nunca deve virar
+ * "deixa passar".
+ */
+async function urlApontaParaRedeInterna(urlBruta: string): Promise<boolean> {
+  let host: string;
+  try {
+    host = new URL(urlBruta).hostname;
+  } catch {
+    return true;
+  }
+  try {
+    const enderecos = await dnsLookup(host, { all: true });
+    return enderecos.some((endereco) => ipEstaEmRedeBloqueada(endereco.address, endereco.family));
+  } catch (erro) {
+    console.error(`[connect-hub] falha ao resolver DNS de "${host}" — bloqueando por precaução:`, erro);
+    return true;
+  }
+}
+
 interface ResultadoTentativaEnvio {
   /** `false` quando o workspace não tem Connect Hub configurado, ou o segredo está inacessível — nunca uma falha de rede, só "nada a tentar". */
   configurado: boolean;
@@ -156,6 +211,13 @@ async function tentarEnviarSobDisjuntor(
 ): Promise<ResultadoTentativaEnvio> {
   const config = await resolverConfigConnectHub(workspaceId);
   if (!config) return { configurado: false, entregue: false, webhookUrl: null };
+
+  if (await urlApontaParaRedeInterna(config.webhookUrl)) {
+    console.error(
+      `[connect-hub] workspace ${workspaceId}: URL do Connect Hub resolve para uma rede interna/privada — envio bloqueado (SSRF).`
+    );
+    return { configurado: true, entregue: false, webhookUrl: config.webhookUrl };
+  }
 
   const segredoWebhook = await lerSegredoCredencialAdmin(workspaceId, config.secretCredentialId);
   if (!segredoWebhook) {
@@ -329,6 +391,26 @@ export async function drenarFilaConnectHub(
     if (delivery.proximaTentativaEm && new Date(delivery.proximaTentativaEm).getTime() > agora.getTime()) {
       continue; // Ainda não chegou a hora desta entrega — backoff respeitado.
     }
+
+    // Reivindica a entrega com um lease curto ANTES de reenviar ao endpoint
+    // real do cliente — sem isto, duas execuções concorrentes desta
+    // drenagem (cron duplicado/retry da Vercel) veriam o MESMO documento
+    // "falhou" na varredura acima e ambas reenviariam o webhook ao cliente.
+    // Se esta tentativa cair antes de `registrarEntrega` persistir o
+    // resultado real, o lease expira em 60s e a próxima drenagem tenta de
+    // novo — nunca trava a entrega para sempre.
+    const refDelivery = db.collection(COLECAO_ENTREGAS).doc(delivery.id);
+    const reivindicada = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(refDelivery);
+      if (!snap.exists) return false;
+      const atual = snap.data() as ConnectHubDelivery;
+      if (atual.status !== "falhou") return false;
+      if (atual.proximaTentativaEm && new Date(atual.proximaTentativaEm).getTime() > agora.getTime()) return false;
+      tx.update(refDelivery, { proximaTentativaEm: new Date(agora.getTime() + 60_000).toISOString() });
+      return true;
+    });
+    if (!reivindicada) continue;
+
     processados += 1;
 
     const tentativa = await tentarEnviarSobDisjuntor(delivery.workspaceId, delivery.payload, executor);

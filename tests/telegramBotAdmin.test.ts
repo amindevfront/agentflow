@@ -72,7 +72,19 @@ function colecaoRef(prefixo: string) {
 }
 
 function criarDbFalso() {
-  return { collection: (nome: string) => colecaoRef(nome) };
+  return {
+    collection: (nome: string) => colecaoRef(nome),
+    // Suficiente para `executarTransacaoDeInteracao` (episodicMemory.ts), que
+    // só usa `get`/`set` da transação — sem isolamento real entre leitura e
+    // escrita, mas os testes aqui não exercitam concorrência nesse ponto.
+    runTransaction: async <T>(fn: (tx: { get: (ref: RefFalsa) => ReturnType<RefFalsa["get"]>; set: (ref: RefFalsa, dados: Record<string, unknown>) => void }) => Promise<T>) =>
+      fn({
+        get: (ref) => ref.get(),
+        set: (ref, dados) => {
+          armazenamento.set(ref._caminho, dados);
+        },
+      }),
+  };
 }
 
 vi.mock("@/lib/server/firebaseAdmin", () => ({
@@ -94,7 +106,7 @@ describe("resolverConectorTelegram / resolverConectorTelegramDoWorkspace", () =>
       workspaceId: "ws-a",
       tipo: "Telegram Bot API",
       telegramBotTokenCredentialId: "cred-a1",
-      telegramWebhookSecret: "segredo-webhook-a",
+      telegramWebhookSecretCredentialId: "cred-webhook-a1",
     });
   });
 
@@ -103,7 +115,7 @@ describe("resolverConectorTelegram / resolverConectorTelegramDoWorkspace", () =>
     const resultado = await resolverConectorTelegram("conn-tg-a");
     expect(resultado?.workspaceId).toBe("ws-a");
     expect(resultado?.credentialId).toBe("cred-a1");
-    expect(resultado?.webhookSecret).toBe("segredo-webhook-a");
+    expect(resultado?.webhookSecretCredentialId).toBe("cred-webhook-a1");
   });
 
   it("conector inexistente devolve null", async () => {
@@ -177,6 +189,32 @@ describe("registrarMensagemTelegramAdmin", () => {
     const a = await registrarMensagemTelegramAdmin({ workspaceId: "ws-a", chatId: "111", remetenteNome: "A", texto: "oi" });
     const b = await registrarMensagemTelegramAdmin({ workspaceId: "ws-b", chatId: "111", remetenteNome: "B", texto: "oi" });
     expect(a.conversationId).not.toBe(b.conversationId);
+  });
+
+  it("idempotência: reenvio do MESMO message_id (retry de webhook) não duplica a mensagem nem o contador", async () => {
+    const { registrarMensagemTelegramAdmin } = await import("@/lib/server/telegramBotAdmin");
+    const entrada = {
+      workspaceId: "ws-a",
+      chatId: "123456789",
+      remetenteNome: "Fulano",
+      texto: "Olá, preciso de ajuda",
+      idExterno: "update-42",
+    };
+
+    const primeira = await registrarMensagemTelegramAdmin(entrada);
+    const retry = await registrarMensagemTelegramAdmin(entrada);
+
+    expect(retry.conversationId).toBe(primeira.conversationId);
+    expect(retry.messageId).toBe(primeira.messageId);
+
+    const conversa = armazenamento.get(`conversations/${primeira.conversationId}`);
+    // Não "2" — o retry nunca chega a gravar nem a incrementar contador.
+    expect(conversa?.totalMensagensCliente).toBe(1);
+
+    const mensagens = [...armazenamento.keys()].filter((chave) =>
+      chave.startsWith(`conversations/${primeira.conversationId}/mensagens/`)
+    );
+    expect(mensagens).toHaveLength(1);
   });
 });
 

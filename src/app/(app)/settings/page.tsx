@@ -111,6 +111,12 @@ export default function SettingsPage() {
   const [moedaAtual, setMoedaAtual] = useState<Moeda | null>(null);
   const [regimeAtual, setRegimeAtual] = useState<RegimeEncargos | null>(null);
   const [gavetaErro, setGavetaErro] = useState<string | null>(null);
+  // Guarda de "já está processando": sem isto, cliques rápidos no mesmo
+  // módulo (ou em módulos diferentes) disparam `patchWorkspace` concorrentes
+  // calculados a partir do MESMO snapshot de `extrasAtivas` — a resposta que
+  // chegar por último "ganha", podendo reverter silenciosamente o clique
+  // anterior do usuário (lost update).
+  const [gavetasSalvando, setGavetasSalvando] = useState<Set<NicheKey>>(new Set());
   const [idiomaErro, setIdiomaErro] = useState<string | null>(null);
   const [idiomaSalvando, setIdiomaSalvando] = useState(false);
 
@@ -196,7 +202,9 @@ export default function SettingsPage() {
    */
   async function handleToggleGaveta(id: NicheKey, ativar: boolean) {
     if (!workspaceId || !workspace?.setor) return;
+    if (gavetasSalvando.has(id)) return; // já em andamento — ignora o clique repetido
     setGavetaErro(null);
+    setGavetasSalvando((atual) => new Set(atual).add(id));
     try {
       const extrasAtuais = [...extrasAtivas];
       const novasExtras = ativar ? Array.from(new Set([...extrasAtuais, id])) : extrasAtuais.filter((m) => m !== id);
@@ -211,6 +219,12 @@ export default function SettingsPage() {
       // Firestore, "Failed to fetch") vai só para o log de diagnóstico.
       reportarErro(erro, "settings:gaveta-extra");
       setGavetaErro("Não foi possível salvar esta gaveta agora. Tente novamente em alguns instantes.");
+    } finally {
+      setGavetasSalvando((atual) => {
+        const proximo = new Set(atual);
+        proximo.delete(id);
+        return proximo;
+      });
     }
   }
 
@@ -439,8 +453,9 @@ export default function SettingsPage() {
                       <input
                         type="checkbox"
                         checked={ativa}
+                        disabled={gavetasSalvando.has(id)}
                         onChange={(e) => handleToggleGaveta(id, e.target.checked)}
-                        className="h-4 w-4 flex-none accent-signal-600"
+                        className="h-4 w-4 flex-none accent-signal-600 disabled:opacity-50"
                       />
                     </label>
                   );

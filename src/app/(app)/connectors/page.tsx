@@ -82,6 +82,15 @@ export default function ConnectorsPage() {
   const [twilioFaltando, setTwilioFaltando] = useState<string[] | null>(null);
   const [metaMessagingFaltando, setMetaMessagingFaltando] = useState<string[] | null>(null);
   const [telegramDetalhesId, setTelegramDetalhesId] = useState<string | null>(null);
+  // Segredo de webhook em claro, visível só nesta sessão do navegador, só
+  // para o conector que acabou de ser criado — depois de selado no Cofre
+  // (`credentialSecrets`), o Firestore nunca mais devolve o valor em claro
+  // (ver `telegramWebhookSecretCredentialId` em `@/types`), então não há de
+  // onde reconstruí-lo após um reload da página.
+  const [telegramSegredoRecemCriado, setTelegramSegredoRecemCriado] = useState<{
+    connectorId: string;
+    segredo: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -221,37 +230,50 @@ export default function ConnectorsPage() {
       const status = TIPOS_COM_INGESTAO_REAL.has(validado.data.tipo) ? "conectado" : "nao-configurado";
 
       if (validado.data.tipo === TIPO_TELEGRAM) {
-        // Telegram é o único canal cujo segredo de autenticação (o token do
-        // bot) precisa passar pelo Cofre Zero-Trust, não um campo em claro —
-        // isso exige 3 passos em ordem: (1) criar o conector pra existir um
-        // id ao qual vincular a credencial, (2) selar o token vinculado a
-        // esse id, (3) gravar o id da credencial de volta no conector.
+        // Telegram tem DOIS segredos que precisam passar pelo Cofre
+        // Zero-Trust, não um campo em claro: o token do bot (autentica NÓS
+        // contra a API do Telegram) e o segredo de webhook (autentica o
+        // TELEGRAM contra NÓS — era gravado em claro e renderizado na tela
+        // para qualquer membro do workspace, não só admin, o que permitia
+        // forjar POSTs ao webhook; ver `telegramWebhookSecretCredentialId`
+        // em `@/types`). Isso exige: (1) criar o conector pra existir um id
+        // ao qual vincular as credenciais, (2) selar as duas vinculadas a
+        // esse id, (3) gravar os dois ids de credencial de volta no conector.
         const webhookSecret = gerarSegredoAleatorio();
-        const connectorId = await createConnector(workspaceId, {
-          ...validado.data,
-          status,
-          telegramWebhookSecret: webhookSecret,
-        });
+        const connectorId = await createConnector(workspaceId, { ...validado.data, status });
         try {
-          const credencial = await armazenarCredencial({
-            nome: `Bot Telegram — ${validado.data.nome}`,
-            tipo: "bearer-token",
-            segredo: telegramBotToken.trim(),
-            conectorId: connectorId,
-            workspaceId,
+          const [credencialToken, credencialWebhook] = await Promise.all([
+            armazenarCredencial({
+              nome: `Bot Telegram — ${validado.data.nome}`,
+              tipo: "bearer-token",
+              segredo: telegramBotToken.trim(),
+              conectorId: connectorId,
+              workspaceId,
+            }),
+            armazenarCredencial({
+              nome: `Segredo de webhook Telegram — ${validado.data.nome}`,
+              tipo: "webhook-secret",
+              segredo: webhookSecret,
+              conectorId: connectorId,
+              workspaceId,
+            }),
+          ]);
+          await updateConnector(connectorId, {
+            telegramBotTokenCredentialId: credencialToken.id,
+            telegramWebhookSecretCredentialId: credencialWebhook.id,
           });
-          await updateConnector(connectorId, { telegramBotTokenCredentialId: credencial.id });
         } catch (erroCredencial) {
-          // O conector já foi criado (passo 1), mas selar o token falhou —
-          // nunca deixar um conector "Telegram" órfão, sem credencial
-          // vinculada, aparecendo como "conectado" na tela sem jamais poder
-          // funcionar. Desfaz o passo 1 e relança o erro original.
+          // O conector já foi criado (passo 1), mas selar algum dos dois
+          // segredos falhou — nunca deixar um conector "Telegram" órfão, sem
+          // credencial vinculada, aparecendo como "conectado" na tela sem
+          // jamais poder funcionar. Desfaz o passo 1 e relança o erro original.
           await deleteConnector(connectorId).catch(() => {
             // Mesmo se o rollback falhar, o erro original (mais relevante
             // pro usuário) ainda precisa aparecer — ver o throw abaixo.
           });
           throw erroCredencial;
         }
+        setTelegramSegredoRecemCriado({ connectorId, segredo: webhookSecret });
         setTelegramDetalhesId(connectorId);
       } else {
         await createConnector(workspaceId, {
@@ -542,7 +564,17 @@ export default function ConnectorsPage() {
                       <p className="mono mt-1 break-all">
                         URL: {typeof window !== "undefined" ? window.location.origin : ""}/api/inbox/webhook/telegram/{c.id}
                       </p>
-                      <p className="mono mt-1 break-all">secret_token: {c.telegramWebhookSecret ?? "—"}</p>
+                      {telegramSegredoRecemCriado?.connectorId === c.id ? (
+                        <p className="mono mt-1 break-all">
+                          secret_token: {telegramSegredoRecemCriado.segredo}
+                        </p>
+                      ) : (
+                        <p className="mt-1 text-ink-500">
+                          secret_token: visível só no momento da criação deste conector — por segurança, o
+                          Cofre Zero-Trust nunca devolve o valor em claro depois de selado. Se foi perdido,
+                          exclua este conector e crie um novo.
+                        </p>
+                      )}
                     </div>
                   )}
                 </>

@@ -15,6 +15,10 @@ import { PiiVault, maskDeep } from "@/lib/guardrails";
 import { hmacSha256Hex } from "@/lib/crypto/digest";
 import { jsonCanonico } from "@/lib/crypto/canonical";
 import { textoParaBytes } from "@/lib/crypto/encoding";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
+
+/** Prazo máximo de espera pelo endpoint do cliente — sem isto, um webhook que aceita a conexão e nunca responde penduraria a function serverless (connectors/tick) até o timeout da PLATAFORMA. */
+const TIMEOUT_ENVIO_MS = 10_000;
 
 /** Header convencional para a assinatura — mesmo prefixo usado por Stripe/GitHub, familiar para quem integra o outro lado. */
 export const HEADER_ASSINATURA_CONNECT_HUB = "x-agentflow-signature";
@@ -96,17 +100,29 @@ export type ExecutorEnvioWebhook = (
   assinatura: string
 ) => Promise<ResultadoEnvioHttp>;
 
-/** Executor real — `fetch` com o header de assinatura. Timeout fica a cargo de quem chama (ver `./webhookQueue`). */
+/** Executor real — `fetch` com o header de assinatura, sob um prazo máximo (`TIMEOUT_ENVIO_MS`). */
 export const executorEnvioFetch: ExecutorEnvioWebhook = async (url, corpoJson, assinatura) => {
-  const resposta = await fetch(url, {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      [HEADER_ASSINATURA_CONNECT_HUB]: `sha256=${assinatura}`,
-    },
-    body: corpoJson,
-  });
-  return { ok: resposta.ok, status: resposta.status };
+  try {
+    const resposta = await fetchComTimeout(
+      url,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          [HEADER_ASSINATURA_CONNECT_HUB]: `sha256=${assinatura}`,
+        },
+        body: corpoJson,
+      },
+      "Timeout ou falha de rede ao chamar o webhook do Connect Hub.",
+      TIMEOUT_ENVIO_MS
+    );
+    return { ok: resposta.ok, status: resposta.status };
+  } catch {
+    // Mesmo contrato de uma resposta HTTP de falha — o chamador (`./webhookQueue`)
+    // já trata `ok: false` como "tentar de novo depois", sem distinguir rede de
+    // status HTTP, então não há necessidade de propagar a exceção.
+    return { ok: false };
+  }
 };
 
 export interface DespacharInput {

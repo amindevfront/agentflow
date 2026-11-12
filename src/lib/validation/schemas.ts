@@ -63,6 +63,15 @@ export const webhookUrlSchema = z
   .max(2048)
   .refine((valor) => valor.length === 0 || /^https:\/\/[\w-]+(\.[\w-]+)+(\/.*)?$/i.test(valor), {
     message: "Endereço incompleto — use https:// e um domínio válido.",
+  })
+  // Primeira camada contra SSRF: um webhook de cliente legítimo tem um
+  // domínio, nunca um IP literal — isso também bloqueia de cara os alvos
+  // mais óbvios (127.0.0.1, 169.254.169.254, 10.x/172.16-31.x/192.168.x). A
+  // defesa real contra DNS rebinding (domínio que resolve para rede interna
+  // só na hora do envio) é a resolução refeita a cada tentativa, em
+  // `urlApontaParaRedeInterna` (`@/lib/server/connectors/webhookQueue.ts`).
+  .refine((valor) => valor.length === 0 || !/^https:\/\/\d{1,3}(\.\d{1,3}){3}([:/].*)?$/.test(valor), {
+    message: "Use um domínio, não um endereço IP — endereços IP literais não são aceitos por segurança.",
   });
 
 export const signupSchema = z.object({

@@ -23,7 +23,11 @@
 // um erro, senão o Telegram desativa o webhook após falhas repetidas.
 
 import { comparacaoSegura } from "@/lib/crypto/encoding";
-import { registrarMensagemTelegramAdmin, resolverConectorTelegram } from "@/lib/server/telegramBotAdmin";
+import {
+  obterTokenTelegram,
+  registrarMensagemTelegramAdmin,
+  resolverConectorTelegram,
+} from "@/lib/server/telegramBotAdmin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,7 +82,22 @@ export async function POST(
     }
 
     const segredoRecebido = requisicao.headers.get("x-telegram-bot-api-secret-token");
-    if (!segredoRecebido || !comparacaoSegura(segredoRecebido, conector.webhookSecret)) {
+    if (!segredoRecebido) {
+      return respostaJson({ erro: { codigo: "assinatura_invalida", mensagem: "Segredo de webhook inválido." } }, 401);
+    }
+
+    let webhookSecret: string;
+    try {
+      webhookSecret = await obterTokenTelegram(conector.webhookSecretCredentialId, conector.workspaceId);
+    } catch (erro) {
+      // Credencial do cofre ausente/corrompida/revogada — mesma resposta
+      // genérica de "segredo inválido", nunca um 500 que confirme ao chamador
+      // que o conector existe e só o segredo está com problema.
+      console.error("[inbox/webhook/telegram] falha ao decifrar segredo de webhook:", erro);
+      return respostaJson({ erro: { codigo: "assinatura_invalida", mensagem: "Segredo de webhook inválido." } }, 401);
+    }
+
+    if (!comparacaoSegura(segredoRecebido, webhookSecret)) {
       return respostaJson({ erro: { codigo: "assinatura_invalida", mensagem: "Segredo de webhook inválido." } }, 401);
     }
 

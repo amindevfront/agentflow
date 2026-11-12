@@ -14,7 +14,7 @@ type LoadState = "loading" | "valid" | "invalid" | "expired";
 export default function InvitePage() {
   const params = useParams<{ token: string }>();
   const router = useRouter();
-  const { signUpWithEmail, signInWithGoogle } = useAuth();
+  const { signUpWithEmail, signInWithGoogle, signOut } = useAuth();
 
   const [state, setState] = useState<LoadState>("loading");
   const [invite, setInvite] = useState<Invite | null>(null);
@@ -74,10 +74,25 @@ export default function InvitePage() {
   }
 
   async function handleGoogleSetup() {
+    if (!invite) return;
     setError(null);
     setLoading("google");
     try {
       const user = await signInWithGoogle();
+      // `signInWithGoogle` deixa a pessoa escolher QUALQUER conta Google no
+      // seletor — sem esta checagem, alguém com o link do convite (reenviado,
+      // compartilhado por engano, visto num print) se auto-provisiona com o
+      // papel/workspace do convite usando a PRÓPRIA conta Google, mesmo o
+      // convite sendo endereçado a outro e-mail. Mesma garantia que o fluxo
+      // de senha já tem de graça (`signUpWithEmail(invite.email, ...)` força
+      // o e-mail da conta nova a ser o do convite).
+      if (user.email?.toLowerCase() !== invite.email.toLowerCase()) {
+        await signOut().catch(() => {});
+        setError(
+          `Este convite é para ${invite.email}. Entre com essa conta Google, ou peça um novo convite para ${user.email ?? "este e-mail"}.`
+        );
+        return;
+      }
       await completeSetup(user.uid, user.displayName ?? user.email ?? "Usuário");
     } catch (err) {
       setError(translateAuthError(err));

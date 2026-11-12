@@ -66,7 +66,19 @@ function colecaoRef(prefixo: string) {
 }
 
 function criarDbFalso() {
-  return { collection: (nome: string) => colecaoRef(nome) };
+  return {
+    collection: (nome: string) => colecaoRef(nome),
+    // Suficiente para `executarTransacaoDeInteracao` (episodicMemory.ts), que
+    // só usa `get`/`set` da transação — sem isolamento real entre leitura e
+    // escrita, mas os testes aqui não exercitam concorrência nesse ponto.
+    runTransaction: async <T>(fn: (tx: { get: (ref: RefFalsa) => ReturnType<RefFalsa["get"]>; set: (ref: RefFalsa, dados: Record<string, unknown>) => void }) => Promise<T>) =>
+      fn({
+        get: (ref) => ref.get(),
+        set: (ref, dados) => {
+          armazenamento.set(ref._caminho, dados);
+        },
+      }),
+  };
 }
 
 vi.mock("@/lib/server/firebaseAdmin", () => ({
@@ -157,6 +169,25 @@ describe("registrarMensagemSmsAdmin", () => {
     const a = await registrarMensagemSmsAdmin({ workspaceId: "ws-a", telefoneCliente: "+15551234567", texto: "oi" });
     const b = await registrarMensagemSmsAdmin({ workspaceId: "ws-b", telefoneCliente: "+15551234567", texto: "oi" });
     expect(a.conversationId).not.toBe(b.conversationId);
+  });
+
+  it("idempotência: reenvio do MESMO MessageSid (retry de webhook) não duplica a mensagem nem o contador", async () => {
+    const { registrarMensagemSmsAdmin } = await import("@/lib/server/twilioSmsAdmin");
+    const entrada = {
+      workspaceId: "ws-a",
+      telefoneCliente: "+15551234567",
+      texto: "Olá, preciso de ajuda",
+      idExterno: "SM123456",
+    };
+
+    const primeira = await registrarMensagemSmsAdmin(entrada);
+    const retry = await registrarMensagemSmsAdmin(entrada);
+
+    expect(retry.conversationId).toBe(primeira.conversationId);
+    expect(retry.messageId).toBe(primeira.messageId);
+
+    const conversa = armazenamento.get(`conversations/${primeira.conversationId}`);
+    expect(conversa?.totalMensagensCliente).toBe(1);
   });
 });
 

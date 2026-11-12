@@ -60,15 +60,43 @@ export async function processarTickArRecoveryEngine(
   for (const documento of documentos) {
     try {
       const decisao = decidirProximaAcaoCobranca(documento, referencia, opcoes.maxTentativasAutomaticas);
+      if (decisao.acao !== "enviar-cobranca" && decisao.acao !== "escalar-humano") continue;
+
       const refDocumento = db.collection(COLECAO).doc(documento.id);
+      const agoraIso = referencia.toISOString();
+
+      // Reivindica o documento numa transação que RELÊ o status atual antes
+      // de aplicar a mudança — se duas execuções do tick rodarem em
+      // paralelo (retry duplicado da Vercel, dois crons simultâneos), a
+      // segunda encontra `atual.status` já diferente do que leu na
+      // varredura e desiste sem repetir o efeito (cobrança/escalonamento)
+      // para o mesmo documento. Mesmo padrão de `processarTickSacShieldSla`
+      // (`./sacShieldHandoffMonitor`). Os efeitos colaterais (crédito de ROI,
+      // abertura de ticket HITL) ficam DELIBERADAMENTE fora da transação —
+      // uma transação do Firestore pode ser reexecutada internamente em
+      // contenção, e um efeito não-idempotente dentro dela rodaria de novo a
+      // cada tentativa.
+      const reivindicado = await db.runTransaction(async (tx) => {
+        const snapAtual = await tx.get(refDocumento);
+        if (!snapAtual.exists) return false;
+        const atual = snapAtual.data() as DocumentoPendente;
+        if (atual.status !== documento.status) return false;
+
+        if (decisao.acao === "enviar-cobranca") {
+          tx.update(refDocumento, {
+            status: "em-cobranca",
+            tentativasCobranca: atual.tentativasCobranca + 1,
+            ultimaCobrancaEm: agoraIso,
+          });
+        } else {
+          tx.update(refDocumento, { status: "escalado" });
+        }
+        return true;
+      });
+
+      if (!reivindicado) continue;
 
       if (decisao.acao === "enviar-cobranca") {
-        const agoraIso = referencia.toISOString();
-        await refDocumento.update({
-          status: "em-cobranca",
-          tentativasCobranca: documento.tentativasCobranca + 1,
-          ultimaCobrancaEm: agoraIso,
-        });
         await registrarGanhoOperacionalAdmin({
           workspaceId,
           origem: "ar-recovery-engine",
@@ -76,7 +104,7 @@ export async function processarTickArRecoveryEngine(
           agora: referencia,
         });
         cobrancasEnviadas += 1;
-      } else if (decisao.acao === "escalar-humano") {
+      } else {
         const diasAtraso = calcularDiasAtraso(documento, referencia);
         await abrirTransbordoAdmin({
           solicitacao: {
@@ -100,7 +128,6 @@ export async function processarTickArRecoveryEngine(
           workspaceId,
           criadoPor: "sistema",
         });
-        await refDocumento.update({ status: "escalado" });
         escalonamentosAbertos += 1;
       }
     } catch (erro) {

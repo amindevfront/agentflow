@@ -27,9 +27,13 @@ import type { Conversation, ConversationMessage, MessageSender } from "@/types";
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { abrirTransbordoAdmin } from "./hitlStore";
+
+/** Prazo máximo para a chamada real à Meta — nunca deixar a function serverless pendurada esperando uma resposta que pode nunca chegar. */
+const TIMEOUT_ENVIO_MS = 10_000;
 
 const COLECAO_CONVERSAS = "conversations";
 const SUBCOLECAO_MENSAGENS = "mensagens";
@@ -102,31 +106,39 @@ export async function resolverPageIdDoWorkspace(
   return typeof metaPageId === "string" && metaPageId.length > 0 ? metaPageId : null;
 }
 
-async function encontrarOuCriarConversaMeta(
+/**
+ * Id determinístico por workspace+canal+remetente — substitui a antiga
+ * query "existe?" seguida de `create` separado, que tinha uma corrida real:
+ * duas mensagens quase simultâneas do MESMO remetente (dois webhooks em
+ * paralelo) viam ambas "não existe" e criavam DUAS conversas para o mesmo
+ * cliente. `canal` entra na chave porque o mesmo id numérico da Meta não
+ * tem significado cruzado entre Instagram e Facebook.
+ */
+function chaveConversaMeta(workspaceId: string, canal: CanalMetaMessaging, remetenteId: string): string {
+  return `conv_meta_${workspaceId}_${canal}_${remetenteId}`;
+}
+
+/**
+ * Id determinístico da mensagem a partir do id externo da Meta
+ * (`messaging[].message.mid`) — raiz da idempotência: um retry do mesmo
+ * webhook (Meta reenviando por timeout/cold start) cai no mesmo documento e
+ * nunca duplica a mensagem nem reaciona o pipeline de frustração/SLA.
+ */
+function idMensagemMeta(idExterno: string | undefined): string {
+  if (!idExterno) return novoId("msg");
+  return `msg_ext_${idExterno.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 200)}`;
+}
+
+function construirConversaMeta(
   workspaceId: string,
   canal: CanalMetaMessaging,
-  remetenteId: string
-): Promise<Conversation> {
-  const colecao = firestoreAdmin().collection(COLECAO_CONVERSAS);
-  // `canal` entra na consulta junto do id: o mesmo id numérico da Meta não
-  // tem significado cruzado entre Instagram e Facebook — sem o filtro de
-  // canal, duas conversas de clientes diferentes poderiam colidir.
-  const existente = await colecao
-    .where("workspaceId", "==", workspaceId)
-    .where("canal", "==", canal)
-    .where("metaSenderId", "==", remetenteId)
-    .limit(1)
-    .get();
-
-  if (!existente.empty) {
-    const doc = existente.docs[0];
-    return { ...(doc.data() as Conversation), id: doc.id };
-  }
-
+  remetenteId: string,
+  id: string
+): Conversation {
   const { textoMascarado: identificadorMascarado } = interceptarMensagem(remetenteId);
   const agora = new Date().toISOString();
-  const conversa: Conversation = {
-    id: novoId("conv"),
+  return {
+    id,
     workspaceId,
     canal,
     participante: { nome: nomeClientePadrao(canal), identificadorMascarado },
@@ -144,8 +156,47 @@ async function encontrarOuCriarConversaMeta(
     totalMensagens: 0,
     totalMensagensCliente: 0,
   };
-  await colecao.doc(conversa.id).set(conversa);
-  return conversa;
+}
+
+interface ResultadoIngestaoMeta {
+  conversa: Conversation;
+  messageId: string;
+  duplicado: boolean;
+}
+
+/** Mesmo papel de `ingerirMensagemTelegramTx` (`@/lib/server/telegramBotAdmin`): encontra-ou-cria a conversa e grava a mensagem (ou detecta que já foi gravada) numa única transação atômica. */
+async function ingerirMensagemMetaTx(
+  database: ReturnType<typeof firestoreAdmin>,
+  entrada: Pick<RegistrarMensagemMetaInput, "workspaceId" | "canal" | "remetenteId" | "idExterno">,
+  mensagemSemId: Omit<ConversationMessage, "id" | "conversationId">,
+  messageId: string
+): Promise<ResultadoIngestaoMeta> {
+  const convId = chaveConversaMeta(entrada.workspaceId, entrada.canal, entrada.remetenteId);
+  const convRef = database.collection(COLECAO_CONVERSAS).doc(convId);
+  const temDedup = Boolean(entrada.idExterno);
+
+  return database.runTransaction(async (tx) => {
+    const convSnap = await tx.get(convRef);
+    const msgRef = convRef.collection(SUBCOLECAO_MENSAGENS).doc(messageId);
+    const msgSnap = temDedup ? await tx.get(msgRef) : null;
+
+    const conversaExistente = convSnap.exists ? { ...(convSnap.data() as Conversation), id: convId } : null;
+
+    if (msgSnap?.exists) {
+      return {
+        conversa:
+          conversaExistente ?? construirConversaMeta(entrada.workspaceId, entrada.canal, entrada.remetenteId, convId),
+        messageId,
+        duplicado: true,
+      };
+    }
+
+    const conversa =
+      conversaExistente ?? construirConversaMeta(entrada.workspaceId, entrada.canal, entrada.remetenteId, convId);
+    if (!conversaExistente) tx.set(convRef, conversa);
+    tx.set(msgRef, { ...mensagemSemId, id: messageId, conversationId: conversa.id });
+    return { conversa, messageId, duplicado: false };
+  });
 }
 
 export interface RegistrarMensagemMetaInput {
@@ -167,12 +218,11 @@ export async function registrarMensagemMetaAdmin(
   entrada: RegistrarMensagemMetaInput
 ): Promise<RegistrarMensagemMetaResultado> {
   const database = firestoreAdmin();
-  const conversa = await encontrarOuCriarConversaMeta(entrada.workspaceId, entrada.canal, entrada.remetenteId);
-  const refConversa = database.collection(COLECAO_CONVERSAS).doc(conversa.id);
+  const agora = new Date();
+  const messageId = idMensagemMeta(entrada.idExterno);
+  const convId = chaveConversaMeta(entrada.workspaceId, entrada.canal, entrada.remetenteId);
 
   const { textoMascarado, piiDetectada, temPii } = interceptarMensagem(entrada.texto);
-  const agora = new Date();
-  const messageId = novoId("msg");
 
   let temVersaoOriginalSelada = false;
   if (temPii) {
@@ -180,32 +230,40 @@ export async function registrarMensagemMetaAdmin(
       const envelope = await selarSegredo({
         plaintext: entrada.texto,
         workspaceId: entrada.workspaceId,
-        recursoId: `${conversa.id}__${messageId}`,
+        recursoId: `${convId}__${messageId}`,
         versao: 1,
         proposito: "mensagem-chat",
       });
       await database
         .collection(COLECAO_VAULT_MENSAGENS)
-        .doc(`${conversa.id}__${messageId}`)
-        .set({ conversationId: conversa.id, messageId, workspaceId: entrada.workspaceId, envelope, criadoEm: agora.toISOString() });
+        .doc(`${convId}__${messageId}`)
+        .set({ conversationId: convId, messageId, workspaceId: entrada.workspaceId, envelope, criadoEm: agora.toISOString() });
       temVersaoOriginalSelada = true;
     } catch (erro) {
       console.error(`[inbox/${entrada.canal}] falha ao selar o original — mensagem segue mascarada:`, erro);
     }
   }
 
-  const mensagem: ConversationMessage = {
-    id: messageId,
-    conversationId: conversa.id,
-    workspaceId: entrada.workspaceId,
-    canal: entrada.canal,
-    remetente: "cliente",
-    texto: textoMascarado,
-    piiDetectada,
-    enviadaEm: agora.toISOString(),
-    temVersaoOriginalSelada,
-  };
-  await refConversa.collection(SUBCOLECAO_MENSAGENS).doc(messageId).set(mensagem);
+  const { conversa, duplicado } = await ingerirMensagemMetaTx(
+    database,
+    entrada,
+    {
+      workspaceId: entrada.workspaceId,
+      canal: entrada.canal,
+      remetente: "cliente",
+      texto: textoMascarado,
+      piiDetectada,
+      enviadaEm: agora.toISOString(),
+      temVersaoOriginalSelada,
+    },
+    messageId
+  );
+
+  if (duplicado) {
+    return { conversationId: conversa.id, messageId, circuitBreakerAtivo: conversa.circuitBreakerAtivo };
+  }
+
+  const refConversa = database.collection(COLECAO_CONVERSAS).doc(conversa.id);
 
   let mensagensClienteRecentes: string[] = [];
   try {
@@ -337,14 +395,27 @@ export async function enviarMensagemMetaMessaging(entrada: EnviarMensagemMetaMes
     );
   }
 
-  const resposta = await fetch(`https://graph.facebook.com/v21.0/me/messages`, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
-    body: JSON.stringify({
-      recipient: { id: entrada.destinatarioId },
-      message: { text: entrada.texto },
-    }),
-  });
+  let resposta: Response;
+  try {
+    resposta = await fetchComTimeout(
+      `https://graph.facebook.com/v21.0/me/messages`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          recipient: { id: entrada.destinatarioId },
+          message: { text: entrada.texto },
+        }),
+      },
+      "Timeout ou falha de rede ao chamar a Meta Graph API.",
+      TIMEOUT_ENVIO_MS
+    );
+  } catch (erro) {
+    console.error(`[meta-messaging/send] falha de rede/timeout (page=${entrada.metaPageId}):`, erro);
+    throw new ErroEnvioMetaMessaging(
+      "Não foi possível falar com o Instagram/Facebook (rede instável ou tempo limite excedido) — tente novamente."
+    );
+  }
 
   if (!resposta.ok) {
     const corpo = await resposta.text().catch(() => "");

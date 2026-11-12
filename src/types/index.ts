@@ -321,16 +321,24 @@ export interface Connector {
    */
   telegramBotTokenCredentialId?: string | null;
   /**
-   * Segredo de webhook do Telegram (string aleatória gerada no cliente ao
-   * criar o conector) — papel equivalente a `META_WEBHOOK_SECRET`, mas por
-   * conector em vez de global, porque o Telegram valida a chamada de
-   * webhook via o header `X-Telegram-Bot-Api-Secret-Token` configurado por
-   * bot (parâmetro `secret_token` da chamada `setWebhook`, feita manualmente
-   * pelo implementador fora do AgentFlow). Em claro de propósito — não é o
-   * token de autenticação da API, só prova "esta chamada veio do webhook
-   * registrado para este bot", mesmo papel de `META_WEBHOOK_SECRET`.
+   * Referência ao cofre Zero-Trust (`credentials/{id}`) do segredo de
+   * webhook do Telegram — papel equivalente a `META_WEBHOOK_SECRET`, mas por
+   * conector em vez de global, porque o Telegram valida a chamada de webhook
+   * via o header `X-Telegram-Bot-Api-Secret-Token` configurado por bot
+   * (parâmetro `secret_token` da chamada `setWebhook`, feita manualmente
+   * pelo implementador fora do AgentFlow).
+   *
+   * ANTES vivia em claro neste documento (`telegramWebhookSecret`) — diferente
+   * de `META_WEBHOOK_SECRET` (variável de ambiente, nunca visível a nenhum
+   * usuário), este valor era lido por `belongsToWorkspace` em `firestore.rules`
+   * e renderizado na tela de Conectores para QUALQUER membro do workspace, não
+   * só admin — ou seja, o próprio bearer secret do webhook era legível por
+   * qualquer pessoa com acesso de leitura ao workspace, reabrindo exatamente a
+   * falha já corrigida para `telegramBotTokenCredentialId` acima. Agora segue
+   * o mesmo caminho: só o id da credencial selada vive aqui (ver
+   * `obterTokenTelegram` em `@/lib/server/telegramBotAdmin`).
    */
-  telegramWebhookSecret?: string;
+  telegramWebhookSecretCredentialId?: string | null;
 }
 
 export interface TeamMember {

@@ -180,8 +180,20 @@ service cloud.firestore {
     }
 
     match /connectors/{connectorId} {
-      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
-      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+      allow read: if belongsToWorkspace(resource.data.workspaceId);
+      allow delete: if belongsToWorkspace(resource.data.workspaceId);
+      // Conector "Telegram Bot API" é admin-only (o segredo de webhook e o
+      // token do bot vão pro Cofre Zero-Trust, que já exige `isAdminOf` para
+      // escrever `credentials`/`credentialSecrets` — sem este espelhamento
+      // aqui, essa restrição existia só no cliente (`connectors/page.tsx`),
+      // e qualquer membro não-admin que chamasse o SDK do Firestore direto
+      // criaria/alteraria o conector mesmo assim).
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId)
+                    && (request.resource.data.tipo != 'Telegram Bot API'
+                        || isAdminOf(request.resource.data.workspaceId));
+      allow update: if belongsToWorkspace(resource.data.workspaceId)
+                    && (resource.data.tipo != 'Telegram Bot API'
+                        || isAdminOf(resource.data.workspaceId));
     }
 
     // ---------- Governança: cofre de credenciais ----------

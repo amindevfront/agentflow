@@ -243,51 +243,89 @@ export async function processarTickCampanhas(
       .where("status", "==", "pendente")
       .get();
 
-    const destinatarios = destinatariosSnap.docs.map((d) => ({ ...(d.data() as CampaignRecipient), id: d.id }));
-    if (destinatarios.length === 0) continue;
+    const candidatos = destinatariosSnap.docs.map((d) => ({ ...(d.data() as CampaignRecipient), id: d.id }));
+    if (candidatos.length === 0) continue;
 
-    const executorBlindado = comBlindagemDeReputacao(
-      criarExecutorReal(campanha.id, workspaceId, campanha.canal, enviarCanal),
-      workspaceId,
-      campanha.id,
-      campanha.canal
-    );
+    // Reivindica cada destinatário numa transação que RELÊ o status atual
+    // antes de marcá-lo "enviando" — se dois ticks rodarem em paralelo (cron
+    // duplicado/retry da Vercel), ambos leriam "pendente" na varredura acima
+    // e, sem esta reivindicação, ambos ENVIARIAM a mesma mensagem real ao
+    // mesmo destinatário (o guard interno de `processarEnviosDevidos` só
+    // olha o status na CÓPIA em memória de cada execução, que em ambas é
+    // "pendente" — não impede o envio duplicado). Só segue para
+    // `processarEnviosDevidos` quem esta execução conseguiu reivindicar.
+    const refDestinatario = (id: string) =>
+      db.collection(COLECAO_CAMPANHAS).doc(campanha.id).collection(SUBCOLECAO_DESTINATARIOS).doc(id);
 
-    const resultado = await processarEnviosDevidos({
-      campanha: { mensagemTemplate: campanha.mensagemTemplate, workspaceId },
-      destinatarios,
-      optOuts,
-      enviar: executorBlindado,
-      agora,
-    });
-
-    const lote = db.batch();
-    for (const destinatario of resultado.destinatariosAtualizados) {
-      lote.set(
-        db.collection(COLECAO_CAMPANHAS).doc(campanha.id).collection(SUBCOLECAO_DESTINATARIOS).doc(destinatario.id),
-        destinatario
-      );
+    const reivindicados: CampaignRecipient[] = [];
+    for (const candidato of candidatos) {
+      const ref = refDestinatario(candidato.id);
+      const reivindicado = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists) return false;
+        const atual = snap.data() as CampaignRecipient;
+        if (atual.status !== "pendente") return false;
+        tx.update(ref, { status: "enviando" });
+        return true;
+      });
+      if (reivindicado) reivindicados.push(candidato);
     }
+    if (reivindicados.length === 0) continue;
 
-    const totalEnviadosAgora = campanha.totalEnviados + resultado.enviadosNestaExecucao;
-    const totalBloqueadosAgora = campanha.totalBloqueados + resultado.bloqueadosNestaExecucao;
-    const totalFalhasAgora = campanha.totalFalhas + resultado.falhasNestaExecucao;
-    const totalFinalizado = totalEnviadosAgora + totalBloqueadosAgora + totalFalhasAgora;
-    const concluida = totalFinalizado >= campanha.totalDestinatarios;
+    try {
+      const executorBlindado = comBlindagemDeReputacao(
+        criarExecutorReal(campanha.id, workspaceId, campanha.canal, enviarCanal),
+        workspaceId,
+        campanha.id,
+        campanha.canal
+      );
 
-    lote.update(db.collection(COLECAO_CAMPANHAS).doc(campanha.id), {
-      status: concluida ? "concluida" : "em-execucao",
-      totalEnviados: totalEnviadosAgora,
-      totalBloqueados: totalBloqueadosAgora,
-      totalFalhas: totalFalhasAgora,
-      concluidaEm: concluida ? agora.toISOString() : null,
-    });
-    await lote.commit();
+      const resultado = await processarEnviosDevidos({
+        campanha: { mensagemTemplate: campanha.mensagemTemplate, workspaceId },
+        destinatarios: reivindicados,
+        optOuts,
+        enviar: executorBlindado,
+        agora,
+      });
 
-    enviosRealizados += resultado.enviadosNestaExecucao;
-    enviosBloqueados += resultado.bloqueadosNestaExecucao;
-    enviosFalhos += resultado.falhasNestaExecucao;
-    if (concluida) campanhasConcluidas += 1;
+      const lote = db.batch();
+      for (const destinatario of resultado.destinatariosAtualizados) {
+        lote.set(refDestinatario(destinatario.id), destinatario);
+      }
+
+      const totalEnviadosAgora = campanha.totalEnviados + resultado.enviadosNestaExecucao;
+      const totalBloqueadosAgora = campanha.totalBloqueados + resultado.bloqueadosNestaExecucao;
+      const totalFalhasAgora = campanha.totalFalhas + resultado.falhasNestaExecucao;
+      const totalFinalizado = totalEnviadosAgora + totalBloqueadosAgora + totalFalhasAgora;
+      const concluida = totalFinalizado >= campanha.totalDestinatarios;
+
+      lote.update(db.collection(COLECAO_CAMPANHAS).doc(campanha.id), {
+        status: concluida ? "concluida" : "em-execucao",
+        totalEnviados: totalEnviadosAgora,
+        totalBloqueados: totalBloqueadosAgora,
+        totalFalhas: totalFalhasAgora,
+        concluidaEm: concluida ? agora.toISOString() : null,
+      });
+      await lote.commit();
+
+      enviosRealizados += resultado.enviadosNestaExecucao;
+      enviosBloqueados += resultado.bloqueadosNestaExecucao;
+      enviosFalhos += resultado.falhasNestaExecucao;
+      if (concluida) campanhasConcluidas += 1;
+    } catch (erro) {
+      // Nunca deixar um destinatário reivindicado ("enviando") travado para
+      // sempre por uma falha no meio do processamento desta campanha — devolve
+      // para "pendente" para que o próximo tick tente de novo, e segue para as
+      // demais campanhas em vez de abortar o tick inteiro.
+      console.error(`[campaigns/tick] falha ao processar campanha ${campanha.id}:`, erro);
+      const loteDeRollback = db.batch();
+      for (const destinatario of reivindicados) {
+        loteDeRollback.update(refDestinatario(destinatario.id), { status: "pendente" });
+      }
+      await loteDeRollback.commit().catch((erroRollback) => {
+        console.error(`[campaigns/tick] falha ao reverter reivindicação da campanha ${campanha.id}:`, erroRollback);
+      });
+    }
   }
 
   // Mesmo tick também dá uma nova chance às mensagens contidas por risco de

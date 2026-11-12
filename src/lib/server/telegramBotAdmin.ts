@@ -27,6 +27,7 @@ import type { CredentialMetadata, SealedSecret } from "@/types";
 import { interceptarMensagem } from "@/lib/guardrails/piiVault";
 import { selarSegredo } from "@/lib/crypto/envelope";
 import { LIMIAR_FRUSTRACAO_CRITICA, calcularFrustration } from "@/lib/sentiment/radar";
+import { fetchComTimeout } from "@/lib/fetchComTimeout";
 import { abrirCredencial } from "./vault";
 import { registrarInteracaoEpisodica } from "./episodicMemory";
 import { firestoreAdmin } from "./firebaseAdmin";
@@ -43,6 +44,9 @@ export const TIPO_CONECTOR_TELEGRAM = "Telegram Bot API";
 
 const SLA_RESPOSTA_SEGUNDOS = { p1: 60, p2: 180, p3: 600, p4: 1800 } as const;
 
+/** Prazo máximo para a chamada real ao Telegram — nunca deixar a function serverless pendurada esperando uma resposta que pode nunca chegar. */
+const TIMEOUT_ENVIO_MS = 10_000;
+
 function novoId(prefixo: string): string {
   const aleatorio =
     typeof globalThis.crypto?.randomUUID === "function"
@@ -58,7 +62,7 @@ function idSegredoCredencial(credentialId: string, versao: number): string {
 export interface ConectorTelegram {
   workspaceId: string;
   credentialId: string;
-  webhookSecret: string;
+  webhookSecretCredentialId: string;
 }
 
 /**
@@ -77,21 +81,24 @@ export async function resolverConectorTelegram(connectorId: string): Promise<Con
     workspaceId?: unknown;
     tipo?: unknown;
     telegramBotTokenCredentialId?: unknown;
-    telegramWebhookSecret?: unknown;
+    telegramWebhookSecretCredentialId?: unknown;
   };
   if (dados.tipo !== TIPO_CONECTOR_TELEGRAM) return null;
   if (typeof dados.workspaceId !== "string" || dados.workspaceId.length === 0) return null;
   if (typeof dados.telegramBotTokenCredentialId !== "string" || dados.telegramBotTokenCredentialId.length === 0) {
     return null;
   }
-  if (typeof dados.telegramWebhookSecret !== "string" || dados.telegramWebhookSecret.length === 0) {
+  if (
+    typeof dados.telegramWebhookSecretCredentialId !== "string" ||
+    dados.telegramWebhookSecretCredentialId.length === 0
+  ) {
     return null;
   }
 
   return {
     workspaceId: dados.workspaceId,
     credentialId: dados.telegramBotTokenCredentialId,
-    webhookSecret: dados.telegramWebhookSecret,
+    webhookSecretCredentialId: dados.telegramWebhookSecretCredentialId,
   };
 }
 
@@ -156,27 +163,41 @@ export async function obterTokenTelegram(credentialId: string, workspaceId: stri
   return abrirCredencial(documento.envelope, { workspaceId, credentialId, versao: metadados.versao });
 }
 
-async function encontrarOuCriarConversaTelegram(
-  workspaceId: string,
-  chatId: string,
-  remetenteNome: string
-): Promise<Conversation> {
-  const colecao = firestoreAdmin().collection(COLECAO_CONVERSAS);
-  const existente = await colecao
-    .where("workspaceId", "==", workspaceId)
-    .where("telegramChatId", "==", chatId)
-    .limit(1)
-    .get();
+/**
+ * Id determinístico da conversa por workspace+chatId — substitui a antiga
+ * dupla "query por existente, senão cria com id aleatório", que tinha uma
+ * corrida real: duas mensagens do mesmo chat quase simultâneas (dois
+ * webhooks em paralelo) viam ambas "não existe" e criavam DUAS conversas
+ * para o mesmo cliente. Com id determinístico, a dedupe vira uma leitura
+ * direta por id DENTRO da transação (ver `ingerirMensagemTelegramTx`), onde
+ * o Firestore garante serializabilidade: se duas transações concorrentes
+ * tentam criar o mesmo documento, só uma comita — a outra é
+ * automaticamente repetida pelo SDK e, na repetição, já encontra a conversa
+ * criada pela primeira.
+ */
+function chaveConversaTelegram(workspaceId: string, chatId: string): string {
+  return `conv_telegram_${workspaceId}_${chatId}`;
+}
 
-  if (!existente.empty) {
-    const doc = existente.docs[0];
-    return { ...(doc.data() as Conversation), id: doc.id };
-  }
+/**
+ * Id determinístico da mensagem a partir do `message_id` do Telegram — raiz
+ * da idempotência de ingestão: se o Telegram reenviar o MESMO update (timeout
+ * de resposta, cold start), a segunda chamada cai no mesmo id de documento em
+ * vez de gravar a mensagem (e disparar todo o pipeline de frustração/SLA/
+ * transbordo) uma segunda vez. Sem `idExterno`, não há como deduplicar — cai
+ * para um id aleatório (não deveria ocorrer: o Telegram sempre envia
+ * `message_id` em `message`).
+ */
+function idMensagemTelegram(idExterno: string | undefined): string {
+  if (!idExterno) return novoId("msg");
+  return `msg_ext_${idExterno.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 200)}`;
+}
 
+function construirConversaTelegram(workspaceId: string, chatId: string, remetenteNome: string, id: string): Conversation {
   const { textoMascarado: identificadorMascarado } = interceptarMensagem(chatId);
   const agora = new Date().toISOString();
-  const conversa: Conversation = {
-    id: novoId("conv"),
+  return {
+    id,
     workspaceId,
     canal: "telegram",
     participante: { nome: remetenteNome || "Cliente Telegram", identificadorMascarado },
@@ -194,8 +215,51 @@ async function encontrarOuCriarConversaTelegram(
     totalMensagens: 0,
     totalMensagensCliente: 0,
   };
-  await colecao.doc(conversa.id).set(conversa);
-  return conversa;
+}
+
+interface ResultadoIngestaoTelegram {
+  conversa: Conversation;
+  messageId: string;
+  duplicado: boolean;
+}
+
+/**
+ * Transação atômica: encontra-ou-cria a conversa e grava a mensagem (ou
+ * detecta que já foi gravada) numa única operação serializável. Nenhuma
+ * escrita acontece fora desta função para estes dois documentos — é isso
+ * que elimina as duas corridas (conversa duplicada / mensagem duplicada)
+ * descritas nos comentários de `chaveConversaTelegram`/`idMensagemTelegram`.
+ */
+async function ingerirMensagemTelegramTx(
+  database: ReturnType<typeof firestoreAdmin>,
+  entrada: Pick<RegistrarMensagemTelegramInput, "workspaceId" | "chatId" | "remetenteNome" | "idExterno">,
+  mensagemSemId: Omit<ConversationMessage, "id" | "conversationId">,
+  messageId: string
+): Promise<ResultadoIngestaoTelegram> {
+  const convId = chaveConversaTelegram(entrada.workspaceId, entrada.chatId);
+  const convRef = database.collection(COLECAO_CONVERSAS).doc(convId);
+  const temDedup = Boolean(entrada.idExterno);
+
+  return database.runTransaction(async (tx) => {
+    const convSnap = await tx.get(convRef);
+    const msgRef = convRef.collection(SUBCOLECAO_MENSAGENS).doc(messageId);
+    const msgSnap = temDedup ? await tx.get(msgRef) : null;
+
+    const conversaExistente = convSnap.exists ? { ...(convSnap.data() as Conversation), id: convId } : null;
+
+    if (msgSnap?.exists) {
+      return {
+        conversa: conversaExistente ?? construirConversaTelegram(entrada.workspaceId, entrada.chatId, entrada.remetenteNome, convId),
+        messageId,
+        duplicado: true,
+      };
+    }
+
+    const conversa = conversaExistente ?? construirConversaTelegram(entrada.workspaceId, entrada.chatId, entrada.remetenteNome, convId);
+    if (!conversaExistente) tx.set(convRef, conversa);
+    tx.set(msgRef, { ...mensagemSemId, id: messageId, conversationId: conversa.id });
+    return { conversa, messageId, duplicado: false };
+  });
 }
 
 export interface RegistrarMensagemTelegramInput {
@@ -217,12 +281,11 @@ export async function registrarMensagemTelegramAdmin(
   entrada: RegistrarMensagemTelegramInput
 ): Promise<RegistrarMensagemTelegramResultado> {
   const database = firestoreAdmin();
-  const conversa = await encontrarOuCriarConversaTelegram(entrada.workspaceId, entrada.chatId, entrada.remetenteNome);
-  const refConversa = database.collection(COLECAO_CONVERSAS).doc(conversa.id);
+  const agora = new Date();
+  const messageId = idMensagemTelegram(entrada.idExterno);
+  const convId = chaveConversaTelegram(entrada.workspaceId, entrada.chatId);
 
   const { textoMascarado, piiDetectada, temPii } = interceptarMensagem(entrada.texto);
-  const agora = new Date();
-  const messageId = novoId("msg");
 
   let temVersaoOriginalSelada = false;
   if (temPii) {
@@ -230,32 +293,43 @@ export async function registrarMensagemTelegramAdmin(
       const envelope = await selarSegredo({
         plaintext: entrada.texto,
         workspaceId: entrada.workspaceId,
-        recursoId: `${conversa.id}__${messageId}`,
+        recursoId: `${convId}__${messageId}`,
         versao: 1,
         proposito: "mensagem-chat",
       });
       await database
         .collection(COLECAO_VAULT_MENSAGENS)
-        .doc(`${conversa.id}__${messageId}`)
-        .set({ conversationId: conversa.id, messageId, workspaceId: entrada.workspaceId, envelope, criadoEm: agora.toISOString() });
+        .doc(`${convId}__${messageId}`)
+        .set({ conversationId: convId, messageId, workspaceId: entrada.workspaceId, envelope, criadoEm: agora.toISOString() });
       temVersaoOriginalSelada = true;
     } catch (erro) {
       console.error("[inbox/telegram] falha ao selar o original — mensagem segue mascarada:", erro);
     }
   }
 
-  const mensagem: ConversationMessage = {
-    id: messageId,
-    conversationId: conversa.id,
-    workspaceId: entrada.workspaceId,
-    canal: "telegram",
-    remetente: "cliente",
-    texto: textoMascarado,
-    piiDetectada,
-    enviadaEm: agora.toISOString(),
-    temVersaoOriginalSelada,
-  };
-  await refConversa.collection(SUBCOLECAO_MENSAGENS).doc(messageId).set(mensagem);
+  const { conversa, duplicado } = await ingerirMensagemTelegramTx(
+    database,
+    entrada,
+    {
+      workspaceId: entrada.workspaceId,
+      canal: "telegram",
+      remetente: "cliente",
+      texto: textoMascarado,
+      piiDetectada,
+      enviadaEm: agora.toISOString(),
+      temVersaoOriginalSelada,
+    },
+    messageId
+  );
+
+  if (duplicado) {
+    // Mesmo `message_id` já processado nesta conversa (retry do webhook) —
+    // idempotente: nenhum efeito colateral (frustração/SLA/transbordo/
+    // memória episódica) roda uma segunda vez para o mesmo evento.
+    return { conversationId: conversa.id, messageId, circuitBreakerAtivo: conversa.circuitBreakerAtivo };
+  }
+
+  const refConversa = database.collection(COLECAO_CONVERSAS).doc(conversa.id);
 
   let mensagensClienteRecentes: string[] = [];
   try {
@@ -378,11 +452,22 @@ export async function enviarMensagemTelegram(entrada: EnviarMensagemTelegramInpu
     throw new ErroEnvioTelegram(mensagem);
   }
 
-  const resposta = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ chat_id: entrada.chatId, text: entrada.texto }),
-  });
+  let resposta: Response;
+  try {
+    resposta = await fetchComTimeout(
+      `https://api.telegram.org/bot${token}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ chat_id: entrada.chatId, text: entrada.texto }),
+      },
+      "Timeout ou falha de rede ao chamar o Telegram Bot API.",
+      TIMEOUT_ENVIO_MS
+    );
+  } catch (erro) {
+    console.error("[telegram/send] falha de rede/timeout:", erro);
+    throw new ErroEnvioTelegram("Não foi possível falar com o Telegram (rede instável ou tempo limite excedido) — tente novamente.");
+  }
 
   if (!resposta.ok) {
     const corpo = await resposta.text().catch(() => "");

@@ -98,10 +98,16 @@ export function hexParaBytes(hex: string): Uint8Array {
  * sempre percorre o mesmo número de posições para entradas de mesmo tamanho.
  */
 export function comparacaoSegura(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let diferenca = 0;
-  for (let i = 0; i < a.length; i += 1) {
-    diferenca |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  // Sem saída antecipada no mismatch de tamanho: isso vazaria, pelo tempo de
+  // execução, se o comprimento do segredo candidato bate com o real. Sempre
+  // percorre `max(a.length, b.length)` posições, e o próprio mismatch de
+  // tamanho entra na acumulação de diferença em vez de decidir o retorno.
+  const tamanho = Math.max(a.length, b.length);
+  let diferenca = a.length === b.length ? 0 : 1;
+  for (let i = 0; i < tamanho; i += 1) {
+    const codigoA = i < a.length ? a.charCodeAt(i) : 0;
+    const codigoB = i < b.length ? b.charCodeAt(i) : 0;
+    diferenca |= codigoA ^ codigoB;
   }
   return diferenca === 0;
 }

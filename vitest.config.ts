@@ -14,5 +14,12 @@ export default defineConfig({
     // disponível no Node 18+. Nenhum teste depende de DOM.
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // 5s (padrão) é instável na suíte completa: vários testes fazem
+    // `await import(...)` dinâmico dentro do `it()`, e a transformação a frio
+    // do módulo (TS -> JS) na primeira chamada, sob a carga de ~90 arquivos
+    // rodando em paralelo, pode ultrapassar 5s mesmo sem nenhum hang real —
+    // já causou falso-negativo intermitente em resolverConectorPorPageId
+    // (meta) e resolverConectorPorNumeroTwilio (sms).
+    testTimeout: 20000,
   },
 });

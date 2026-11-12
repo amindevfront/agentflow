@@ -67,7 +67,19 @@ function colecaoRef(prefixo: string) {
 }
 
 function criarDbFalso() {
-  return { collection: (nome: string) => colecaoRef(nome) };
+  return {
+    collection: (nome: string) => colecaoRef(nome),
+    // Suficiente para `executarTransacaoDeInteracao` (episodicMemory.ts), que
+    // só usa `get`/`set` da transação — sem isolamento real entre leitura e
+    // escrita, mas os testes aqui não exercitam concorrência nesse ponto.
+    runTransaction: async <T>(fn: (tx: { get: (ref: RefFalsa) => ReturnType<RefFalsa["get"]>; set: (ref: RefFalsa, dados: Record<string, unknown>) => void }) => Promise<T>) =>
+      fn({
+        get: (ref) => ref.get(),
+        set: (ref, dados) => {
+          armazenamento.set(ref._caminho, dados);
+        },
+      }),
+  };
 }
 
 vi.mock("@/lib/server/firebaseAdmin", () => ({
@@ -193,6 +205,26 @@ describe("registrarMensagemMetaAdmin", () => {
     const a = await registrarMensagemMetaAdmin({ workspaceId: "ws-a", canal: "instagram", remetenteId: "sender-1", texto: "oi" });
     const b = await registrarMensagemMetaAdmin({ workspaceId: "ws-b", canal: "instagram", remetenteId: "sender-1", texto: "oi" });
     expect(a.conversationId).not.toBe(b.conversationId);
+  });
+
+  it("idempotência: reenvio do MESMO id de mensagem (retry de webhook) não duplica a mensagem nem o contador", async () => {
+    const { registrarMensagemMetaAdmin } = await import("@/lib/server/metaMessagingAdmin");
+    const entrada = {
+      workspaceId: "ws-a",
+      canal: "instagram" as const,
+      remetenteId: "sender-1",
+      texto: "Olá, preciso de ajuda",
+      idExterno: "mid.ABC123",
+    };
+
+    const primeira = await registrarMensagemMetaAdmin(entrada);
+    const retry = await registrarMensagemMetaAdmin(entrada);
+
+    expect(retry.conversationId).toBe(primeira.conversationId);
+    expect(retry.messageId).toBe(primeira.messageId);
+
+    const conversa = armazenamento.get(`conversations/${primeira.conversationId}`);
+    expect(conversa?.totalMensagensCliente).toBe(1);
   });
 });
 
