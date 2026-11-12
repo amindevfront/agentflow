@@ -95,6 +95,21 @@ export function ExecutiveReportPanel() {
   const custoEvitadoMadrugadaBrl =
     (receitaMadrugada.totalConversas * config.minutosManuaisPorConversa * config.custoHoraOperadorBrl) / 60;
 
+  // Motor de Pre-Deal Compliance & Margin Guard — "Passivo & Multas
+  // Prevenidas (Risk Shield)", mesmo cálculo de `BusinessROIWidget`: soma de
+  // `riscoPrevenido.prejuizoEstimadoBrl` dos tickets do período já carregados
+  // acima (ver `@/lib/governance/marginGuard`).
+  const riscoPrevenidoTotalBrl = useMemo(() => {
+    const inicio = new Date(snapshot.periodo.inicio).getTime();
+    const fim = new Date(snapshot.periodo.fim).getTime();
+    return tickets.reduce((acc, t) => {
+      if (!t.riscoPrevenido) return acc;
+      const criadoEm = new Date(t.criadoEm).getTime();
+      if (!Number.isFinite(criadoEm) || criadoEm < inicio || criadoEm > fim) return acc;
+      return acc + t.riscoPrevenido.prejuizoEstimadoBrl;
+    }, 0);
+  }, [tickets, snapshot.periodo]);
+
   async function handleDownload() {
     if (!workspaceId) return;
     setGerando(true);
@@ -130,6 +145,7 @@ export function ExecutiveReportPanel() {
         snapshot,
         receitaMadrugada,
         custoEvitadoMadrugadaFormatado: moedaDoValor(custoEvitadoMadrugadaBrl),
+        riscoPrevenidoTotalBrl,
         moedaDoValor,
         atestado: entrada
           ? {

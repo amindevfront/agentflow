@@ -584,3 +584,111 @@ export function detectarGarantiaExitoNaoAutorizada(texto: string): DeteccaoGaran
   }
   return { suspeito: descricoes.length > 0, descricoes };
 }
+
+/**
+ * Motor de Pre-Deal Compliance & Margin Guard — Proteção Fiscal (Brasil).
+ *
+ * Mesma filosofia dos detectores anteriores: casamento é tratado como
+ * `critica` por `inspecionarSaida` (ver `./index`), sem escala de peso — a
+ * regra de negócio é "nenhuma tolerância", não "depende do quanto". Risco
+ * concreto e crescente: a Reforma Tributária 2027 e a fiscalização digital
+ * (split payment, e-invoicing cruzado em tempo real) tornam "vender sem
+ * nota" um passivo detectável automaticamente pelo Fisco, não mais uma
+ * aposta de baixo risco.
+ *
+ * Deliberadamente BR-only (sem equivalente em inglês, diferente de
+ * `PADROES_PROMESSA_COMERCIAL`): "nota fiscal", CNPJ/PF-PJ e "caixa dois" são
+ * conceitos do regime tributário brasileiro, sem correspondência 1:1 em
+ * EUA/UE — inventar um equivalente em inglês sem uma regra fiscal real por
+ * trás violaria o Artigo IV (No Invention).
+ *
+ * Cobre três sinais, cada um suficiente isoladamente:
+ *  1. venda/pagamento sem nota fiscal ("sem nota", "não precisa de nota",
+ *     "não vai sair nota");
+ *  2. pagamento informal/não declarado ("por fora", "caixa dois/2", "sem
+ *     recibo", "direto na sua conta");
+ *  3. mistura indevida de pessoa física/jurídica para descaracterizar a
+ *     operação ("emite pra outro CNPJ", "nota de outra empresa", "passa
+ *     como pessoa física").
+ */
+const PADROES_INFORMALIDADE_FISCAL: Array<{ padrao: RegExp; descricao: string }> = [
+  {
+    padrao: /\bsem\s+nota(?:\s+fiscal)?\b|\bn[ãa]o\s+(?:precisa|sai|vai\s+sair)\s+(?:de\s+)?nota(?:\s+fiscal)?\b/i,
+    descricao: "venda ou pagamento sem nota fiscal",
+  },
+  {
+    padrao: /\bpor\s+fora\b|\bcaixa\s*(?:dois|2)\b|\bsem\s+recibo\b|\bdireto\s+na\s+(?:sua\s+)?conta\s+(?:pessoal|particular)\b/i,
+    descricao: "pagamento informal/não declarado (por fora)",
+  },
+  {
+    padrao: /\bemit[ei](?:r|mos)?\s+pr[ao]\s+outr[ao]\s+(?:cnpj|empresa)\b|\bnota\s+de\s+outra\s+empresa\b|\bpassa\s+como\s+pessoa\s+f[íi]sica\b/i,
+    descricao: "mistura indevida de pessoa física/jurídica para descaracterizar a operação",
+  },
+];
+
+export interface DeteccaoInformalidadeFiscal {
+  suspeito: boolean;
+  descricoes: string[];
+}
+
+export function detectarInformalidadeFiscal(texto: string): DeteccaoInformalidadeFiscal {
+  const descricoes: string[] = [];
+  for (const { padrao, descricao } of PADROES_INFORMALIDADE_FISCAL) {
+    if (padrao.test(texto)) descricoes.push(descricao);
+  }
+  return { suspeito: descricoes.length > 0, descricoes };
+}
+
+/**
+ * Motor de Pre-Deal Compliance & Margin Guard — Proteção de Margem.
+ *
+ * Diferente de `detectarPromessaComercialNaoAutorizada` (que trata QUALQUER
+ * desconto mencionado como violação — Módulos Verticais 1-3, onde a
+ * política é "nenhum desconto sem aprovação"), este detector é NUMÉRICO e
+ * comparado a um limite configurável (`GuardrailPolicy.descontoMaximoSemAprovacaoPercentual`):
+ * nichos de volume (e-commerce, Comércio Exterior/Logística B2B) precisam
+ * negociar desconto dentro de uma faixa saudável, não nunca — o risco real
+ * aqui é a IA prometer um desconto que erode a margem configurada pelo
+ * gestor, não a mera menção de desconto.
+ *
+ * Extrai todo percentual associado a "desconto"/"discount" (PT e EN — a
+ * saída real de workspaces US/EU é em inglês, mesma lição documentada em
+ * `PADROES_PROMESSA_COMERCIAL`) e compara o MAIOR valor encontrado contra o
+ * limite. Nenhum percentual encontrado = nada a comparar, sem violação.
+ */
+const PADRAO_PERCENTUAL_DESCONTO =
+  /\b(\d{1,3}(?:[.,]\d+)?)\s*%\s*(?:de\s+)?desconto\b|\bdesconto\s+de\s+(\d{1,3}(?:[.,]\d+)?)\s*%/gi;
+const PADRAO_PERCENTUAL_DISCOUNT = /\b(\d{1,3}(?:[.,]\d+)?)\s*%\s*(?:off|discount)\b|\bdiscount\s+of\s+(\d{1,3}(?:[.,]\d+)?)\s*%/gi;
+
+function extrairPercentuaisDesconto(texto: string): number[] {
+  const achados: number[] = [];
+  for (const padrao of [PADRAO_PERCENTUAL_DESCONTO, PADRAO_PERCENTUAL_DISCOUNT]) {
+    for (const m of texto.matchAll(padrao)) {
+      const bruto = (m[1] ?? m[2])?.replace(",", ".");
+      const valor = bruto ? Number(bruto) : NaN;
+      if (Number.isFinite(valor)) achados.push(valor);
+    }
+  }
+  return achados;
+}
+
+export interface DeteccaoDescontoAcimaDoLimite {
+  suspeito: boolean;
+  descricoes: string[];
+}
+
+export function detectarDescontoAcimaDoLimite(
+  texto: string,
+  limitePercentual: number
+): DeteccaoDescontoAcimaDoLimite {
+  const percentuais = extrairPercentuaisDesconto(texto).filter((p) => p > limitePercentual);
+  if (percentuais.length === 0) return { suspeito: false, descricoes: [] };
+
+  const maior = Math.max(...percentuais);
+  return {
+    suspeito: true,
+    descricoes: [
+      `desconto de ${maior}% comunicado acima do limite de ${limitePercentual}% configurado para aprovação prévia`,
+    ],
+  };
+}

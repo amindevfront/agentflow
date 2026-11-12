@@ -35,12 +35,15 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
   },
   "logistica-portuaria": {
     key: "logistica-portuaria",
-    label: "Logística & Portos",
-    descricao: "Rastreamento de cargas, janelas de atracação e documentação alfandegária.",
+    label: "Comércio Exterior & Logística B2B (Portos)",
+    descricao:
+      "Cotação segura com checklist documental, rastreamento de cargas, janelas de atracação e prevenção de erro operacional B2B.",
     playbooksSugeridos: [
+      "Cotação segura com checklist documental (DI/BL/fatura comercial)",
       "Notificação de status de carga",
       "Agendamento de janela de atracação",
       "Alerta de pendência documental (DI/BL)",
+      "Prevenção de erro operacional B2B (Pre-Deal Compliance & Margin Guard)",
     ],
   },
   "clinica-alto-padrao": {

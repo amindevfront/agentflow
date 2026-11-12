@@ -44,6 +44,7 @@ import type {
   ResumoExecutivoHandoff,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
+import { estimarRiscoPrevenido } from "@/lib/governance/marginGuard";
 import { auth, db } from "./firebase";
 import { DEFAULT_WORKSPACE_ID, requireDb } from "./firestore";
 import { registrarEventoAuditoriaSilencioso } from "./auditLog";
@@ -91,6 +92,7 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "exito-nao-autorizado": "Garantia de êxito não autorizada (Guardrail Ético-Profissional)",
   "confirmacao-reuniao-diagnostico-b2b": "Confirmação de reunião de diagnóstico B2B",
   "cobranca-documento-pendente": "Cobrança/documento pendente escalado (AR Recovery Engine)",
+  "risco-fiscal-margem-nao-autorizado": "Risco fiscal/margem não autorizado (Pre-Deal Compliance & Margin Guard)",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {
@@ -149,6 +151,9 @@ export function derivarMotivo(
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
   if (regras.has("garantia-exito-nao-autorizada")) return "exito-nao-autorizado";
+  if (regras.has("informalidade-fiscal-nao-autorizada") || regras.has("desconto-acima-limite-sem-aprovacao")) {
+    return "risco-fiscal-margem-nao-autorizado";
+  }
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
 
@@ -268,6 +273,32 @@ export async function abrirTransbordo(entrada: ConstruirTicketInput): Promise<Ha
   });
 
   await setDoc(doc(database, COLECAO, ticket.id), ticket);
+
+  // Motor de Pre-Deal Compliance & Margin Guard: mesma anexação feita no
+  // caminho server-side (`abrirTransbordoAdmin`, `@/lib/server/hitlStore`) —
+  // ver `estimarRiscoPrevenido` (`@/lib/governance/marginGuard`). Best-effort:
+  // uma falha aqui nunca desfaz o ticket já persistido.
+  const riscoPrevenido = estimarRiscoPrevenido(ticket.violacoes);
+  if (riscoPrevenido) {
+    try {
+      await updateDoc(doc(database, COLECAO, ticket.id), { riscoPrevenido });
+      ticket.riscoPrevenido = riscoPrevenido;
+      await registrarEventoAuditoriaSilencioso({
+        tipo: "guardrail.risco-fiscal-margem.prevenido",
+        resultado: "negado",
+        recurso: `${COLECAO}/${ticket.id}`,
+        workspaceId: ticket.workspaceId,
+        traceId: ticket.traceId,
+        severidade: "critica",
+        detalhes: {
+          regras: riscoPrevenido.regras.join("; "),
+          prejuizoEstimadoBrl: riscoPrevenido.prejuizoEstimadoBrl,
+        },
+      });
+    } catch (erro) {
+      console.error(`[margin-guard] falha ao registrar risco prevenido do ticket ${ticket.id}:`, erro);
+    }
+  }
 
   await registrarEventoAuditoriaSilencioso({
     tipo: "hitl.ticket.aberto",

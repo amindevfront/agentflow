@@ -52,6 +52,11 @@ export const POLITICA_PADRAO: GuardrailPolicy = {
   bloquearPromessaComercialNaoAutorizada: false,
   bloquearDiagnosticoOuResultadoClinico: false,
   bloquearGarantiaExitoNaoAutorizada: false,
+  bloquearRiscoFiscalEMargem: false,
+  // 15% é uma faixa de negociação usual sem exigir alçada superior — valor
+  // de referência conservador, cada workspace deve recalibrar ao seu
+  // próprio regime de margem (mesmo espírito de `limiarValorSensivel`).
+  descontoMaximoSemAprovacaoPercentual: 15,
   acaoPorSeveridade: {
     info: "permitido",
     baixa: "mascarado",
@@ -159,6 +164,25 @@ export const POLITICA_ADVOCACIA_CONTABILIDADE: GuardrailPolicy = {
   bloquearGarantiaExitoNaoAutorizada: true,
 };
 
+/**
+ * Política do Motor de Pre-Deal Compliance & Margin Guard — integra
+ * Imobiliário, Clínicas, Comércio Exterior/Logística B2B e E-commerce com
+ * Proteção de Margem e Conformidade Fiscal/Operacional.
+ *
+ * Estende `POLITICA_NO_CRITICO` (mesmo rigor dos outros Módulos Verticais)
+ * com `bloquearRiscoFiscalEMargem`: nenhuma sugestão de informalidade fiscal
+ * (Brasil) ou desconto acima do limite configurado sai sem bloqueio +
+ * acionamento do SAC Shield. Diferente das políticas 1-3 (que também
+ * bloqueiam QUALQUER desconto via `bloquearPromessaComercialNaoAutorizada`),
+ * esta NÃO liga esse mecanismo — os nichos de volume que a usam (e-commerce,
+ * logística) precisam negociar desconto dentro de uma faixa, não nunca.
+ */
+export const POLITICA_PROTECAO_MARGEM_FISCAL: GuardrailPolicy = {
+  ...POLITICA_NO_CRITICO,
+  id: "protecao-margem-fiscal",
+  bloquearRiscoFiscalEMargem: true,
+};
+
 export const POLITICAS_PREDEFINIDAS: Record<string, GuardrailPolicy> = {
   padrao: POLITICA_PADRAO,
   "no-critico": POLITICA_NO_CRITICO,
@@ -166,6 +190,7 @@ export const POLITICAS_PREDEFINIDAS: Record<string, GuardrailPolicy> = {
   "imobiliario-alto-padrao": POLITICA_IMOBILIARIO_ALTO_PADRAO,
   "clinica-alto-padrao": POLITICA_CLINICA_ALTO_PADRAO,
   "advocacia-contabilidade": POLITICA_ADVOCACIA_CONTABILIDADE,
+  "protecao-margem-fiscal": POLITICA_PROTECAO_MARGEM_FISCAL,
 };
 
 const LIMITES_NUMERICOS: Array<{ campo: keyof GuardrailPolicy; min: number; max: number }> = [
@@ -178,6 +203,7 @@ const LIMITES_NUMERICOS: Array<{ campo: keyof GuardrailPolicy; min: number; max:
   // Piso utilizável, não 1: limitar a 1 caractere faria uma configuração
   // malformada bloquear todo payload, contrariando o propósito do limite.
   { campo: "maxCaracteresPayload", min: 1024, max: 5_000_000 },
+  { campo: "descontoMaximoSemAprovacaoPercentual", min: 0, max: 100 },
 ];
 
 function limitar(valor: number, min: number, max: number): number {

@@ -122,7 +122,28 @@ export type GuardrailRuleId =
    * também reaproveitam a fila de HITL para um sinal positivo/operacional,
    * não um bloqueio). Ver `@/lib/server/arRecoveryEngine`.
    */
-  | "cobranca-documento-pendente";
+  | "cobranca-documento-pendente"
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard — risco fiscal/operacional
+   * concreto (ver `@/lib/guardrails/consistency`, `detectarInformalidadeFiscal`):
+   * sugestão/pedido de venda sem nota, pagamento "por fora", mistura
+   * indevida PF/PJ ou outra forma de evasão fiscal — o risco que a Reforma
+   * Tributária 2027 e a fiscalização digital brasileira tornam concreto para
+   * qualquer negócio. Sempre `critica`: a política é "nenhuma tolerância",
+   * mesmo racional de `preco-comercial-nao-autorizado`.
+   */
+  | "informalidade-fiscal-nao-autorizada"
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard — erosão de margem (ver
+   * `@/lib/guardrails/consistency`, `detectarDescontoAcimaDoLimite`): a saída
+   * comunicou um desconto percentual acima do limite configurado pelo gestor
+   * (`GuardrailPolicy.descontoMaximoSemAprovacaoPercentual`) sem validação
+   * prévia. Diferente de `preco-comercial-nao-autorizado` (que bloqueia
+   * QUALQUER desconto, sem exceção — Módulos Verticais 1-3), este limite é
+   * configurável por workspace: nichos de volume (e-commerce, logística)
+   * precisam negociar desconto dentro de uma faixa saudável, não nunca.
+   */
+  | "desconto-acima-limite-sem-aprovacao";
 
 export interface GuardrailViolation {
   regra: GuardrailRuleId;
@@ -250,6 +271,27 @@ export interface GuardrailPolicy {
    * são afetados.
    */
   bloquearGarantiaExitoNaoAutorizada: boolean;
+
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard (Proteção de Margem e
+   * Conformidade Fiscal/Operacional — integra Imobiliário, Clínicas,
+   * Comércio Exterior/Logística B2B e E-commerce). Quando `true`, a saída é
+   * varrida por `detectarInformalidadeFiscal` e `detectarDescontoAcimaDoLimite`
+   * (`@/lib/guardrails/consistency`) — qualquer casamento é `critica`,
+   * bloqueando a resposta e acionando o SAC Shield, mesmo mecanismo dos
+   * guardrails de Proteção de Caixa/Clínico/Ético. `false` por padrão.
+   */
+  bloquearRiscoFiscalEMargem: boolean;
+
+  /**
+   * Limite percentual de desconto comunicável sem aprovação prévia da
+   * diretoria (0..100) — usado por `detectarDescontoAcimaDoLimite` somente
+   * quando `bloquearRiscoFiscalEMargem` está ativo. Configurável por
+   * workspace/nicho (ver `Workspace.guardrailOverrides`): um gestor de
+   * e-commerce/logística define a própria faixa saudável de negociação, em
+   * vez do bloqueio incondicional de `bloquearPromessaComercialNaoAutorizada`.
+   */
+  descontoMaximoSemAprovacaoPercentual: number;
 
   /** Mapa severidade → ação. Permite afrouxar/endurecer por nó. */
   acaoPorSeveridade: Record<GuardrailSeverity, GuardrailVerdict>;

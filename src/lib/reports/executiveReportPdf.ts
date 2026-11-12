@@ -64,6 +64,14 @@ export interface RelatorioExecutivoInput {
   receitaMadrugada: { totalConversas: number; totalAltaIntencaoComercial: number };
   custoEvitadoMadrugadaFormatado: string;
   moedaDoValor: (valorBrl: number) => string;
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard — "Passivo & Multas
+   * Prevenidas (Risk Shield)": soma de `riscoPrevenido.prejuizoEstimadoBrl`
+   * dos tickets do período (ver `@/lib/governance/marginGuard`). Ausente/0 =
+   * nenhum bloqueio deste motor no período, estado normal — o cartão ainda
+   * aparece, para que o C-Level veja "R$ 0" em vez de sumir silenciosamente.
+   */
+  riscoPrevenidoTotalBrl?: number;
   /** `null` quando a trilha de auditoria estava indisponível na geração — ver nota de topo. */
   atestado: AtestadoRelatorio | null;
   geradoEm: string;
@@ -359,6 +367,12 @@ export async function gerarRelatorioExecutivoPdf(input: RelatorioExecutivoInput)
       rotulo: "Receita resgatada de madrugada",
       valor: `${input.receitaMadrugada.totalConversas} conversa(s)`,
       detalhe: `${input.receitaMadrugada.totalAltaIntencaoComercial} de alta intenção · ${input.custoEvitadoMadrugadaFormatado} evitados`,
+      tom: TOKEN.stateDone,
+    },
+    {
+      rotulo: "Passivo & Multas Prevenidas (Risk Shield)",
+      valor: input.moedaDoValor(input.riscoPrevenidoTotalBrl ?? 0),
+      detalhe: "Pre-Deal Compliance & Margin Guard — informalidade fiscal e desconto acima do limite",
       tom: TOKEN.stateDone,
     },
   ]);

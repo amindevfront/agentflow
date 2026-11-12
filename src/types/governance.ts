@@ -1,7 +1,7 @@
 // Tipos de governança: transbordo humano (HITL), cofre Zero-Trust de
 // credenciais e trilha de auditoria imutável.
 
-import type { GuardrailSeverity, GuardrailViolation } from "./guardrails";
+import type { GuardrailRuleId, GuardrailSeverity, GuardrailViolation } from "./guardrails";
 
 // ---------------------------------------------------------------------------
 // Transbordo inteligente (Human-in-the-Loop)
@@ -73,7 +73,15 @@ export type HandoffReason =
    * inadimplência persistente, exceção a avaliar). Ticket carrega
    * `resumoExecutivoCobranca`.
    */
-  | "cobranca-documento-pendente";
+  | "cobranca-documento-pendente"
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard: a IA tentou sugerir
+   * informalidade fiscal (venda sem nota, mistura PF/PJ, evasão) ou um
+   * desconto acima do limite configurado sem aprovação — ver
+   * `informalidade-fiscal-nao-autorizada`/`desconto-acima-limite-sem-aprovacao`
+   * em `GuardrailRuleId`.
+   */
+  | "risco-fiscal-margem-nao-autorizado";
 
 export type HandoffStatus = "aberto" | "em-analise" | "resolvido" | "expirado" | "cancelado";
 
@@ -172,6 +180,22 @@ export interface SugestaoGhostCoach {
   geradoEm: string;
 }
 
+/**
+ * Motor de Pre-Deal Compliance & Margin Guard — estimativa de prejuízo
+ * (multa, passivo tributário, erosão de margem) evitado por um bloqueio de
+ * guardrail. Valor SEMPRE derivado de uma tabela de referência documentada
+ * e conservadora (`VALOR_ESTIMADO_PREJUIZO_POR_REGRA_BRL` em
+ * `@/lib/governance/marginGuard`), nunca inventado por contexto que o
+ * AgentFlow não tem (Artigo IV — No Invention) — mesma honestidade de
+ * `pipelineEstimadoBrl` em `@/lib/server/roiDashboard`.
+ */
+export interface RiscoPrevenidoEstimado {
+  regras: GuardrailRuleId[];
+  /** Categorias textuais detectadas — para o badge "Risco Evitado" e o Checklist de Conformidade da Neural Inbox. */
+  categorias: string[];
+  prejuizoEstimadoBrl: number;
+}
+
 export interface HandoffTicket {
   id: string;
   workspaceId: string;
@@ -227,6 +251,12 @@ export interface HandoffTicket {
   resumoExecutivoCobranca?: ResumoExecutivoCobranca;
   /** Presente apenas em tickets originados da Neural Inbox (`conversationId` definido) — ver `SugestaoGhostCoach`. */
   ghostCoach?: SugestaoGhostCoach;
+  /**
+   * Presente apenas quando `violacoes` contém ao menos uma regra do Motor de
+   * Pre-Deal Compliance & Margin Guard — ver `RiscoPrevenidoEstimado` e
+   * `estimarRiscoPrevenido` em `@/lib/governance/marginGuard`.
+   */
+  riscoPrevenido?: RiscoPrevenidoEstimado;
 }
 
 export interface HandoffQueueStats {
@@ -406,7 +436,16 @@ export type AuditEventType =
    * PRÓPRIO, nunca reaproveita `relatorio.lgpd.gerado` (regime diferente —
    * mesma lição do bug de `conversa.desfecho.registrado` acima).
    */
-  | "relatorio.compliance-global.gerado";
+  | "relatorio.compliance-global.gerado"
+  /**
+   * Motor de Pre-Deal Compliance & Margin Guard: um bloqueio de guardrail
+   * fiscal/margem (`informalidade-fiscal-nao-autorizada` ou
+   * `desconto-acima-limite-sem-aprovacao`) selou um `RiscoPrevenidoEstimado`
+   * na trilha — prova auditável de "quanto passivo/multa isto evitou", para
+   * o indicador "Passivo & Multas Prevenidas (Risk Shield)" do Painel de
+   * Governança e do Relatório Executivo.
+   */
+  | "guardrail.risco-fiscal-margem.prevenido";
 
 export type AuditOutcome = "sucesso" | "falha" | "negado";
 

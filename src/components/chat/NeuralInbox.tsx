@@ -359,6 +359,18 @@ export function NeuralInbox() {
     });
   }, [selecionada]);
 
+  // Motor de Pre-Deal Compliance & Margin Guard: ticket mais recente desta
+  // conversa com risco fiscal/margem prevenido (ver `riscoPrevenido` em
+  // `HandoffTicket`) — alimenta o badge "Risco Evitado" e o Checklist de
+  // Conformidade abaixo. `undefined` quando nenhum guardrail deste motor
+  // disparou nesta conversa — estado normal, não um erro.
+  const ticketRiscoPrevenido = useMemo(() => {
+    if (!selecionada) return undefined;
+    return tickets
+      .filter((t) => t.conversationId === selecionada.id && t.riscoPrevenido)
+      .sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime())[0];
+  }, [tickets, selecionada]);
+
   // Módulo Multimodal de Elite: contagem de áudios/imagens já processados
   // nesta conversa — base do identificador visual no cabeçalho (ver item 3).
   const contagensMidia = useMemo(() => {
@@ -890,6 +902,34 @@ export function NeuralInbox() {
                       {executiveBrief.scriptsSugeridos.map((script, i) => (
                         <li key={i} className="text-xs text-ink-700">
                           “{script}”
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              {ticketRiscoPrevenido?.riscoPrevenido && (
+                <div className="flex flex-col gap-2 rounded-[var(--radius-sm)] border border-state-done-ink/40 bg-state-done-bg p-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="flex-none rounded-full bg-state-done-ink px-2 py-0.5 text-[11px] font-semibold text-white">
+                      RISCO EVITADO
+                    </span>
+                    <p className="text-xs font-semibold text-state-done">
+                      {formatarMoeda(
+                        ticketRiscoPrevenido.riscoPrevenido.prejuizoEstimadoBrl,
+                        roiConfig.moedaExibicao,
+                        cambioParaMoeda(roiConfig, roiConfig.moedaExibicao)
+                      )}{" "}
+                      estimados (Pre-Deal Compliance & Margin Guard)
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-medium text-ink-700">Checklist de Conformidade:</p>
+                    <ul className="mt-1 flex flex-col gap-1">
+                      {ticketRiscoPrevenido.riscoPrevenido.categorias.map((categoria, i) => (
+                        <li key={i} className="text-xs text-ink-700">
+                          ✓ {categoria}
                         </li>
                       ))}
                     </ul>

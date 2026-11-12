@@ -29,7 +29,9 @@ import {
   avaliarFundamentacao,
   detectarAlucinacaoMedica,
   detectarCicloNo,
+  detectarDescontoAcimaDoLimite,
   detectarGarantiaExitoNaoAutorizada,
+  detectarInformalidadeFiscal,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
@@ -58,7 +60,9 @@ export {
   avaliarFundamentacao,
   detectarAlucinacaoMedica,
   detectarCicloNo,
+  detectarDescontoAcimaDoLimite,
   detectarGarantiaExitoNaoAutorizada,
+  detectarInformalidadeFiscal,
   detectarPromessaComercialNaoAutorizada,
   detectarPromptInjection,
   detectarRepeticao,
@@ -71,6 +75,7 @@ export {
   POLITICA_IMOBILIARIO_ALTO_PADRAO,
   POLITICA_NO_CRITICO,
   POLITICA_PADRAO,
+  POLITICA_PROTECAO_MARGEM_FISCAL,
   POLITICA_SANDBOX,
   POLITICAS_PREDEFINIDAS,
   maiorSeveridade,
@@ -482,6 +487,34 @@ export function inspecionarSaida(entrada: InspecaoSaidaInput): OutboundInspectio
           regra: "garantia-exito-nao-autorizada",
           severidade: "critica",
           mensagem: `Tentativa de ${descricao}.`,
+        });
+      }
+    }
+
+    // 9. Motor de Pre-Deal Compliance & Margin Guard (Proteção de Margem e
+    // Conformidade Fiscal/Operacional — integra Imobiliário, Clínicas,
+    // Comércio Exterior/Logística B2B e E-commerce) — ver
+    // `detectarInformalidadeFiscal`/`detectarDescontoAcimaDoLimite`
+    // (`./consistency`). Mesmo racional dos itens 6-8: sempre `critica`,
+    // bloqueio + SAC Shield — risco fiscal (Reforma Tributária 2027,
+    // fiscalização digital) e erosão de margem são risco financeiro/legal
+    // direto, não passivo trabalhista genérico.
+    if (politica.bloquearRiscoFiscalEMargem) {
+      const fiscal = detectarInformalidadeFiscal(escolhida);
+      for (const descricao of fiscal.descricoes) {
+        violacoes.push({
+          regra: "informalidade-fiscal-nao-autorizada",
+          severidade: "critica",
+          mensagem: `Tentativa de ${descricao}.`,
+        });
+      }
+
+      const desconto = detectarDescontoAcimaDoLimite(escolhida, politica.descontoMaximoSemAprovacaoPercentual);
+      for (const descricao of desconto.descricoes) {
+        violacoes.push({
+          regra: "desconto-acima-limite-sem-aprovacao",
+          severidade: "critica",
+          mensagem: `Tentativa de comunicar ${descricao}.`,
         });
       }
     }

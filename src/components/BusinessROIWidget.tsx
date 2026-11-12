@@ -134,6 +134,24 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
     [execucoes, tickets, conversas, campanhas, config, janela, referencia]
   );
 
+  // Motor de Pre-Deal Compliance & Margin Guard — "Passivo & Multas
+  // Prevenidas (Risk Shield)": soma de `riscoPrevenido.prejuizoEstimadoBrl`
+  // (ver `@/lib/governance/marginGuard`) dos tickets já carregados acima,
+  // no MESMO período do resto do painel. Deliberadamente FORA de
+  // `calcularRoi`/`RoiSnapshot` — um agregado derivado, local a este
+  // componente, para não alterar o contrato testado do motor de ROI
+  // (1.100 testes existentes dependem da forma atual de `RoiSnapshot`).
+  const riscoPrevenidoTotalBrl = useMemo(() => {
+    const inicio = new Date(snapshot.periodo.inicio).getTime();
+    const fim = new Date(snapshot.periodo.fim).getTime();
+    return tickets.reduce((acc, t) => {
+      if (!t.riscoPrevenido) return acc;
+      const criadoEm = new Date(t.criadoEm).getTime();
+      if (!Number.isFinite(criadoEm) || criadoEm < inicio || criadoEm > fim) return acc;
+      return acc + t.riscoPrevenido.prejuizoEstimadoBrl;
+    }, 0);
+  }, [tickets, snapshot.periodo]);
+
   // `cambioParaMoeda` escolhe a taxa certa por moeda (USD/GBP/EUR) — antes
   // desta correção, qualquer moeda diferente de USD herdava `cambioUsdBrl`
   // por engano; passava sem ser notado porque GBP nunca esteve em
@@ -189,7 +207,7 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
         />
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
               rotulo="Horas humanas economizadas"
               valor={formatarHoras(snapshot.horasEconomizadasLiquidas)}
@@ -203,6 +221,13 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
               detalhe={`${formatarPercentual(snapshot.reducaoOpexPercentual)} do custo humano · ROI ${formatarPercentual(snapshot.roiPercentual)}`}
               tom={snapshot.economiaLiquidaBrl >= 0 ? "positivo" : "erro"}
               dica={`Custo humano evitado (${moedaDoValor(snapshot.custoHumanoEvitadoBrl)}) menos o custo de tokens de IA (${moedaDoValor(snapshot.custoIaBrl)}), a revisão humana (${moedaDoValor(snapshot.custoRevisaoHumanaBrl)}) e o rateio da plataforma (${moedaDoValor(snapshot.custoPlataformaBrl)}).`}
+            />
+            <MetricCard
+              rotulo="Passivo & Multas Prevenidas (Risk Shield)"
+              valor={moedaDoValor(riscoPrevenidoTotalBrl)}
+              detalhe="Pre-Deal Compliance & Margin Guard"
+              tom={riscoPrevenidoTotalBrl > 0 ? "positivo" : "marca"}
+              dica="Estimativa conservadora de passivo fiscal/multa e erosão de margem evitados por bloqueios do guardrail de informalidade fiscal e desconto acima do limite configurado — tabela de referência em `VALOR_ESTIMADO_PREJUIZO_POR_REGRA_BRL` (@/lib/governance/marginGuard), nunca um valor inventado a partir do contexto da conversa."
             />
             <MetricCard
               rotulo="Autonomia dos agentes"

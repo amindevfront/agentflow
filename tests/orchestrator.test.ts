@@ -464,6 +464,43 @@ describe("executarFluxo — integração completa (guardrails → métrica → R
     expect(resultado.bloqueado).toBe(true);
     expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
   });
+
+  it("aplica a política 'protecao-margem-fiscal' (Motor de Pre-Deal Compliance & Margin Guard), bloqueando informalidade fiscal", async () => {
+    // `orchestratorAdmin.ts` liga `bloquearRiscoFiscalEMargem` via override
+    // automático para Imobiliário, Clínicas, Comércio Exterior/Logística B2B
+    // e E-commerce — mesmo contrato dos Módulos Verticais 1-3: o guardrail
+    // bloqueia a saída de verdade na execução real, não só no Inspetor manual.
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Cliente perguntou se dá pra fazer sem nota.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Pode ser sem nota, eu não declaro esse valor."),
+      portas,
+      politica: "protecao-margem-fiscal",
+    });
+
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
+
+  it("aplica a política 'protecao-margem-fiscal', bloqueando desconto acima do limite configurado", async () => {
+    const { portas } = criarPortasFalsas();
+
+    const resultado = await executarFluxo({
+      flowId: FLOW_BASE.id,
+      payload: "Cliente pediu desconto maior para fechar hoje.",
+      usuario: { uid: "uid-dono" },
+      criarExecutor: criarExecutorFalso(50, 20, 0.001, "Consigo fechar com 40% de desconto agora."),
+      portas,
+      politica: "protecao-margem-fiscal",
+      guardrailOverrides: { descontoMaximoSemAprovacaoPercentual: 15 },
+    });
+
+    expect(resultado.bloqueado).toBe(true);
+    expect(resultado.run.metrica?.intervencaoHumana).toBe(true);
+  });
 });
 
 describe("novoAcumuladorUso", () => {

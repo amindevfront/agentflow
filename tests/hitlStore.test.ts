@@ -80,6 +80,21 @@ describe("derivarMotivo (servidor) — paridade com o cliente", () => {
       )
     ).toBe("exito-nao-autorizado");
   });
+
+  it("mapeia o Motor de Pre-Deal Compliance & Margin Guard para risco-fiscal-margem-nao-autorizado", () => {
+    expect(
+      derivarMotivo(
+        [{ regra: "informalidade-fiscal-nao-autorizada", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("risco-fiscal-margem-nao-autorizado");
+    expect(
+      derivarMotivo(
+        [{ regra: "desconto-acima-limite-sem-aprovacao", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("risco-fiscal-margem-nao-autorizado");
+  });
 });
 
 describe("construirTicketAdmin", () => {

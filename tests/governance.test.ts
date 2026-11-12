@@ -307,6 +307,19 @@ describe("transbordo: prioridade e SLA", () => {
         "bloqueado"
       )
     ).toBe("exito-nao-autorizado");
+    // Motor de Pre-Deal Compliance & Margin Guard — paridade com `hitlStore.ts`.
+    expect(
+      derivarMotivo(
+        [{ regra: "informalidade-fiscal-nao-autorizada", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("risco-fiscal-margem-nao-autorizado");
+    expect(
+      derivarMotivo(
+        [{ regra: "desconto-acima-limite-sem-aprovacao", severidade: "critica", mensagem: "" }],
+        "bloqueado"
+      )
+    ).toBe("risco-fiscal-margem-nao-autorizado");
   });
 
   it("nunca copia o payload em claro para o ticket", () => {

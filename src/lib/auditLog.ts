@@ -329,4 +329,5 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "conector.excluido": "Conector excluído",
   "conversa.desfecho.registrado": "Desfecho de atendimento registrado",
   "relatorio.compliance-global.gerado": "Relatório de prontidão internacional gerado (GDPR/Privacidade EUA)",
+  "guardrail.risco-fiscal-margem.prevenido": "Risco fiscal/margem prevenido (Pre-Deal Compliance & Margin Guard)",
 };

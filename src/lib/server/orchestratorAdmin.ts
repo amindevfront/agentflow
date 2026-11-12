@@ -55,6 +55,22 @@ const MAX_TOKENS_SAIDA = 1024;
 const TIMEOUT_CHAMADA_MS = 20_000;
 
 /**
+ * Nichos cobertos nativamente pelo Motor de Pre-Deal Compliance & Margin
+ * Guard (Proteção de Margem e Conformidade Fiscal/Operacional) — ver uso em
+ * `executarFluxoReal` abaixo. Imobiliário e Clínicas incluem as variantes
+ * globais (EUA/Portugal) dos Módulos Verticais 1-2, não só as versões BR.
+ */
+const NICHOS_RISCO_FISCAL_MARGEM = new Set<NicheKey>([
+  "construtora-imobiliaria",
+  "us-real-estate-luxury",
+  "clinica-alto-padrao",
+  "clinica-medica-exames",
+  "portugal-clinics-health",
+  "logistica-portuaria",
+  "ecommerce",
+]);
+
+/**
  * Disjuntor + retry da chamada real à Anthropic (ver `./externalApiBreaker`).
  * Abre após 3 falhas consecutivas (cada uma já esgotou 2 tentativas com
  * backoff) e passa a recusar chamadas por 30s sem tocar a rede — proteção
@@ -286,12 +302,27 @@ export async function executarFluxoReal(
     } else if (setor === "advocacia-contabilidade") {
       politicaBase = "advocacia-contabilidade";
     }
+    // Motor de Pre-Deal Compliance & Margin Guard — integra nativamente
+    // Imobiliário, Clínicas, Comércio Exterior/Logística B2B e E-commerce
+    // com a Proteção de Margem e Conformidade Fiscal/Operacional, SEM
+    // exigir configuração manual de `guardrailOverrides` (mesmo espírito da
+    // seleção de `politicaBase` acima). Composto via override — não troca
+    // `politicaBase` — porque workspaces dos Módulos Verticais 1-3 já têm
+    // sua própria política endurecida (`imobiliario-alto-padrao`/
+    // `clinica-alto-padrao`): o guardrail fiscal/margem liga ADICIONALMENTE
+    // a ela, em vez de substituí-la.
+    if (setor && NICHOS_RISCO_FISCAL_MARGEM.has(setor)) {
+      guardrailOverrides = { bloquearRiscoFiscalEMargem: true };
+    }
     if (
       dados?.guardrailOverrides &&
       typeof dados.guardrailOverrides === "object" &&
       !Array.isArray(dados.guardrailOverrides)
     ) {
-      guardrailOverrides = dados.guardrailOverrides as Partial<GuardrailPolicy>;
+      // Configuração explícita do workspace sempre prevalece sobre o
+      // default automático acima — "guardrails configuráveis por workspace
+      // e nicho" inclui a opção de desligar, não só ligar.
+      guardrailOverrides = { ...guardrailOverrides, ...(dados.guardrailOverrides as Partial<GuardrailPolicy>) };
     }
   } catch (erro) {
     console.error(`[orchestrator] falha ao ler contexto do workspace ${flow.workspaceId}:`, erro);

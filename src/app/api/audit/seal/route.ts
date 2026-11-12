@@ -70,6 +70,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "conector.excluido",
   "conversa.desfecho.registrado",
   "relatorio.compliance-global.gerado",
+  "guardrail.risco-fiscal-margem.prevenido",
 ]);
 
 const RESULTADOS = new Set<AuditOutcome>(["sucesso", "falha", "negado"]);

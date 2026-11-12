@@ -31,6 +31,8 @@ import type {
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
 import type { ConnectHubEventType } from "@/types";
 import type { Idioma } from "@/lib/jurisdiction";
+import { estimarRiscoPrevenido } from "@/lib/governance/marginGuard";
+import { registrarRiscoPrevenidoAdmin } from "@/lib/governance/marginGuardAdmin";
 import { despacharEventoConnectHubAdmin, montarPayloadConnectHub } from "./connectors";
 import { firestoreAdmin } from "./firebaseAdmin";
 import { gerarSugestaoGhostCoachAdmin } from "./ghostCoach";
@@ -130,6 +132,9 @@ export function derivarMotivo(violacoes: GuardrailViolation[], veredito: Guardra
   if (regras.has("preco-comercial-nao-autorizado")) return "preco-nao-autorizado";
   if (regras.has("diagnostico-ou-resultado-nao-autorizado")) return "diagnostico-nao-autorizado";
   if (regras.has("garantia-exito-nao-autorizada")) return "exito-nao-autorizado";
+  if (regras.has("informalidade-fiscal-nao-autorizada") || regras.has("desconto-acima-limite-sem-aprovacao")) {
+    return "risco-fiscal-margem-nao-autorizado";
+  }
   if (regras.has("orcamento-tokens")) return "orcamento-excedido";
   if (regras.has("erro-interno-guardrail")) return "erro-execucao";
   return veredito === "bloqueado" ? "guardrail-bloqueio" : "guardrail-revisao";
@@ -237,6 +242,27 @@ export async function abrirTransbordoAdmin(entrada: ConstruirTicketAdminInput): 
   const refTicket = firestoreAdmin().collection(COLECAO).doc(ticket.id);
   await refTicket.set(ticket);
   await notificarConnectHub(ticket);
+
+  // Motor de Pre-Deal Compliance & Margin Guard: se alguma violação vier do
+  // guardrail fiscal/margem, anexa a estimativa de prejuízo evitado ao
+  // ticket (badge "Risco Evitado" da Neural Inbox) e sela o evento na
+  // trilha de auditoria. Best-effort e nunca bloqueante: o ticket já está
+  // seguro em `hitlTickets` — mesmo racional de `notificarConnectHub`.
+  const riscoPrevenido = estimarRiscoPrevenido(ticket.violacoes);
+  if (riscoPrevenido) {
+    try {
+      await refTicket.update({ riscoPrevenido });
+      ticket.riscoPrevenido = riscoPrevenido;
+      await registrarRiscoPrevenidoAdmin({
+        workspaceId: ticket.workspaceId,
+        ticketId: ticket.id,
+        traceId: ticket.traceId,
+        risco: riscoPrevenido,
+      });
+    } catch (erro) {
+      console.error(`[margin-guard] falha ao registrar risco prevenido do ticket ${ticket.id}:`, erro);
+    }
+  }
 
   // Ghost Coach / Shadow AI: só faz sentido para tickets conversacionais
   // (Neural Inbox, `conversationId` definido) — um ticket de guardrail de
