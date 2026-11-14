@@ -75,11 +75,32 @@ function criarFirestore(app: FirebaseApp): Firestore {
   }
 }
 
+// Bug real: este bloco roda em escopo de MÓDULO, importado (transitivamente,
+// via `./auth`) pelo layout raiz do app — qualquer `throw` aqui nunca chega a
+// nenhum try/catch de componente nem Error Boundary, porque acontece ANTES
+// de qualquer render começar. O resultado é uma tela completamente branca,
+// sem nenhuma mensagem — exatamente o sintoma reportado em Safari mobile na
+// primeira visita (a política de particionamento de armazenamento do
+// WebKit/ITP é o gatilho real mais comum para `getAuth`/`getStorage`
+// lançarem durante a configuração da camada de persistência, mesmo com
+// `criarFirestore` já protegido abaixo). O resto do app já foi desenhado
+// para lidar bem com `auth`/`db`/`storage` undefined (`firebaseReady` em
+// `@/lib/auth`, `requireDb()` lançando um erro CATCHÁVEL só quando de fato
+// usado) — faltava só proteger a própria inicialização para esse
+// comportamento gracioso realmente se aplicar quando o SDK falha em tempo
+// de execução, não só quando as credenciais estão ausentes.
 if (isFirebaseConfigured) {
-  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  auth = getAuth(app);
-  db = criarFirestore(app);
-  storage = getStorage(app);
+  try {
+    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = criarFirestore(app);
+    storage = getStorage(app);
+  } catch (erro) {
+    console.error(
+      "[firebase] falha ao inicializar o SDK — o app continua rodando sem Firebase (ver `firebaseReady`):",
+      erro
+    );
+  }
 }
 
 export { app, auth, db, storage };
