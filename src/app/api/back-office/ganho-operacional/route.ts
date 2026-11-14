@@ -8,11 +8,19 @@
 // economizados também nunca vêm do cliente: são uma tabela fixa no servidor
 // (`MINUTOS_ECONOMIZADOS_POR_ORIGEM`) — só `origem`/`descricao` (rótulo de
 // exibição) são informados pelo chamador.
+//
+// `origem` é restrita a `ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE`, NÃO
+// a todas as chaves de `MINUTOS_ECONOMIZADOS_POR_ORIGEM`: AR Recovery Engine
+// e Spot Driver Onboarding têm tick próprio (Admin SDK, só acessível a
+// admin do workspace) que já credita automaticamente depois de validar
+// estado real — aceitar essas origens aqui deixaria QUALQUER membro
+// autenticado (não precisa ser admin) fabricar "horas economizadas" dessas
+// duas gavetas sem nenhuma cobrança/triagem real ter acontecido.
 
 import { lerWorkspaceIdDoUsuarioAdmin } from "@/lib/server/orchestratorAdmin";
 import {
   type OrigemBackOffice,
-  MINUTOS_ECONOMIZADOS_POR_ORIGEM,
+  ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE,
   registrarGanhoOperacionalAdmin,
 } from "@/lib/server/backOfficeRoi";
 import { ErroApi, comGuarda, corpoJson, respostaJson } from "@/lib/server/http";
@@ -20,7 +28,7 @@ import { ErroApi, comGuarda, corpoJson, respostaJson } from "@/lib/server/http";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const ORIGENS_VALIDAS = new Set<OrigemBackOffice>(Object.keys(MINUTOS_ECONOMIZADOS_POR_ORIGEM) as OrigemBackOffice[]);
+const ORIGENS_VALIDAS = new Set<OrigemBackOffice>(ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE);
 
 interface CorpoGanhoOperacional {
   origem?: unknown;

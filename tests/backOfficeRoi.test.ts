@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { MINUTOS_ECONOMIZADOS_POR_ORIGEM, construirFlowRunGanhoOperacional } from "@/lib/server/backOfficeRoi";
+import {
+  MINUTOS_ECONOMIZADOS_POR_ORIGEM,
+  ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE,
+  construirFlowRunGanhoOperacional,
+} from "@/lib/server/backOfficeRoi";
 
 const AGORA = new Date("2026-03-15T12:00:00.000Z");
 
@@ -8,6 +12,23 @@ describe("MINUTOS_ECONOMIZADOS_POR_ORIGEM", () => {
     for (const minutos of Object.values(MINUTOS_ECONOMIZADOS_POR_ORIGEM)) {
       expect(minutos).toBeGreaterThan(0);
       expect(minutos).toBeLessThan(60);
+    }
+  });
+});
+
+describe("ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE", () => {
+  it("nunca inclui uma gaveta com tick/Admin SDK próprio — essas só creditam via seu próprio tick, nunca por um membro comum chamando a rota do cliente", () => {
+    expect(ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE).not.toContain("ar-recovery-engine");
+    expect(ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE).not.toContain("spot-driver-onboarding");
+  });
+
+  it("inclui exatamente as gavetas sem tick próprio, onde o clique do operador É a operação concluída", () => {
+    expect([...ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE].sort()).toEqual(["document-ai-vault", "sheet-reconciliation"]);
+  });
+
+  it("toda origem creditável pelo cliente tem uma entrada correspondente na tabela de minutos", () => {
+    for (const origem of ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE) {
+      expect(MINUTOS_ECONOMIZADOS_POR_ORIGEM[origem]).toBeGreaterThan(0);
     }
   });
 });

@@ -60,6 +60,29 @@ const NOME_GAVETA: Record<OrigemBackOffice, string> = {
   "spot-driver-onboarding": "Fleet & SPOT Driver Onboarding",
 };
 
+/**
+ * Origens que QUALQUER membro autenticado do workspace pode creditar via
+ * `/api/back-office/ganho-operacional` — as duas gavetas sem tick/Admin SDK
+ * próprio, onde o clique do operador NA HORA é a própria "operação
+ * concluída" (análise de contrato, reconciliação de registro).
+ *
+ * `ar-recovery-engine` e `spot-driver-onboarding` ficam de FORA desta lista
+ * deliberadamente: o crédito legítimo delas já é 100% automático via seus
+ * próprios ticks Admin SDK (`processarTickArRecoveryEngine`/
+ * `processarTickSpotDriverOnboardingAdmin`), que só creditam depois de
+ * validar estado real (limite de tentativas de cobrança, documentação
+ * obrigatória completa/válida). Se essas duas origens fossem aceitas aqui
+ * também, qualquer membro do workspace (não precisa ser admin) poderia
+ * fabricar "horas economizadas" de AR Recovery/Spot Driver só chamando esta
+ * rota repetidamente pelo navegador — sem nenhuma cobrança real enviada,
+ * nenhum motorista realmente triado — quebrando exatamente a "honestidade
+ * do número" que este arquivo promete no cabeçalho.
+ */
+export const ORIGENS_BACK_OFFICE_CREDITAVEIS_PELO_CLIENTE: readonly OrigemBackOffice[] = [
+  "document-ai-vault",
+  "sheet-reconciliation",
+];
+
 function novoIdRun(): string {
   const aleatorio =
     typeof globalThis.crypto?.randomUUID === "function"
