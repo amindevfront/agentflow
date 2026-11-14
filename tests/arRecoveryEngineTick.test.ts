@@ -22,19 +22,22 @@ interface RefFalsa {
 
 const armazenamento = new Map<string, Record<string, unknown>>();
 // Permite simular que, no instante em que a transação relê o documento, uma
-// execução CONCORRENTE já mudou o status para outro valor — a varredura
-// inicial (`where status in [...]`) já tinha capturado o valor antigo antes
-// dessa mudança, exatamente a janela de corrida que o tick precisa fechar.
-const statusDivergenteNaTransacao = new Map<string, string>();
+// execução CONCORRENTE já mudou o estado — a varredura inicial
+// (`where status in [...]`) já tinha capturado o valor antigo antes dessa
+// mudança, exatamente a janela de corrida que o tick precisa fechar. Um
+// patch arbitrário (não só `status`) porque a corrida mais sutil deste
+// motor é `tentativasCobranca` avançar com o `status` continuando
+// `em-cobranca` (ver teste "corrida: segunda cobrança...").
+const patchDivergenteNaTransacao = new Map<string, Record<string, unknown>>();
 
 function refPara(caminho: string): RefFalsa {
   return {
     _caminho: caminho,
     get: async () => {
-      const divergente = statusDivergenteNaTransacao.get(caminho);
+      const divergente = patchDivergenteNaTransacao.get(caminho);
       const dados = armazenamento.get(caminho);
       if (dados === undefined) return { exists: false, data: () => undefined };
-      return { exists: true, data: () => (divergente ? { ...dados, status: divergente } : dados) };
+      return { exists: true, data: () => (divergente ? { ...dados, ...divergente } : dados) };
     },
     update: async (patch: Record<string, unknown>) => {
       const atual = armazenamento.get(caminho) ?? {};
@@ -106,7 +109,7 @@ const REFERENCIA = new Date("2026-03-15T12:00:00.000Z"); // bem depois do vencim
 describe("processarTickArRecoveryEngine", () => {
   beforeEach(() => {
     armazenamento.clear();
-    statusDivergenteNaTransacao.clear();
+    patchDivergenteNaTransacao.clear();
     mockGanhoOperacional.mockClear();
     mockAbrirTransbordo.mockClear();
   });
@@ -126,7 +129,7 @@ describe("processarTickArRecoveryEngine", () => {
     armazenamento.set("documentosPendentes/doc-1", documentoPendente() as unknown as Record<string, unknown>);
     // Simula que, no instante em que ESTA execução tenta reivindicar o
     // documento, uma execução concorrente já o moveu para "em-cobranca".
-    statusDivergenteNaTransacao.set("documentosPendentes/doc-1", "em-cobranca");
+    patchDivergenteNaTransacao.set("documentosPendentes/doc-1", { status: "em-cobranca", tentativasCobranca: 1 });
 
     const { processarTickArRecoveryEngine } = await import("@/lib/server/arRecoveryEngine");
     const resultado = await processarTickArRecoveryEngine("ws-a", { referencia: REFERENCIA });
@@ -134,8 +137,38 @@ describe("processarTickArRecoveryEngine", () => {
     expect(resultado.cobrancasEnviadas).toBe(0);
     expect(mockGanhoOperacional).not.toHaveBeenCalled();
     // Nenhuma escrita desta execução chega ao documento — ela desiste assim
-    // que a transação relê um status diferente do que a varredura capturou.
+    // que a transação relê um estado diferente do que a varredura capturou.
     expect(armazenamento.get("documentosPendentes/doc-1")?.status).toBe("pendente");
+  });
+
+  it("corrida: segunda cobrança concorrente para o MESMO documento já `em-cobranca` (status não muda, só tentativasCobranca) não dobra o efeito", async () => {
+    // Bug real corrigido: a guarda antiga comparava só `status`, que não
+    // muda entre lembretes sucessivos — só `tentativasCobranca` muda. Duas
+    // execuções do tick vendo o mesmo documento `em-cobranca` na varredura
+    // passavam as duas pela guarda antiga.
+    armazenamento.set(
+      "documentosPendentes/doc-1",
+      documentoPendente({ status: "em-cobranca", tentativasCobranca: 1 }) as unknown as Record<string, unknown>
+    );
+    // Simula que, no instante em que ESTA execução tenta reivindicar o
+    // documento, uma execução concorrente já enviou o lembrete seguinte —
+    // MESMO status (`em-cobranca`), só `tentativasCobranca` avançou.
+    patchDivergenteNaTransacao.set("documentosPendentes/doc-1", {
+      tentativasCobranca: 2,
+      ultimaCobrancaEm: "2026-03-15T11:00:00.000Z",
+    });
+
+    const { processarTickArRecoveryEngine } = await import("@/lib/server/arRecoveryEngine");
+    const resultado = await processarTickArRecoveryEngine("ws-a", { referencia: REFERENCIA });
+
+    expect(resultado.cobrancasEnviadas).toBe(0);
+    expect(mockGanhoOperacional).not.toHaveBeenCalled();
+    // Nenhuma escrita desta execução chega ao documento — ela desiste assim
+    // que a transação relê `tentativasCobranca` diferente do que a
+    // varredura capturou (o fake simula a leitura divergente da
+    // concorrente; a escrita real de QUEM ganhou a corrida não é desta
+    // execução, então `armazenamento` continua no valor pré-corrida).
+    expect(armazenamento.get("documentosPendentes/doc-1")?.tentativasCobranca).toBe(1);
   });
 
   it("escalonamento humano também respeita a mesma proteção contra corrida", async () => {
@@ -143,7 +176,7 @@ describe("processarTickArRecoveryEngine", () => {
       "documentosPendentes/doc-1",
       documentoPendente({ tentativasCobranca: 10, status: "em-cobranca" }) as unknown as Record<string, unknown>
     );
-    statusDivergenteNaTransacao.set("documentosPendentes/doc-1", "escalado");
+    patchDivergenteNaTransacao.set("documentosPendentes/doc-1", { status: "escalado" });
 
     const { processarTickArRecoveryEngine } = await import("@/lib/server/arRecoveryEngine");
     const resultado = await processarTickArRecoveryEngine("ws-a", { referencia: REFERENCIA });

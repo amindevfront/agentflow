@@ -65,22 +65,36 @@ export async function processarTickArRecoveryEngine(
       const refDocumento = db.collection(COLECAO).doc(documento.id);
       const agoraIso = referencia.toISOString();
 
-      // Reivindica o documento numa transação que RELÊ o status atual antes
+      // Reivindica o documento numa transação que RELÊ o estado atual antes
       // de aplicar a mudança — se duas execuções do tick rodarem em
       // paralelo (retry duplicado da Vercel, dois crons simultâneos), a
-      // segunda encontra `atual.status` já diferente do que leu na
-      // varredura e desiste sem repetir o efeito (cobrança/escalonamento)
-      // para o mesmo documento. Mesmo padrão de `processarTickSacShieldSla`
+      // segunda encontra o estado já diferente do que leu na varredura e
+      // desiste sem repetir o efeito (cobrança/escalonamento) para o mesmo
+      // documento. Mesmo padrão de `processarTickSacShieldSla`
       // (`./sacShieldHandoffMonitor`). Os efeitos colaterais (crédito de ROI,
       // abertura de ticket HITL) ficam DELIBERADAMENTE fora da transação —
       // uma transação do Firestore pode ser reexecutada internamente em
       // contenção, e um efeito não-idempotente dentro dela rodaria de novo a
       // cada tentativa.
+      //
+      // Bug real corrigido aqui: a reivindicação comparava SÓ `status`, que
+      // não muda entre lembretes sucessivos de um documento já
+      // `em-cobranca` — só `tentativasCobranca` muda. Resultado: duas
+      // execuções concorrentes do tick, ambas vendo o mesmo documento
+      // `em-cobranca` com a MESMA contagem de tentativas na varredura,
+      // passavam as duas pela guarda (`atual.status === documento.status`
+      // continua verdadeiro), e cada uma incrementava `tentativasCobranca`
+      // e creditava ROI — dois lembretes e dois créditos para a MESMA
+      // janela de atraso. Comparar também `tentativasCobranca` fecha essa
+      // janela: qualquer cobrança já aplicada por outra execução (que
+      // sempre incrementa este contador) agora é detectada aqui.
       const reivindicado = await db.runTransaction(async (tx) => {
         const snapAtual = await tx.get(refDocumento);
         if (!snapAtual.exists) return false;
         const atual = snapAtual.data() as DocumentoPendente;
-        if (atual.status !== documento.status) return false;
+        if (atual.status !== documento.status || atual.tentativasCobranca !== documento.tentativasCobranca) {
+          return false;
+        }
 
         if (decisao.acao === "enviar-cobranca") {
           tx.update(refDocumento, {
