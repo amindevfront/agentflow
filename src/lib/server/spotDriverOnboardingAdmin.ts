@@ -28,7 +28,11 @@
 // real.
 
 import type { DossieMotoristaSpot } from "@/types";
-import { construirResumoExecutivoMotoristaSpot, decidirProximaAcaoOnboardingSpot } from "@/lib/spotDriverOnboarding";
+import {
+  avaliarDossieMotoristaSpot,
+  construirResumoExecutivoMotoristaSpot,
+  decidirProximaAcaoOnboardingSpot,
+} from "@/lib/spotDriverOnboarding";
 import { abrirTransbordoAdmin } from "./hitlStore";
 import { registrarGanhoOperacionalAdmin } from "./backOfficeRoi";
 import { firestoreAdmin } from "./firebaseAdmin";
@@ -58,36 +62,82 @@ export async function processarTickSpotDriverOnboardingAdmin(
   const referencia = opcoes.referencia ?? new Date();
 
   const snap = await db.collection(COLECAO).where("workspaceId", "==", workspaceId).get();
-  const dossies = snap.docs.map((d) => d.data() as DossieMotoristaSpot).filter((d) => !d.aprovadoEm);
+  const idsCandidatos = snap.docs
+    .map((d) => d.data() as DossieMotoristaSpot)
+    .filter((d) => !d.aprovadoEm)
+    .map((d) => d.id);
 
   let escalonamentosAbertos = 0;
   let aprovacoesPendentesAbertas = 0;
 
-  for (const dossie of dossies) {
+  for (const dossieId of idsCandidatos) {
     try {
-      const decisao = decidirProximaAcaoOnboardingSpot(dossie);
-      if (decisao.acao === "aguardar-documentos") continue;
-
-      const refDossie = db.collection(COLECAO).doc(dossie.id);
+      const refDossie = db.collection(COLECAO).doc(dossieId);
       const agoraIso = referencia.toISOString();
 
-      // Reivindica o dossiê numa transação que RELÊ o estado atual antes de
-      // marcar `ticketAbertoEm` — mesmo padrão de `processarTickArRecoveryEngine`:
-      // se duas execuções do tick rodarem em paralelo, a segunda encontra
-      // `ticketAbertoEm` já preenchido (ou `status` já diferente) e desiste
-      // sem abrir um segundo ticket para o mesmo dossiê.
-      const reivindicado = await db.runTransaction(async (tx) => {
+      // Reivindica o dossiê numa transação que RELÊ os `documentos` e
+      // RECALCULA `status`/`pendencias` a partir deles e da referência
+      // ATUAL do tick — nunca confia no `status` persistido no último write
+      // do cliente: uma CNH/ANTT pode vencer só pelo tempo passar entre um
+      // tick e o outro, sem que ninguém tenha editado o dossiê
+      // (`validarDocumentoMotorista` recebe `referencia` como parâmetro
+      // exatamente para isso). Sem este recálculo, um dossiê que ficou
+      // `verde` (ticket "pronto para aprovação" aberto) poderia ser
+      // aprovado por um humano DIAS depois com a CNH já vencida — o mesmo
+      // "nunca libera frota silenciosamente com documentação vencida" que
+      // este módulo promete, quebrado só por o relógio passar. Reler e
+      // recalcular dentro da MESMA transação também fecha a janela de
+      // corrida de `processarTickArRecoveryEngine`: se duas execuções do
+      // tick rodarem em paralelo, ou o cliente escrever um novo documento
+      // entre a varredura e esta transação, é sempre o estado mais recente
+      // que decide.
+      const efeito = await db.runTransaction<
+        { dossie: DossieMotoristaSpot; decisao: ReturnType<typeof decidirProximaAcaoOnboardingSpot> } | null
+      >(async (tx) => {
         const snapAtual = await tx.get(refDossie);
-        if (!snapAtual.exists) return false;
+        if (!snapAtual.exists) return null;
         const atual = snapAtual.data() as DossieMotoristaSpot;
-        if (atual.ticketAbertoEm || atual.status !== dossie.status || atual.aprovadoEm) return false;
+        if (atual.aprovadoEm) return null;
 
-        tx.update(refDossie, { ticketAbertoEm: agoraIso });
-        return true;
+        const avaliacao = avaliarDossieMotoristaSpot(atual.documentos, referencia);
+        const statusMudou = avaliacao.status !== atual.status;
+        const dossieAtualizado: DossieMotoristaSpot = {
+          ...atual,
+          status: avaliacao.status,
+          pendencias: avaliacao.pendencias,
+          // Uma transição de status NOVA invalida o ticket aberto para a
+          // transição ANTERIOR — mesma regra de `atualizarDocumentoMotoristaSpot`
+          // (cliente) ao gravar um documento, agora espelhada aqui para a
+          // transição detectada só pela passagem do tempo.
+          ticketAbertoEm: statusMudou ? null : atual.ticketAbertoEm,
+        };
+
+        const decisao = decidirProximaAcaoOnboardingSpot(dossieAtualizado);
+
+        if (decisao.acao === "aguardar-documentos") {
+          if (statusMudou) {
+            tx.update(refDossie, {
+              status: avaliacao.status,
+              pendencias: avaliacao.pendencias,
+              ticketAbertoEm: null,
+              atualizadoEm: agoraIso,
+            });
+          }
+          return null;
+        }
+
+        tx.update(refDossie, {
+          status: avaliacao.status,
+          pendencias: avaliacao.pendencias,
+          ticketAbertoEm: agoraIso,
+          atualizadoEm: agoraIso,
+        });
+        return { dossie: dossieAtualizado, decisao };
       });
 
-      if (!reivindicado) continue;
+      if (!efeito) continue;
 
+      const { dossie, decisao } = efeito;
       const resumoExecutivoMotoristaSpot = construirResumoExecutivoMotoristaSpot(dossie);
 
       if (decisao.acao === "escalar-documentacao-irregular") {
@@ -135,9 +185,9 @@ export async function processarTickSpotDriverOnboardingAdmin(
         });
       }
     } catch (erro) {
-      console.error(`[spot-driver-onboarding] falha ao processar dossiê ${dossie.id}:`, erro);
+      console.error(`[spot-driver-onboarding] falha ao processar dossiê ${dossieId}:`, erro);
     }
   }
 
-  return { dossiesVerificados: dossies.length, escalonamentosAbertos, aprovacoesPendentesAbertas };
+  return { dossiesVerificados: idsCandidatos.length, escalonamentosAbertos, aprovacoesPendentesAbertas };
 }

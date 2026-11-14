@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
-import type { HandoffTicket, ResumoExecutivoB2B, ResumoExecutivoClinico, ResumoExecutivoHandoff } from "@/types";
+import type {
+  HandoffTicket,
+  ResumoExecutivoB2B,
+  ResumoExecutivoClinico,
+  ResumoExecutivoHandoff,
+  ResumoExecutivoMotoristaSpot,
+} from "@/types";
 import {
   SLA_MINUTOS,
   construirTicketAdmin,
@@ -240,6 +246,37 @@ describe("construirTicketAdmin", () => {
       agora: AGORA,
     });
     expect(semResumo.resumoExecutivoB2B).toBeUndefined();
+  });
+
+  it("carrega resumoExecutivoMotoristaSpot quando informado (Fleet & SPOT Driver Onboarding) e o omite quando ausente", () => {
+    const resumoExecutivoMotoristaSpot: ResumoExecutivoMotoristaSpot = {
+      nomeMotorista: "João",
+      placaVeiculo: "ABC1D23",
+      status: "vermelho",
+      pendencias: ["CNH vencida há 5 dia(s)."],
+    };
+
+    const comResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "critica" }),
+      flowId: "motorista-1",
+      flowNome: "Fleet & SPOT Driver Onboarding — João",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      motivoForcado: "motorista-documentacao-irregular",
+      resumoExecutivoMotoristaSpot,
+      agora: AGORA,
+    });
+    expect(comResumo.resumoExecutivoMotoristaSpot).toEqual(resumoExecutivoMotoristaSpot);
+
+    const semResumo = construirTicketAdmin({
+      solicitacao: solicitacao({ severidade: "media" }),
+      flowId: "flow-1",
+      flowNome: "Faturamento",
+      workspaceId: "ws-1",
+      criadoPor: "sistema",
+      agora: AGORA,
+    });
+    expect(semResumo.resumoExecutivoMotoristaSpot).toBeUndefined();
   });
 });
 

@@ -95,6 +95,7 @@ async function notificarConnectHub(ticket: HandoffTicket): Promise<void> {
         resumoExecutivoClinico: ticket.resumoExecutivoClinico ?? null,
         resumoExecutivoB2B: ticket.resumoExecutivoB2B ?? null,
         resumoExecutivoCobranca: ticket.resumoExecutivoCobranca ?? null,
+        resumoExecutivoMotoristaSpot: ticket.resumoExecutivoMotoristaSpot ?? null,
         criadoEm: ticket.criadoEm,
         slaExpiraEm: ticket.slaExpiraEm,
       },

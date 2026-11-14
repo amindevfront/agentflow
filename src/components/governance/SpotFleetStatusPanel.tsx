@@ -14,7 +14,7 @@
 // filtrada pelos dois motivos desta gaveta, sem nenhuma UI de decisão nova.
 
 import { useEffect, useMemo, useState } from "react";
-import type { DocumentoMotoristaSpot, DossieMotoristaSpot, HandoffTicket, TipoDocumentoMotoristaSpot } from "@/types";
+import type { DocumentoMotoristaSpot, DossieMotoristaSpot, TipoDocumentoMotoristaSpot } from "@/types";
 import { useWorkspace } from "@/lib/workspace";
 import {
   aprovarMotoristaSpot,
@@ -24,7 +24,6 @@ import {
   subscribeMotoristasSpot,
 } from "@/lib/motoristasSpot";
 import { CUSTO_EVITADO_GARGALO_PATIO_BRL, ROTULO_DOCUMENTO_SPOT } from "@/lib/spotDriverOnboarding";
-import { subscribeFilaTransbordo } from "@/lib/humanInTheLoop";
 import { cambioParaMoeda, formatarHoras, formatarMoeda, ROI_CONFIG_PADRAO } from "@/lib/roi";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
@@ -52,7 +51,6 @@ const MINUTOS_ECONOMIZADOS_POR_MOTORISTA = 15;
 export function SpotFleetStatusPanel() {
   const { workspaceId } = useWorkspace();
   const [dossies, setDossies] = useState<DossieMotoristaSpot[]>([]);
-  const [tickets, setTickets] = useState<HandoffTicket[]>([]);
   const [formAberto, setFormAberto] = useState(false);
   const [nomeMotorista, setNomeMotorista] = useState("");
   const [placaVeiculo, setPlacaVeiculo] = useState("");
@@ -61,39 +59,36 @@ export function SpotFleetStatusPanel() {
 
   useEffect(() => {
     if (!workspaceId) return;
-    const cancelamentos = [
-      subscribeMotoristasSpot(setDossies, workspaceId),
-      subscribeFilaTransbordo(setTickets, { workspaceId, limite: 300 }),
-    ];
-    return () => cancelamentos.forEach((cancelar) => cancelar());
+    return subscribeMotoristasSpot(setDossies, workspaceId);
   }, [workspaceId]);
 
   const naoAprovados = useMemo(() => dossies.filter((d) => !d.aprovadoEm), [dossies]);
   const emRisco = naoAprovados.filter((d) => d.status === "vermelho").length;
 
-  // Tempo médio de liberação de frota SPOT: tickets desta gaveta com
-  // decisão "aprovado" medem `decididoEm - criadoEm` — o mesmo intervalo que
-  // antes levava dias de conferência manual e agora é o tempo de revisão
-  // humana de um dossiê já pré-validado (segundos a minutos).
-  const ticketsAprovados = useMemo(
-    () =>
-      tickets.filter(
-        (t) => t.motivo === "dossie-motorista-pronto-aprovacao" && t.decisao === "aprovado" && t.decididoEm
-      ),
-    [tickets]
-  );
+  // Tempo médio de liberação de frota SPOT: mede `aprovadoEm - ticketAbertoEm`
+  // do próprio dossiê (nunca da decisão do ticket HITL genérico de
+  // `HandoffQueuePanel` — "aprovado" ali significa "liberar a saída do
+  // agente como está", um conceito diferente de "liberar a frota"; a única
+  // ação que de fato libera a frota é `aprovarMotoristaSpot`, que só toca o
+  // dossiê). `ticketAbertoEm` é o instante em que o Shield-Layer terminou de
+  // pré-validar o dossiê (status virou `verde`) — o intervalo até
+  // `aprovadoEm` é exatamente o tempo de revisão humana de um dossiê já
+  // pré-validado (segundos a minutos), o mesmo intervalo que antes levava
+  // dias de conferência manual.
+  const dossiesAprovados = useMemo(() => dossies.filter((d) => d.aprovadoEm), [dossies]);
 
   const tempoMedioLiberacaoSegundos = useMemo(() => {
-    if (ticketsAprovados.length === 0) return null;
-    const total = ticketsAprovados.reduce((acc, t) => {
-      const ms = new Date(t.decididoEm as string).getTime() - new Date(t.criadoEm).getTime();
+    const comIntervaloConhecido = dossiesAprovados.filter((d) => d.ticketAbertoEm);
+    if (comIntervaloConhecido.length === 0) return null;
+    const total = comIntervaloConhecido.reduce((acc, d) => {
+      const ms = new Date(d.aprovadoEm as string).getTime() - new Date(d.ticketAbertoEm as string).getTime();
       return acc + Math.max(0, ms);
     }, 0);
-    return total / ticketsAprovados.length / 1000;
-  }, [ticketsAprovados]);
+    return total / comIntervaloConhecido.length / 1000;
+  }, [dossiesAprovados]);
 
-  const horasEconomizadas = (naoAprovados.length + ticketsAprovados.length) * MINUTOS_ECONOMIZADOS_POR_MOTORISTA / 60;
-  const custoEvitadoGargaloBrl = ticketsAprovados.length * CUSTO_EVITADO_GARGALO_PATIO_BRL;
+  const horasEconomizadas = (dossies.length * MINUTOS_ECONOMIZADOS_POR_MOTORISTA) / 60;
+  const custoEvitadoGargaloBrl = dossiesAprovados.length * CUSTO_EVITADO_GARGALO_PATIO_BRL;
 
   async function handleCriar() {
     if (!nomeMotorista.trim()) return;
@@ -179,7 +174,7 @@ export function SpotFleetStatusPanel() {
         <MetricCard
           rotulo="Custo evitado em gargalo de pátio"
           valor={formatarMoeda(custoEvitadoGargaloBrl, ROI_CONFIG_PADRAO.moedaExibicao, cambioParaMoeda(ROI_CONFIG_PADRAO, ROI_CONFIG_PADRAO.moedaExibicao))}
-          detalhe={`${ticketsAprovados.length} motorista(s) liberado(s) sem caminhão parado`}
+          detalhe={`${dossiesAprovados.length} motorista(s) liberado(s) sem caminhão parado`}
           tom={custoEvitadoGargaloBrl > 0 ? "positivo" : "marca"}
         />
       </div>

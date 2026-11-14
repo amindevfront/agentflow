@@ -3,15 +3,22 @@
 // `tests/spotDriverOnboarding.test.ts` (que testa só `decidirProximaAcaoOnboardingSpot`
 // e companhia, nunca este wrapper).
 //
-// Cobre especificamente a proteção contra duplo-efeito sob execução
-// concorrente do tick (cron duplicado / retry da Vercel) — mesmo racional de
-// `tests/arRecoveryEngineTick.test.ts`: cada dossiê é reivindicado numa
-// transação que RELÊ `ticketAbertoEm`/`status`/`aprovadoEm` antes de abrir o
-// ticket HITL/creditar ROI; se outra execução já avançou o dossiê, esta
-// reivindicação desiste sem repetir o efeito.
+// Cobre duas garantias:
+//
+// 1. Proteção contra duplo-efeito sob execução concorrente do tick (cron
+//    duplicado / retry da Vercel) — mesmo racional de
+//    `tests/arRecoveryEngineTick.test.ts`: cada dossiê é reivindicado numa
+//    transação que RELÊ `documentos`/`ticketAbertoEm`/`aprovadoEm` antes de
+//    abrir o ticket HITL/creditar ROI.
+// 2. RECÁLCULO de `status`/`pendencias` a partir dos `documentos` e da
+//    referência do tick, nunca confiando no `status` persistido no último
+//    write do cliente — uma CNH/ANTT pode vencer só pelo tempo passar entre
+//    um tick e o outro, sem que ninguém tenha editado o dossiê. Sem esse
+//    recálculo, um dossiê que ficou `verde` poderia ser aprovado por um
+//    humano dias depois com a CNH já vencida.
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { DossieMotoristaSpot } from "@/types";
+import type { DocumentoMotoristaSpot, DossieMotoristaSpot } from "@/types";
 
 interface RefFalsa {
   _caminho: string;
@@ -81,6 +88,30 @@ vi.mock("@/lib/server/hitlStore", () => ({
   abrirTransbordoAdmin: mockAbrirTransbordo,
 }));
 
+const REFERENCIA = new Date("2026-03-15T12:00:00.000Z");
+const DIA_MS = 24 * 60 * 60 * 1000;
+
+function documento(parcial: Partial<DocumentoMotoristaSpot>): DocumentoMotoristaSpot {
+  return { tipo: "cnh", status: "pendente", validadeEm: null, motivoInvalido: null, recebidoEm: null, ...parcial };
+}
+
+/** Os quatro documentos obrigatórios, todos válidos na `REFERENCIA` — dossiê avalia para `verde`. */
+function documentosValidos(): DocumentoMotoristaSpot[] {
+  return [
+    documento({ tipo: "cnh", status: "recebido", validadeEm: new Date(REFERENCIA.getTime() + 30 * DIA_MS).toISOString() }),
+    documento({ tipo: "crlv", status: "recebido" }),
+    documento({ tipo: "antt", status: "recebido", validadeEm: new Date(REFERENCIA.getTime() + 30 * DIA_MS).toISOString() }),
+    documento({ tipo: "comprovante-residencia", status: "recebido" }),
+  ];
+}
+
+/** Mesmos quatro documentos, mas a CNH já venceu na `REFERENCIA` — dossiê avalia para `vermelho`. */
+function documentosComCnhVencida(): DocumentoMotoristaSpot[] {
+  return documentosValidos().map((d) =>
+    d.tipo === "cnh" ? { ...d, validadeEm: new Date(REFERENCIA.getTime() - 5 * DIA_MS).toISOString() } : d
+  );
+}
+
 function dossie(parcial: Partial<DossieMotoristaSpot> = {}): DossieMotoristaSpot {
   return {
     id: "motorista-1",
@@ -98,8 +129,6 @@ function dossie(parcial: Partial<DossieMotoristaSpot> = {}): DossieMotoristaSpot
   };
 }
 
-const REFERENCIA = new Date("2026-03-15T12:00:00.000Z");
-
 describe("processarTickSpotDriverOnboardingAdmin", () => {
   beforeEach(() => {
     armazenamento.clear();
@@ -111,7 +140,7 @@ describe("processarTickSpotDriverOnboardingAdmin", () => {
   it("escala documentação irregular e abre o ticket HITL uma única vez no caminho normal", async () => {
     armazenamento.set(
       "motoristasSpot/motorista-1",
-      dossie({ status: "vermelho", pendencias: ["CNH vencida há 5 dia(s)."] }) as unknown as Record<string, unknown>
+      dossie({ documentos: documentosComCnhVencida(), status: "amarelo" }) as unknown as Record<string, unknown>
     );
     const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
 
@@ -121,11 +150,16 @@ describe("processarTickSpotDriverOnboardingAdmin", () => {
     expect(resultado.aprovacoesPendentesAbertas).toBe(0);
     expect(mockAbrirTransbordo).toHaveBeenCalledTimes(1);
     expect(mockGanhoOperacional).not.toHaveBeenCalled();
-    expect(armazenamento.get("motoristasSpot/motorista-1")?.ticketAbertoEm).toBe(REFERENCIA.toISOString());
+    const persistido = armazenamento.get("motoristasSpot/motorista-1");
+    expect(persistido?.status).toBe("vermelho");
+    expect(persistido?.ticketAbertoEm).toBe(REFERENCIA.toISOString());
   });
 
-  it("abre aprovação pendente e credita ROI quando o dossiê está verde", async () => {
-    armazenamento.set("motoristasSpot/motorista-1", dossie({ status: "verde" }) as unknown as Record<string, unknown>);
+  it("abre aprovação pendente e credita ROI quando os documentos avaliam para verde", async () => {
+    armazenamento.set(
+      "motoristasSpot/motorista-1",
+      dossie({ documentos: documentosValidos(), status: "amarelo" }) as unknown as Record<string, unknown>
+    );
     const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
 
     const resultado = await processarTickSpotDriverOnboardingAdmin("ws-a", { referencia: REFERENCIA });
@@ -133,25 +167,35 @@ describe("processarTickSpotDriverOnboardingAdmin", () => {
     expect(resultado.aprovacoesPendentesAbertas).toBe(1);
     expect(mockAbrirTransbordo).toHaveBeenCalledTimes(1);
     expect(mockGanhoOperacional).toHaveBeenCalledTimes(1);
+    expect(armazenamento.get("motoristasSpot/motorista-1")?.status).toBe("verde");
   });
 
-  it("nunca processa dossiê já aprovado", async () => {
+  it("nunca processa dossiê já aprovado, mesmo com documentos vencidos", async () => {
     armazenamento.set(
       "motoristasSpot/motorista-1",
-      dossie({ status: "verde", aprovadoEm: "2026-02-01T00:00:00.000Z" }) as unknown as Record<string, unknown>
+      dossie({
+        documentos: documentosComCnhVencida(),
+        status: "verde",
+        aprovadoEm: "2026-02-01T00:00:00.000Z",
+      }) as unknown as Record<string, unknown>
     );
     const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
 
     const resultado = await processarTickSpotDriverOnboardingAdmin("ws-a", { referencia: REFERENCIA });
 
-    expect(resultado.dossiesVerificados).toBe(0);
+    expect(resultado.escalonamentosAbertos).toBe(0);
+    expect(resultado.aprovacoesPendentesAbertas).toBe(0);
     expect(mockAbrirTransbordo).not.toHaveBeenCalled();
   });
 
   it("corrida: se outra execução já reivindicou o dossiê entre a varredura e a transação, não repete o efeito", async () => {
-    armazenamento.set("motoristasSpot/motorista-1", dossie({ status: "verde" }) as unknown as Record<string, unknown>);
+    armazenamento.set(
+      "motoristasSpot/motorista-1",
+      dossie({ documentos: documentosValidos(), status: "verde" }) as unknown as Record<string, unknown>
+    );
     // Simula que, no instante em que ESTA execução tenta reivindicar o
-    // dossiê, uma execução concorrente já marcou `ticketAbertoEm`.
+    // dossiê, uma execução concorrente já marcou `ticketAbertoEm` para a
+    // MESMA transição (status continua `verde`).
     patchDivergenteNaTransacao.set("motoristasSpot/motorista-1", { ticketAbertoEm: "2026-03-15T11:59:00.000Z" });
 
     const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
@@ -162,14 +206,46 @@ describe("processarTickSpotDriverOnboardingAdmin", () => {
     expect(mockGanhoOperacional).not.toHaveBeenCalled();
   });
 
+  it("detecta uma CNH vencida só pela passagem do tempo, mesmo sem nenhuma edição do dossiê — nunca libera frota com documentação vencida silenciosamente", async () => {
+    // Estado persistido por um tick ANTERIOR, quando a CNH ainda era válida:
+    // status `verde`, ticket de aprovação já aberto, ninguém decidiu ainda.
+    // Entre aquele tick e este, a CNH venceu — SEM nenhum write do cliente.
+    armazenamento.set(
+      "motoristasSpot/motorista-1",
+      dossie({
+        documentos: documentosComCnhVencida(),
+        status: "verde",
+        ticketAbertoEm: "2026-03-01T00:00:00.000Z",
+      }) as unknown as Record<string, unknown>
+    );
+
+    const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
+    const resultado = await processarTickSpotDriverOnboardingAdmin("ws-a", { referencia: REFERENCIA });
+
+    expect(resultado.escalonamentosAbertos).toBe(1);
+    expect(resultado.aprovacoesPendentesAbertas).toBe(0);
+    expect(mockAbrirTransbordo).toHaveBeenCalledTimes(1);
+    const persistido = armazenamento.get("motoristasSpot/motorista-1");
+    expect(persistido?.status).toBe("vermelho");
+    // O novo ticket é para a transição `vermelho` recém-detectada, não uma
+    // repetição do ticket antigo (que era para `verde`).
+    expect(persistido?.ticketAbertoEm).toBe(REFERENCIA.toISOString());
+  });
+
   it("um erro em um dossiê não impede o processamento dos demais", async () => {
     armazenamento.set(
       "motoristasSpot/motorista-1",
-      dossie({ id: "motorista-1", status: "vermelho", pendencias: ["CNH vencida."] }) as unknown as Record<string, unknown>
+      dossie({ id: "motorista-1", documentos: documentosComCnhVencida(), status: "amarelo" }) as unknown as Record<
+        string,
+        unknown
+      >
     );
     armazenamento.set(
       "motoristasSpot/motorista-2",
-      dossie({ id: "motorista-2", status: "verde" }) as unknown as Record<string, unknown>
+      dossie({ id: "motorista-2", documentos: documentosValidos(), status: "amarelo" }) as unknown as Record<
+        string,
+        unknown
+      >
     );
     mockAbrirTransbordo.mockRejectedValueOnce(new Error("falha simulada no primeiro dossiê"));
 
