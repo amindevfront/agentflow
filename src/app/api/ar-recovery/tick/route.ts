@@ -11,6 +11,8 @@
 import { diagnosticoAdmin, firestoreAdmin } from "@/lib/server/firebaseAdmin";
 import { processarTickArRecoveryEngine } from "@/lib/server/arRecoveryEngine";
 import { ErroApi, comGuarda, corpoJson, exigirIdentificador, respostaJson } from "@/lib/server/http";
+import { obterIdsModulosAtivos } from "@/modules/registry";
+import type { Workspace } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +46,22 @@ export const POST = comGuarda(
     const ehAdminDoWorkspace = dadosUsuario?.workspaceId === workspaceId && dadosUsuario?.papel === "admin";
     if (!ehAdminDoWorkspace) {
       throw new ErroApi(403, "Apenas administradores do workspace podem processar o AR Recovery Engine.", "papel_insuficiente");
+    }
+
+    // Um scheduler externo (Cloud Scheduler/cron) não sabe, por si só, que o
+    // workspace desligou esta gaveta em Configurações — nada no código
+    // desregistra o job externo quando isso acontece. Sem esta checagem, um
+    // documento pendente que ficou esquecido na coleção continuaria
+    // recebendo cobrança/escalonamento/crédito de ROI indefinidamente,
+    // mesmo com a gaveta oficialmente desativada. Degrada para um resultado
+    // zerado (nunca um erro — "módulo desligado" é um estado normal, não uma
+    // falha) em vez de processar silenciosamente.
+    const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(workspaceId).get();
+    const modulosAtivos = obterIdsModulosAtivos(
+      workspaceSnap.exists ? (workspaceSnap.data() as Pick<Workspace, "setor" | "modulosAtivos">) : null
+    );
+    if (!modulosAtivos.includes("ar-recovery-engine")) {
+      return respostaJson({ documentosVerificados: 0, cobrancasEnviadas: 0, escalonamentosAbertos: 0 });
     }
 
     const resultado = await processarTickArRecoveryEngine(workspaceId);

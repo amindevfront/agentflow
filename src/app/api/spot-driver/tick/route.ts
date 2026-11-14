@@ -11,6 +11,8 @@
 import { diagnosticoAdmin, firestoreAdmin } from "@/lib/server/firebaseAdmin";
 import { processarTickSpotDriverOnboardingAdmin } from "@/lib/server/spotDriverOnboardingAdmin";
 import { ErroApi, comGuarda, corpoJson, exigirIdentificador, respostaJson } from "@/lib/server/http";
+import { obterIdsModulosAtivos } from "@/modules/registry";
+import type { Workspace } from "@/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,6 +50,22 @@ export const POST = comGuarda(
         "Apenas administradores do workspace podem processar o Fleet & SPOT Driver Onboarding.",
         "papel_insuficiente"
       );
+    }
+
+    // Um scheduler externo (Cloud Scheduler/cron) não sabe, por si só, que o
+    // workspace desligou esta gaveta em Configurações — nada no código
+    // desregistra o job externo quando isso acontece. Sem esta checagem, um
+    // dossiê esquecido na coleção continuaria sendo escalado/aprovado-pendente
+    // (e creditando ROI) indefinidamente, mesmo com a gaveta oficialmente
+    // desativada. Degrada para um resultado zerado (nunca um erro — "módulo
+    // desligado" é um estado normal, não uma falha) em vez de processar
+    // silenciosamente.
+    const workspaceSnap = await firestoreAdmin().collection("workspaces").doc(workspaceId).get();
+    const modulosAtivos = obterIdsModulosAtivos(
+      workspaceSnap.exists ? (workspaceSnap.data() as Pick<Workspace, "setor" | "modulosAtivos">) : null
+    );
+    if (!modulosAtivos.includes("spot-driver-onboarding")) {
+      return respostaJson({ dossiesVerificados: 0, escalonamentosAbertos: 0, aprovacoesPendentesAbertas: 0 });
     }
 
     const resultado = await processarTickSpotDriverOnboardingAdmin(workspaceId);

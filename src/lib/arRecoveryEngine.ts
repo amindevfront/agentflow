@@ -10,11 +10,14 @@
 // "Mensagens humanizadas via HITL": o motor NUNCA envia a mensagem de
 // cobrança diretamente ao devedor. Dentro do limite de tentativas
 // automáticas, o documento é marcado "em-cobranca" e o ganho operacional é
-// creditado — mas o texto fica disponível para o operador revisar/disparar
-// pela Neural Inbox, mesmo espírito de `SugestaoGhostCoach` ("nunca enviada
-// automaticamente ao cliente — é um rascunho para o operador revisar").
-// Esgotadas as tentativas, o motor ESCALA para um ticket HITL real
-// (`cobranca-documento-pendente`), para decisão humana.
+// creditado — e `gerarMensagemCobrancaHumanizada` fica disponível para o
+// operador revisar/copiar/disparar manualmente no `ArRecoveryStatusPanel`
+// (painel standalone de Governança — esta gaveta tem `temInboxExtras: false`,
+// então NUNCA é a Neural Inbox que mostra isto), mesmo espírito de
+// `SugestaoGhostCoach` ("nunca enviada automaticamente ao cliente — é um
+// rascunho para o operador revisar"). Esgotadas as tentativas, o motor
+// ESCALA para um ticket HITL real (`cobranca-documento-pendente`), para
+// decisão humana.
 
 import type { DecisaoArRecovery, DocumentoPendente, NivelUrgenciaCobranca, ResumoExecutivoCobranca } from "@/types";
 import type { Idioma } from "@/lib/jurisdiction";

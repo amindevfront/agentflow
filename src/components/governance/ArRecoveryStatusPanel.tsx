@@ -5,9 +5,11 @@
 // Visão geral dos documentos/faturas monitorados pelo motor autônomo de
 // cobrança (`@/lib/arRecoveryEngine`/`@/lib/server/arRecoveryEngine`) — o
 // tick em si roda via scheduler externo (`/api/ar-recovery/tick`), nunca
-// disparado por este painel: aqui o operador cadastra documentos e consulta
-// o status, mesmo padrão de `DistratoRiskPanel` (ferramenta interna, não um
-// gerador de mensagem automática ao devedor).
+// disparado por este painel: aqui o operador cadastra documentos, consulta
+// o status e copia a mensagem humanizada SUGERIDA (`gerarMensagemCobrancaHumanizada`)
+// para disparar manualmente onde já atende o devedor — mesmo padrão de
+// `DistratoRiskPanel` (ferramenta interna, nunca um disparo automático ao
+// devedor).
 
 import { useEffect, useMemo, useState } from "react";
 import type { DocumentoPendente, NivelUrgenciaCobranca } from "@/types";
@@ -17,7 +19,7 @@ import {
   criarDocumentoPendente,
   subscribeDocumentosPendentes,
 } from "@/lib/documentosPendentes";
-import { calcularDiasAtraso, classificarUrgenciaCobranca } from "@/lib/arRecoveryEngine";
+import { calcularDiasAtraso, classificarUrgenciaCobranca, gerarMensagemCobrancaHumanizada } from "@/lib/arRecoveryEngine";
 import { reportarErro } from "@/lib/telemetry/errorReporting";
 import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
@@ -55,6 +57,7 @@ export function ArRecoveryStatusPanel() {
   const [vencimentoEm, setVencimentoEm] = useState("");
   const [processandoId, setProcessandoId] = useState<string | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [copiadoId, setCopiadoId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -115,6 +118,24 @@ export function ArRecoveryStatusPanel() {
     }
   }
 
+  // Fecha a lacuna entre "o motor decidiu que este documento precisa de um
+  // lembrete" (tick, `@/lib/server/arRecoveryEngine`, que só marca
+  // `em-cobranca`/credita ROI) e "o operador tem o TEXTO para realmente
+  // mandar" — `gerarMensagemCobrancaHumanizada` existia e era testada, mas
+  // nenhuma tela chamava, então a mensagem nunca aparecia em lugar nenhum
+  // (o motor nunca envia por conta própria, por desenho). Copiar em vez de
+  // só exibir: o operador cola no WhatsApp/e-mail de onde já está atendendo,
+  // mesmo padrão de `copiarLink` (`@/components/flows/ClientPortalLinkCard`).
+  async function copiarMensagem(documento: DocumentoPendente, nivel: NivelUrgenciaCobranca) {
+    try {
+      await navigator.clipboard.writeText(gerarMensagemCobrancaHumanizada(documento, nivel));
+      setCopiadoId(documento.id);
+      setTimeout(() => setCopiadoId((atual) => (atual === documento.id ? null : atual)), 2000);
+    } catch {
+      // Clipboard pode estar indisponível — a mensagem segue visível para copiar manualmente.
+    }
+  }
+
   return (
     <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
       <div className="flex items-center justify-between gap-2">
@@ -151,23 +172,34 @@ export function ArRecoveryStatusPanel() {
       ) : (
         <ul className="flex flex-col gap-1.5">
           {linhas.map(({ documento, diasAtraso, nivel }) => (
-            <li key={documento.id} className="flex flex-wrap items-center justify-between gap-2 rounded-[var(--radius-sm)] border border-ink-100 px-3 py-2">
-              <div>
-                <span className="text-sm font-semibold text-ink-950">
-                  {documento.referencia} · {documento.devedorNome}
-                </span>
-                <p className="text-xs text-ink-500">
-                  {documento.tentativasCobranca} tentativa(s) · {diasAtraso >= 0 ? `${diasAtraso} dia(s) de atraso` : "ainda não venceu"}
-                </p>
+            <li key={documento.id} className="flex flex-col gap-1.5 rounded-[var(--radius-sm)] border border-ink-100 px-3 py-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <span className="text-sm font-semibold text-ink-950">
+                    {documento.referencia} · {documento.devedorNome}
+                  </span>
+                  <p className="text-xs text-ink-500">
+                    {documento.tentativasCobranca} tentativa(s) · {diasAtraso >= 0 ? `${diasAtraso} dia(s) de atraso` : "ainda não venceu"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", CORES_URGENCIA[nivel])}>
+                    {ROTULO_URGENCIA[nivel]}
+                  </span>
+                  <Button size="sm" variant="secondary" loading={processandoId === documento.id} onClick={() => handleMarcarPago(documento)}>
+                    Marcar como pago
+                  </Button>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className={cn("rounded-full px-2.5 py-1 text-[11px] font-medium", CORES_URGENCIA[nivel])}>
-                  {ROTULO_URGENCIA[nivel]}
-                </span>
-                <Button size="sm" variant="secondary" loading={processandoId === documento.id} onClick={() => handleMarcarPago(documento)}>
-                  Marcar como pago
-                </Button>
-              </div>
+
+              {nivel !== "no-prazo" && (
+                <div className="flex items-start justify-between gap-2 rounded-[var(--radius-sm)] bg-mist-50 px-2.5 py-2">
+                  <p className="text-xs text-ink-700">{gerarMensagemCobrancaHumanizada(documento, nivel)}</p>
+                  <Button size="sm" variant="secondary" onClick={() => copiarMensagem(documento, nivel)}>
+                    {copiadoId === documento.id ? "Copiado!" : "Copiar mensagem"}
+                  </Button>
+                </div>
+              )}
             </li>
           ))}
         </ul>
