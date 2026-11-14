@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { FlowRun, HandoffTicket, RoiConfig } from "@/types";
 import {
   ROI_CONFIG_PADRAO,
+  agruparGanhoOperacionalPorGaveta,
   cambioParaMoeda,
   calcularRoi,
   calcularVariacaoPercentual,
@@ -598,5 +599,83 @@ describe("calcularVariacaoPercentual", () => {
   it("devolve null para entradas não finitas", () => {
     expect(calcularVariacaoPercentual(Number.NaN, 100)).toBeNull();
     expect(calcularVariacaoPercentual(100, Number.NaN)).toBeNull();
+  });
+});
+
+describe("agruparGanhoOperacionalPorGaveta", () => {
+  function runGaveta(origem: string, minutos: number, parcial: Partial<FlowRun> = {}): FlowRun {
+    return execucao({
+      id: `run-${origem}-${Math.random()}`,
+      status: "concluido",
+      flowId: `${origem}:1`,
+      metrica: {
+        tokensEntrada: 0,
+        tokensSaida: 0,
+        minutosManuaisEvitados: minutos,
+        intervencaoHumana: false,
+        concluidoEm: REFERENCIA.toISOString(),
+      },
+      ...parcial,
+    });
+  }
+
+  it("agrupa e soma os minutos já gravados no FlowRun, nunca reinventando o valor por operação", () => {
+    const execucoes = [runGaveta("document-ai-vault", 20), runGaveta("document-ai-vault", 20), runGaveta("ar-recovery-engine", 6)];
+    const resultado = agruparGanhoOperacionalPorGaveta(execucoes, PERIODO);
+
+    const vault = resultado.find((r) => r.gaveta === "document-ai-vault");
+    expect(vault?.operacoes).toBe(2);
+    expect(vault?.minutosEconomizados).toBe(40);
+
+    const arRecovery = resultado.find((r) => r.gaveta === "ar-recovery-engine");
+    expect(arRecovery?.operacoes).toBe(1);
+    expect(arRecovery?.minutosEconomizados).toBe(6);
+  });
+
+  it("nunca inclui uma gaveta sem nenhuma operação no período — nunca uma linha zerada inventada", () => {
+    const resultado = agruparGanhoOperacionalPorGaveta([runGaveta("document-ai-vault", 20)], PERIODO);
+    expect(resultado).toHaveLength(1);
+    expect(resultado.map((r) => r.gaveta)).toEqual(["document-ai-vault"]);
+  });
+
+  it("ignora execuções que não estão concluídas", () => {
+    const resultado = agruparGanhoOperacionalPorGaveta(
+      [runGaveta("document-ai-vault", 20, { status: "em-execucao" })],
+      PERIODO
+    );
+    expect(resultado).toHaveLength(0);
+  });
+
+  it("ignora execuções fora do período", () => {
+    const foraDoPeriodo = runGaveta("document-ai-vault", 20, {
+      metrica: {
+        tokensEntrada: 0,
+        tokensSaida: 0,
+        minutosManuaisEvitados: 20,
+        intervencaoHumana: false,
+        concluidoEm: "2020-01-01T00:00:00.000Z",
+      },
+    });
+    expect(agruparGanhoOperacionalPorGaveta([foraDoPeriodo], PERIODO)).toHaveLength(0);
+  });
+
+  it("nunca confunde um flowId de outra origem com o prefixo de uma gaveta de back-office", () => {
+    const deOutroFluxo = execucao({
+      id: "run-outro",
+      status: "concluido",
+      flowId: "document-ai-vault-mas-nao-e-isso:1",
+      metrica: {
+        tokensEntrada: 0,
+        tokensSaida: 0,
+        minutosManuaisEvitados: 999,
+        intervencaoHumana: false,
+        concluidoEm: REFERENCIA.toISOString(),
+      },
+    });
+    expect(agruparGanhoOperacionalPorGaveta([deOutroFluxo], PERIODO)).toHaveLength(0);
+  });
+
+  it("devolve lista vazia quando nenhuma gaveta de back-office teve operação", () => {
+    expect(agruparGanhoOperacionalPorGaveta([], PERIODO)).toEqual([]);
   });
 });

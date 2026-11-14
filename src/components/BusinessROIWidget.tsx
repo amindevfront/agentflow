@@ -23,6 +23,7 @@ import { subscribeCampaigns } from "@/lib/campaigns/firestore";
 import {
   OPCOES_MOEDA,
   ROI_CONFIG_PADRAO,
+  agruparGanhoOperacionalPorGaveta,
   cambioParaMoeda,
   calcularRoi,
   formatarHoras,
@@ -151,6 +152,17 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
       return acc + t.riscoPrevenido.prejuizoEstimadoBrl;
     }, 0);
   }, [tickets, snapshot.periodo]);
+
+  // Expansão Full-Scope Enterprise Operations — ganho operacional das
+  // gavetas de back-office (Document AI Vault, Sheet Reconciliation, AR
+  // Recovery Engine, Fleet & SPOT Driver Onboarding), atribuído por gaveta
+  // em vez de somado ao total genérico de "fluxos" — ver
+  // `agruparGanhoOperacionalPorGaveta` (`@/lib/roi`) para o porquê de viver
+  // fora de `calcularRoi`.
+  const ganhoPorGaveta = useMemo(
+    () => agruparGanhoOperacionalPorGaveta(execucoes, snapshot.periodo),
+    [execucoes, snapshot.periodo]
+  );
 
   // `cambioParaMoeda` escolhe a taxa certa por moeda (USD/GBP/EUR) — antes
   // desta correção, qualquer moeda diferente de USD herdava `cambioUsdBrl`
@@ -302,6 +314,35 @@ export function BusinessROIWidget({ compacto = false, className }: BusinessROIWi
                   dica="Envios de campanha bloqueados pelo motor anti-ban antes de qualquer tentativa de envio — opt-out registrado ou falha de conformidade."
                 />
               </div>
+
+              {/* Expansão Full-Scope Enterprise Operations: as gavetas de
+                  back-office (Document AI Vault, Sheet Reconciliation, AR
+                  Recovery Engine, Fleet & SPOT Driver Onboarding) já
+                  creditavam horas ao total geral acima — só não apareciam
+                  atribuídas por gaveta neste painel. Sem esta seção, o
+                  C-Level não consegue ver ONDE dentro do "fluxos concluídos"
+                  o ganho recente está vindo. Seção inteira omitida (nunca
+                  cartões zerados) quando nenhuma gaveta teve operação no
+                  período — ver `agruparGanhoOperacionalPorGaveta`. */}
+              {ganhoPorGaveta.length > 0 && (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                    Gavetas de back-office
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {ganhoPorGaveta.map((gaveta) => (
+                      <MetricCard
+                        key={gaveta.gaveta}
+                        rotulo={gaveta.rotulo}
+                        valor={formatarHoras(gaveta.minutosEconomizados / 60)}
+                        detalhe={`${gaveta.operacoes} operaç${gaveta.operacoes === 1 ? "ão" : "ões"} concluída(s) no período`}
+                        tom="marca"
+                        dica="Horas manuais evitadas creditadas por esta gaveta — já incluídas em 'Horas humanas economizadas' acima, mostradas aqui atribuídas à origem específica."
+                      />
+                    ))}
+                  </div>
+                </>
+              )}
 
               {/* Transparência da base de cálculo: um painel de ROI sem esta
                   ressalva seria otimista por omissão. */}

@@ -22,6 +22,7 @@ import type {
   FlowRun,
   HandoffTicket,
   Moeda,
+  NicheKey,
   RegimeEncargos,
   RoiConfig,
   RoiPeriodo,
@@ -647,6 +648,66 @@ export function calcularRoi(entrada: CalcularRoiInput): RoiSnapshot {
 export function calcularVariacaoPercentual(atual: number, anterior: number): number | null {
   if (!Number.isFinite(atual) || !Number.isFinite(anterior) || anterior <= 0) return null;
   return arredondar(((atual - anterior) / anterior) * 100, 1);
+}
+
+export interface GanhoOperacionalGaveta {
+  gaveta: NicheKey;
+  rotulo: string;
+  operacoes: number;
+  minutosEconomizados: number;
+}
+
+/**
+ * As quatro gavetas de back-office da Expansão Full-Scope Enterprise
+ * Operations que creditam ganho operacional via `FlowRun`
+ * (`registrarGanhoOperacionalAdmin`, `@/lib/server/backOfficeRoi`) — lista
+ * fechada e explícita, nunca "qualquer FlowRun que pareça vir de lá".
+ */
+const GAVETAS_BACK_OFFICE: ReadonlyArray<{ id: NicheKey; rotulo: string }> = [
+  { id: "document-ai-vault", rotulo: "Document AI Vault" },
+  { id: "sheet-reconciliation", rotulo: "Sheet Reconciliation" },
+  { id: "ar-recovery-engine", rotulo: "AR Recovery Engine" },
+  { id: "spot-driver-onboarding", rotulo: "Fleet & SPOT Driver Onboarding" },
+];
+
+/**
+ * Agrupa o ganho operacional por gaveta de back-office no período — a
+ * atribuição por gaveta que `calcularRoi`/`RoiSnapshot` não fazem (ali todo
+ * `FlowRun` concluído conta para o mesmo agregado "fluxos", sem distinguir
+ * de onde veio). Função pura e local a este módulo, no mesmo espírito de
+ * `riscoPrevenidoTotalBrl` em `BusinessROIWidget` — um agregado derivado,
+ * sem alterar o contrato já testado de `calcularRoi`.
+ *
+ * Identifica a gaveta pelo prefixo de `flowId` (`${origem}:${passoId}`,
+ * mesma convenção de `construirFlowRunGanhoOperacional`) — nunca duplica a
+ * tabela de minutos por operação (que já vive só no servidor,
+ * `MINUTOS_ECONOMIZADOS_POR_ORIGEM` em `@/lib/server/backOfficeRoi`): soma
+ * direto `metrica.minutosManuaisEvitados`, já gravado em cada `FlowRun`
+ * pelo servidor. Uma gaveta sem nenhuma operação no período simplesmente
+ * não aparece no resultado — nunca uma linha zerada inventada.
+ */
+export function agruparGanhoOperacionalPorGaveta(execucoes: FlowRun[], periodo: RoiPeriodo): GanhoOperacionalGaveta[] {
+  const resultado: GanhoOperacionalGaveta[] = [];
+
+  for (const { id, rotulo } of GAVETAS_BACK_OFFICE) {
+    const prefixo = `${id}:`;
+    const daGaveta = execucoes.filter(
+      (run) =>
+        run.status === "concluido" &&
+        run.flowId.startsWith(prefixo) &&
+        dentroDoPeriodo(run.metrica?.concluidoEm ?? run.iniciadoEm, periodo)
+    );
+    if (daGaveta.length === 0) continue;
+
+    resultado.push({
+      gaveta: id,
+      rotulo,
+      operacoes: daGaveta.length,
+      minutosEconomizados: daGaveta.reduce((acc, run) => acc + (run.metrica?.minutosManuaisEvitados ?? 0), 0),
+    });
+  }
+
+  return resultado;
 }
 
 // ---------------------------------------------------------------------------
