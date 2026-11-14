@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/Button";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { signInWithEmail, signInWithGoogle, firebaseReady } = useAuth();
+  const { user, signInWithEmail, signInWithGoogle, firebaseReady, redirectError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +27,20 @@ export default function LoginPage() {
     }, 1000);
     return () => clearInterval(id);
   }, []);
+
+  // Fecha o fluxo de login com Google por REDIRECT (mobile/PWA, ver
+  // `deveUsarRedirectParaGoogle` em `@/lib/auth`): a página recarrega do
+  // zero ao voltar do Google, então `handleGoogleLogin` nunca chega a
+  // resolver sua própria Promise — é este efeito, reagindo a `user` ficar
+  // preenchido, que de fato navega para `/flows` nesse caminho. Também
+  // cobre, de graça, quem abre `/login` já autenticado.
+  useEffect(() => {
+    if (user) router.push("/flows");
+  }, [user, router]);
+
+  useEffect(() => {
+    if (redirectError) setError(redirectError);
+  }, [redirectError]);
 
   async function handleEmailLogin(e: FormEvent) {
     e.preventDefault();

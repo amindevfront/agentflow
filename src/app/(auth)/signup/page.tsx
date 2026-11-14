@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuth, translateAuthError } from "@/lib/auth";
@@ -11,12 +11,23 @@ import { Button } from "@/components/ui/Button";
 
 export default function SignupPage() {
   const router = useRouter();
-  const { signUpWithEmail, signInWithGoogle, firebaseReady } = useAuth();
+  const { user, signUpWithEmail, signInWithGoogle, firebaseReady, redirectError } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<"email" | "google" | null>(null);
+
+  // Mesma lógica de `LoginPage`: fecha o cadastro com Google por REDIRECT
+  // (mobile/PWA) — a página recarrega do zero ao voltar do Google, então
+  // `handleGoogleSignup` nunca resolve sua própria Promise nesse caminho.
+  useEffect(() => {
+    if (user) router.push("/onboarding");
+  }, [user, router]);
+
+  useEffect(() => {
+    if (redirectError) setError(redirectError);
+  }, [redirectError]);
 
   const passwordError = password.length > 0 ? validatePassword(password) : null;
   const confirmError =

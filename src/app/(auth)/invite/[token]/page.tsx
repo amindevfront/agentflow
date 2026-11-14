@@ -78,7 +78,11 @@ export default function InvitePage() {
     setError(null);
     setLoading("google");
     try {
-      const user = await signInWithGoogle();
+      // `forcarPopup`: esta tela precisa do retorno SÍNCRONO (checagem de
+      // e-mail abaixo, na mesma página) — ver a nota em `AuthContextValue`
+      // (`@/lib/auth`). Login/Signup usam o fallback de redirect em
+      // mobile/PWA; esta tela, por ora, mantém só popup.
+      const user = await signInWithGoogle({ forcarPopup: true });
       // `signInWithGoogle` deixa a pessoa escolher QUALQUER conta Google no
       // seletor — sem esta checagem, alguém com o link do convite (reenviado,
       // compartilhado por engano, visto num print) se auto-provisiona com o
