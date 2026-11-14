@@ -27,6 +27,7 @@ import { PORTUGAL_CLINICS_HEALTH_MODULE } from "./portugal-clinics-health";
 import { DOCUMENT_AI_VAULT_MODULE } from "./document-ai-vault";
 import { SHEET_RECONCILIATION_MODULE } from "./sheet-reconciliation";
 import { AR_RECOVERY_ENGINE_MODULE } from "./ar-recovery-engine";
+import { SPOT_DRIVER_ONBOARDING_MODULE } from "./spot-driver-onboarding";
 
 export const MODULE_REGISTRY: Partial<Record<NicheKey, VerticalModuleDefinition>> = {
   "construtora-imobiliaria": REAL_ESTATE_MODULE,
@@ -43,6 +44,7 @@ export const MODULE_REGISTRY: Partial<Record<NicheKey, VerticalModuleDefinition>
   "document-ai-vault": DOCUMENT_AI_VAULT_MODULE,
   "sheet-reconciliation": SHEET_RECONCILIATION_MODULE,
   "ar-recovery-engine": AR_RECOVERY_ENGINE_MODULE,
+  "spot-driver-onboarding": SPOT_DRIVER_ONBOARDING_MODULE,
 };
 
 /** Definição da gaveta registrada para `id`, ou `null` quando o nicho não tem módulo (ex.: `outros`). */

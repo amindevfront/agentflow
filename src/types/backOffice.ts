@@ -120,3 +120,74 @@ export interface DecisaoArRecovery {
   motivo: string;
   nivel: NivelUrgenciaCobranca;
 }
+
+// --- Fleet & SPOT Driver Onboarding ---
+//
+// Gaveta de Back-office para Logística/Transportadoras (Fadel, Comex,
+// distribuidoras pesadas): triagem autônoma de motoristas terceirizados
+// (SPOT) via WhatsApp/Telegram, com validação determinística da
+// documentação obrigatória — mesmo padrão isomórfico/puro de
+// `DecisaoArRecovery`/`decidirProximaAcaoCobranca` (`./arRecoveryEngine`
+// equivalente para esta gaveta vive em `@/lib/spotDriverOnboarding`).
+
+/** Documentação obrigatória de um motorista SPOT para liberação de frota — ver `DOCUMENTOS_OBRIGATORIOS_SPOT`. */
+export type TipoDocumentoMotoristaSpot = "cnh" | "crlv" | "antt" | "comprovante-residencia";
+
+export type StatusDocumentoMotoristaSpot = "pendente" | "recebido" | "valido" | "invalido";
+
+/**
+ * Um documento do dossiê — `validadeEm` só é relevante para CNH/ANTT
+ * (documentos com data de validade); CRLV/Comprovante de Residência são
+ * validados por presença, não por vencimento. `motivoInvalido` nunca é
+ * inventado: só é preenchido quando `validarDocumentoMotorista` encontra um
+ * motivo concreto (ex.: "CNH vencida há N dias").
+ */
+export interface DocumentoMotoristaSpot {
+  tipo: TipoDocumentoMotoristaSpot;
+  status: StatusDocumentoMotoristaSpot;
+  validadeEm?: string | null;
+  motivoInvalido?: string | null;
+  recebidoEm?: string | null;
+}
+
+/**
+ * Semáforo de prontidão do dossiê — vocabulário do próprio produto
+ * ("status verde/vermelho" no Dossiê de Risco e Prontidão da Neural Inbox):
+ *  - `vermelho`: ao menos um documento `invalido` (ex.: CNH vencida) —
+ *    bloqueio de compliance, nunca libera frota.
+ *  - `amarelo`: nenhum documento inválido, mas a triagem ainda não reuniu
+ *    toda a documentação obrigatória — em andamento.
+ *  - `verde`: toda a documentação obrigatória presente e válida — pronto
+ *    para a aprovação humana de 1 clique (`aprovadoEm`/`aprovadoPor`).
+ */
+export type StatusDossieMotoristaSpot = "verde" | "amarelo" | "vermelho";
+
+/**
+ * Dossiê de Risco e Prontidão do motorista SPOT — o que a Neural Inbox
+ * exibe para o auxiliar humano revisar em segundos, em vez de conduzir a
+ * triagem documento por documento. Persistido em `motoristasSpot/{id}`.
+ */
+export interface DossieMotoristaSpot {
+  id: string;
+  workspaceId: string;
+  nomeMotorista: string;
+  placaVeiculo?: string | null;
+  documentos: DocumentoMotoristaSpot[];
+  status: StatusDossieMotoristaSpot;
+  /** Rótulos legíveis das pendências atuais (documento ausente/inválido) — nunca inventadas, uma por documento problemático. */
+  pendencias: string[];
+  /** Presente quando a triagem se originou de uma conversa da Neural Inbox (WhatsApp/Telegram). */
+  conversationId?: string | null;
+  /** Marca que o tick já abriu o ticket HITL para a transição atual de `status` — evita reabrir ticket a cada tick (ver `processarTickSpotDriverOnboardingAdmin`). */
+  ticketAbertoEm?: string | null;
+  criadoEm: string;
+  atualizadoEm: string;
+  aprovadoEm?: string | null;
+  aprovadoPor?: string | null;
+}
+
+/** Decisão do motor autônomo de triagem para um dossiê — ver `decidirProximaAcaoOnboardingSpot`. */
+export interface DecisaoOnboardingSpot {
+  acao: "aguardar-documentos" | "dossie-pronto-aprovacao" | "escalar-documentacao-irregular";
+  motivo: string;
+}

@@ -189,7 +189,12 @@ describe("Expansão Enterprise Global — camada de localização (moeda, jurisd
 });
 
 describe("Full-Scope Enterprise Operations — gavetas de back-office", () => {
-  const IDS_BACK_OFFICE: NicheKey[] = ["document-ai-vault", "sheet-reconciliation", "ar-recovery-engine"];
+  const IDS_BACK_OFFICE: NicheKey[] = [
+    "document-ai-vault",
+    "sheet-reconciliation",
+    "ar-recovery-engine",
+    "spot-driver-onboarding",
+  ];
 
   it("as três gavetas de back-office estão registradas", () => {
     for (const id of IDS_BACK_OFFICE) {
@@ -216,11 +221,13 @@ describe("Full-Scope Enterprise Operations — gavetas de back-office", () => {
     }
   });
 
-  it("document-ai-vault e ar-recovery-engine são painéis standalone/Governança — não entram no INBOX_EXTRAS_REGISTRY", () => {
+  it("document-ai-vault, ar-recovery-engine e spot-driver-onboarding são painéis standalone/Governança — não entram no INBOX_EXTRAS_REGISTRY", () => {
     expect(obterModulo("document-ai-vault")!.temInboxExtras).toBe(false);
     expect(obterModulo("ar-recovery-engine")!.temInboxExtras).toBe(false);
+    expect(obterModulo("spot-driver-onboarding")!.temInboxExtras).toBe(false);
     expect(INBOX_EXTRAS_REGISTRY["document-ai-vault"]).toBeUndefined();
     expect(INBOX_EXTRAS_REGISTRY["ar-recovery-engine"]).toBeUndefined();
+    expect(INBOX_EXTRAS_REGISTRY["spot-driver-onboarding"]).toBeUndefined();
   });
 
   it("sheet-reconciliation é um widget de Neural Inbox — entra no INBOX_EXTRAS_REGISTRY", () => {
@@ -240,6 +247,11 @@ describe("Full-Scope Enterprise Operations — gavetas de back-office", () => {
     const modulo = obterModulo("ar-recovery-engine")!;
     expect(modulo.guardrailPolicyId).toBe(POLITICA_IMOBILIARIO_ALTO_PADRAO.id);
     expect(resolverPolitica(modulo.guardrailPolicyId).bloquearPromessaComercialNaoAutorizada).toBe(true);
+  });
+
+  it("spot-driver-onboarding reaproveita a política de nó crítico — documentação irregular nunca libera frota silenciosamente", () => {
+    const modulo = obterModulo("spot-driver-onboarding")!;
+    expect(modulo.guardrailPolicyId).toBe(POLITICA_NO_CRITICO.id);
   });
 
   it("um workspace pode ativar uma gaveta de back-office JUNTO do seu setor de indústria, sem perder nenhuma das duas", () => {

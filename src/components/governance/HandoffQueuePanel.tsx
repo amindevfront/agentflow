@@ -283,6 +283,45 @@ export function HandoffQueuePanel({ motivoFiltro }: HandoffQueuePanelProps = {})
                 </p>
               </div>
 
+              {selecionado.resumoExecutivoMotoristaSpot && (
+                <div
+                  className={cn(
+                    "flex flex-col gap-1.5 rounded-[var(--radius-sm)] border p-3",
+                    selecionado.resumoExecutivoMotoristaSpot.status === "vermelho"
+                      ? "border-state-error-ink/40 bg-state-error-bg"
+                      : "border-state-done-ink/40 bg-state-done-bg"
+                  )}
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={cn(
+                        "flex-none rounded-full px-2 py-0.5 text-[11px] font-semibold text-white",
+                        selecionado.resumoExecutivoMotoristaSpot.status === "vermelho"
+                          ? "bg-state-error"
+                          : "bg-state-done-ink"
+                      )}
+                    >
+                      DOSSIÊ {selecionado.resumoExecutivoMotoristaSpot.status.toUpperCase()}
+                    </span>
+                    <p className="text-xs font-semibold text-ink-900">
+                      {selecionado.resumoExecutivoMotoristaSpot.nomeMotorista}
+                      {selecionado.resumoExecutivoMotoristaSpot.placaVeiculo
+                        ? ` · ${selecionado.resumoExecutivoMotoristaSpot.placaVeiculo}`
+                        : ""}
+                    </p>
+                  </div>
+                  {selecionado.resumoExecutivoMotoristaSpot.pendencias.length > 0 && (
+                    <ul className="flex flex-col gap-0.5">
+                      {selecionado.resumoExecutivoMotoristaSpot.pendencias.map((pendencia, i) => (
+                        <li key={i} className="text-xs text-ink-700">
+                          • {pendencia}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
               <div>
                 <h4 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-ink-400">
                   Violações detectadas

@@ -468,6 +468,15 @@ service cloud.firestore {
       allow create: if belongsToWorkspace(request.resource.data.workspaceId);
     }
 
+    match /motoristasSpot/{dossieId} {
+      // Fleet & SPOT Driver Onboarding — mesmo padrão de `documentosPendentes`.
+      // Escrito tanto pelo operador (cadastro/atualização manual de documento
+      // no painel) quanto pelo tick autônomo via Admin SDK
+      // (`/api/spot-driver/tick`, que ignora estas regras por desenho).
+      allow read, write: if belongsToWorkspace(resource.data.workspaceId);
+      allow create: if belongsToWorkspace(request.resource.data.workspaceId);
+    }
+
     match /optOuts/{optOutId} {
       // Opt-out é checado por hash, nunca pelo valor em claro — ver
       // `hashDestino()`. Qualquer membro do workspace pode registrar um

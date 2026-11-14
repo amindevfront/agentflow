@@ -77,6 +77,11 @@ export type NicheKey =
   | "sheet-reconciliation"
   // Motor autônomo de cobrança/follow-up de papelada vencida, via HITL — ver `@/lib/server/arRecoveryEngine`.
   | "ar-recovery-engine"
+  // Fleet & SPOT Driver Onboarding (Logística/Transportadoras): triagem
+  // autônoma de motoristas terceirizados via WhatsApp/Telegram, validação de
+  // CNH/CRLV/ANTT/Comprovante de Residência e Dossiê de Risco e Prontidão
+  // pré-validado para aprovação em 1 clique — ver `@/lib/spotDriverOnboarding`.
+  | "spot-driver-onboarding"
   | "outros";
 
 /**

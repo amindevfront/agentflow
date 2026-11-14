@@ -75,6 +75,20 @@ export type HandoffReason =
    */
   | "cobranca-documento-pendente"
   /**
+   * Fleet & SPOT Driver Onboarding (Logística/Transportadoras): o dossiê do
+   * motorista chegou a `vermelho` (ex.: CNH vencida) — o Shield-Layer bloqueia
+   * a liberação de frota e escala para decisão humana. Ver
+   * `@/lib/spotDriverOnboarding`.
+   */
+  | "motorista-documentacao-irregular"
+  /**
+   * Fleet & SPOT Driver Onboarding: o dossiê chegou a `verde` (toda a
+   * documentação obrigatória presente e válida) — gatilho de transbordo
+   * POSITIVO, mesmo desenho de `agendamento-visita-presencial`: o auxiliar
+   * humano só revisa o Dossiê de Risco e Prontidão e aprova em 1 clique.
+   */
+  | "dossie-motorista-pronto-aprovacao"
+  /**
    * Motor de Pre-Deal Compliance & Margin Guard: a IA tentou sugerir
    * informalidade fiscal (venda sem nota, mistura PF/PJ, evasão) ou um
    * desconto acima do limite configurado sem aprovação — ver
@@ -157,6 +171,20 @@ export interface ResumoExecutivoCobranca {
   tentativasAnteriores?: number | null;
   /** Faixa por extenso, nunca o valor exato em claro — mesmo princípio de `ResumoExecutivoHandoff.faixaOrcamento`. */
   faixaValor?: string | null;
+}
+
+/**
+ * Dossiê de Risco e Prontidão do Motorista SPOT (Gaveta de Back-office:
+ * Fleet & SPOT Driver Onboarding) — card pronto para o auxiliar humano
+ * revisar em segundos e aprovar/escalar, mesmo princípio dos outros
+ * `ResumoExecutivo*` (campo ausente fica `null`/ausente, nunca inventado —
+ * Artigo IV) — ver `@/lib/spotDriverOnboarding`.
+ */
+export interface ResumoExecutivoMotoristaSpot {
+  nomeMotorista: string;
+  placaVeiculo?: string | null;
+  status: "verde" | "amarelo" | "vermelho";
+  pendencias: string[];
 }
 
 /**
@@ -249,6 +277,8 @@ export interface HandoffTicket {
   resumoExecutivoB2B?: ResumoExecutivoB2B;
   /** Presente apenas em tickets de `motivo: "cobranca-documento-pendente"` — ver `ResumoExecutivoCobranca`. */
   resumoExecutivoCobranca?: ResumoExecutivoCobranca;
+  /** Presente apenas em tickets de `motivo: "motorista-documentacao-irregular"` ou `"dossie-motorista-pronto-aprovacao"` — ver `ResumoExecutivoMotoristaSpot`. */
+  resumoExecutivoMotoristaSpot?: ResumoExecutivoMotoristaSpot;
   /** Presente apenas em tickets originados da Neural Inbox (`conversationId` definido) — ver `SugestaoGhostCoach`. */
   ghostCoach?: SugestaoGhostCoach;
   /**

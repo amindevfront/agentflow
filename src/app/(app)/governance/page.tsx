@@ -24,6 +24,7 @@ import { OpexTaxShieldPanel } from "@/components/governance/OpexTaxShieldPanel";
 import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
 import { RoiOpportunityPanel } from "@/components/governance/RoiOpportunityPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
+import { SpotFleetStatusPanel } from "@/components/governance/SpotFleetStatusPanel";
 import { DocumentVaultPanel } from "@/components/niche/DocumentVaultPanel";
 import { Banner } from "@/components/ui/Banner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -81,6 +82,7 @@ export default function GovernancePage() {
   const idsModulosAtivos = obterIdsModulosAtivos(workspace);
   const documentAiVaultAtivo = idsModulosAtivos.includes("document-ai-vault");
   const arRecoveryAtivo = idsModulosAtivos.includes("ar-recovery-engine");
+  const spotDriverOnboardingAtivo = idsModulosAtivos.includes("spot-driver-onboarding");
 
   // Guia de 4 Passos (Configurações → Fluxo → Sandbox → Governança):
   // quem pula direto para a Governança por URL, sem nunca ter passado por
@@ -162,6 +164,15 @@ export default function GovernancePage() {
             <EmptyState
               title="AR Recovery Engine desligado"
               description="Ligue esta gaveta para monitorar faturas/documentos vencidos e disparar cobrança humanizada."
+              action={<CtaAtivarEmConfiguracoes />}
+            />
+          )}
+          {spotDriverOnboardingAtivo ? (
+            <SpotFleetStatusPanel />
+          ) : (
+            <EmptyState
+              title="Fleet & SPOT Driver Onboarding desligado"
+              description="Ligue esta gaveta para triar motoristas SPOT (CNH/CRLV/ANTT/Comprovante de Residência) com Dossiê de Risco e Prontidão."
               action={<CtaAtivarEmConfiguracoes />}
             />
           )}

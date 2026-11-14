@@ -25,7 +25,7 @@
 import type { FlowRun, FlowRunStep } from "@/types";
 import { firestoreAdmin } from "./firebaseAdmin";
 
-export type OrigemBackOffice = "document-ai-vault" | "sheet-reconciliation" | "ar-recovery-engine";
+export type OrigemBackOffice = "document-ai-vault" | "sheet-reconciliation" | "ar-recovery-engine" | "spot-driver-onboarding";
 
 /**
  * Minutos manuais ESTIMADOS evitados por operação, por gaveta — valores de
@@ -39,17 +39,25 @@ export type OrigemBackOffice = "document-ai-vault" | "sheet-reconciliation" | "a
  *  - AR Recovery Engine: tempo médio de redigir e disparar manualmente um
  *    follow-up de cobrança (sem contar o tempo de decisão/negociação, que
  *    continua humano quando o caso é escalado).
+ *  - Fleet & SPOT Driver Onboarding: tempo médio de um auxiliar
+ *    administrativo conferindo manualmente CNH/CRLV/ANTT/Comprovante de
+ *    Residência de um motorista terceirizado e decidindo liberar a frota —
+ *    ver `MINUTOS_ECONOMIZADOS_POR_MOTORISTA_SPOT` em
+ *    `@/lib/server/spotDriverOnboardingAdmin` (mesmo valor, reexportado aqui
+ *    só para a tabela ficar completa por origem).
  */
 export const MINUTOS_ECONOMIZADOS_POR_ORIGEM: Record<OrigemBackOffice, number> = {
   "document-ai-vault": 20,
   "sheet-reconciliation": 4,
   "ar-recovery-engine": 6,
+  "spot-driver-onboarding": 15,
 };
 
 const NOME_GAVETA: Record<OrigemBackOffice, string> = {
   "document-ai-vault": "Document AI Vault",
   "sheet-reconciliation": "Sheet Reconciliation",
   "ar-recovery-engine": "AR Recovery Engine",
+  "spot-driver-onboarding": "Fleet & SPOT Driver Onboarding",
 };
 
 function novoIdRun(): string {

@@ -71,7 +71,12 @@ const ROTULO_CAPACIDADE: Record<keyof Omit<RespostaSaudeSistema, "erro">, string
  * curta e fixa de propósito: são as únicas gavetas hoje pensadas para
  * ligar/desligar como extra, independente do nicho de indústria.
  */
-const GAVETAS_EXTRAS: NicheKey[] = ["document-ai-vault", "sheet-reconciliation", "ar-recovery-engine"];
+const GAVETAS_EXTRAS: NicheKey[] = [
+  "document-ai-vault",
+  "sheet-reconciliation",
+  "ar-recovery-engine",
+  "spot-driver-onboarding",
+];
 
 const ROTULO_MOEDA: Record<Moeda, string> = {
   BRL: "Real (R$)",

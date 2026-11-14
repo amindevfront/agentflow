@@ -61,7 +61,8 @@ export const JANELA_MADRUGADA: JanelaExpediente = {
  * valores de sempre, fonte única agora.
  *
  * Escopo deliberado: as gavetas de back-office (`document-ai-vault`,
- * `sheet-reconciliation`, `ar-recovery-engine`) NÃO entram aqui — `NICHE_ORDER`
+ * `sheet-reconciliation`, `ar-recovery-engine`, `spot-driver-onboarding`)
+ * NÃO entram aqui — `NICHE_ORDER`
  * (fonte desta tabela) só lista nichos de INDÚSTRIA, e `obterMetricasPipelineVerticalAdmin`
  * abaixo só lê `Workspace.setor` (nunca `modulosAtivos`). Isso é correto, não
  * uma lacuna: back-office não gera OPORTUNIDADE DE VENDA (este painel), gera

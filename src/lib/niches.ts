@@ -158,6 +158,13 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
     descricao: "Monitor autônomo de documentos/faturas vencidas, com follow-up humanizado via HITL.",
     playbooksSugeridos: ["Follow-up automático de cobrança", "Escalonamento humano de inadimplência"],
   },
+  "spot-driver-onboarding": {
+    key: "spot-driver-onboarding",
+    label: "Fleet & SPOT Driver Onboarding",
+    descricao:
+      "Triagem de motoristas terceirizados SPOT (CNH/CRLV/ANTT/Comprovante de Residência) com Dossiê de Risco e Prontidão pré-validado.",
+    playbooksSugeridos: ["Triagem documental de motorista SPOT", "Escalonamento de documentação irregular"],
+  },
   outros: {
     key: "outros",
     label: "Outros",

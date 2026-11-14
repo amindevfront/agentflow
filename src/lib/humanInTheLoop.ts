@@ -93,6 +93,8 @@ export const ROTULO_MOTIVO: Record<HandoffReason, string> = {
   "confirmacao-reuniao-diagnostico-b2b": "Confirmação de reunião de diagnóstico B2B",
   "cobranca-documento-pendente": "Cobrança/documento pendente escalado (AR Recovery Engine)",
   "risco-fiscal-margem-nao-autorizado": "Risco fiscal/margem não autorizado (Pre-Deal Compliance & Margin Guard)",
+  "motorista-documentacao-irregular": "Documentação de motorista SPOT irregular (Fleet & SPOT Driver Onboarding)",
+  "dossie-motorista-pronto-aprovacao": "Dossiê de motorista SPOT pronto para aprovação",
 };
 
 export const ROTULO_STATUS: Record<HandoffStatus, string> = {

@@ -124,6 +124,13 @@ export type GuardrailRuleId =
    */
   | "cobranca-documento-pendente"
   /**
+   * Fleet & SPOT Driver Onboarding (Gaveta de Back-office): o dossiê do
+   * motorista SPOT chegou a `vermelho` (ex.: CNH vencida) — Shield-Layer
+   * bloqueia a liberação de frota e escala para decisão humana. Ver
+   * `@/lib/spotDriverOnboarding`.
+   */
+  | "motorista-documentacao-irregular"
+  /**
    * Motor de Pre-Deal Compliance & Margin Guard — risco fiscal/operacional
    * concreto (ver `@/lib/guardrails/consistency`, `detectarInformalidadeFiscal`):
    * sugestão/pedido de venda sem nota, pagamento "por fora", mistura

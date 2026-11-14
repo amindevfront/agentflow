@@ -27,6 +27,7 @@ import type {
   ResumoExecutivoClinico,
   ResumoExecutivoCobranca,
   ResumoExecutivoHandoff,
+  ResumoExecutivoMotoristaSpot,
 } from "@/types";
 import type { SolicitacaoTransbordo } from "@/lib/guardrails";
 import type { ConnectHubEventType } from "@/types";
@@ -179,6 +180,8 @@ export interface ConstruirTicketAdminInput {
   resumoExecutivoB2B?: ResumoExecutivoB2B;
   /** Handoff com Resumo Executivo de Cobrança (AR Recovery Engine) — ver `@/lib/server/arRecoveryEngine`. */
   resumoExecutivoCobranca?: ResumoExecutivoCobranca;
+  /** Dossiê de Risco e Prontidão do Motorista SPOT (Fleet & SPOT Driver Onboarding) — ver `@/lib/spotDriverOnboarding`. */
+  resumoExecutivoMotoristaSpot?: ResumoExecutivoMotoristaSpot;
   /**
    * Identidade do cliente já correlacionada entre canais (ver "No Invention"
    * em `@/lib/server/episodicMemory`) — usada SOMENTE para o Ghost Coach
@@ -231,6 +234,7 @@ export function construirTicketAdmin(entrada: ConstruirTicketAdminInput): Handof
     ...(entrada.resumoExecutivoClinico ? { resumoExecutivoClinico: entrada.resumoExecutivoClinico } : {}),
     ...(entrada.resumoExecutivoB2B ? { resumoExecutivoB2B: entrada.resumoExecutivoB2B } : {}),
     ...(entrada.resumoExecutivoCobranca ? { resumoExecutivoCobranca: entrada.resumoExecutivoCobranca } : {}),
+    ...(entrada.resumoExecutivoMotoristaSpot ? { resumoExecutivoMotoristaSpot: entrada.resumoExecutivoMotoristaSpot } : {}),
     atribuidoPara: null,
     atribuidoEm: null,
   };

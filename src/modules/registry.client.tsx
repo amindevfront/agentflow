@@ -37,9 +37,9 @@ export const INBOX_EXTRAS_REGISTRY: Partial<Record<NicheKey, ComponentType<Inbox
   // `@/modules/portugal-clinics-health/index.ts`.
   "portugal-clinics-health": ClinicsInboxExtras,
   // --- Full-Scope Enterprise Operations (gavetas de back-office) ---
-  // `document-ai-vault`/`ar-recovery-engine` não entram aqui: são painéis
-  // standalone/de Governança, não widgets de Neural Inbox — ver
-  // `temInboxExtras: false` em seus respectivos `index.ts`.
+  // `document-ai-vault`/`ar-recovery-engine`/`spot-driver-onboarding` não
+  // entram aqui: são painéis standalone/de Governança, não widgets de
+  // Neural Inbox — ver `temInboxExtras: false` em seus respectivos `index.ts`.
   "sheet-reconciliation": SheetReconciliationInboxExtras,
 };
 
