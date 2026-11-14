@@ -207,7 +207,15 @@ export default function SettingsPage() {
    */
   async function handleToggleGaveta(id: NicheKey, ativar: boolean) {
     if (!workspaceId || !workspace?.setor) return;
-    if (gavetasSalvando.has(id)) return; // já em andamento — ignora o clique repetido
+    // Bug real corrigido aqui: a guarda antiga só travava a MESMA gaveta
+    // (`.has(id)`), mas o comentário acima sempre descreveu a corrida entre
+    // módulos DIFERENTES — ligar duas gavetas em sequência rápida (ex.: numa
+    // demonstração ao cliente) disparava dois `patchWorkspace` concorrentes,
+    // os dois calculando `novasExtras` a partir do MESMO snapshot antigo de
+    // `extrasAtivas`; o que resolvesse por último sobrescrevia o outro,
+    // revertendo silenciosamente o primeiro clique sem nenhum erro exibido.
+    // Travar por QUALQUER gaveta em andamento (não só esta) fecha a janela.
+    if (gavetasSalvando.size > 0) return;
     setGavetaErro(null);
     setGavetasSalvando((atual) => new Set(atual).add(id));
     try {
@@ -458,7 +466,12 @@ export default function SettingsPage() {
                       <input
                         type="checkbox"
                         checked={ativa}
-                        disabled={gavetasSalvando.has(id)}
+                        // Desabilita TODAS as gavetas (não só a que está
+                        // salvando) enquanto qualquer `patchWorkspace` desta
+                        // seção está em voo — mesma correção do guard em
+                        // `handleToggleGaveta`, aplicada aqui para a UI nunca
+                        // deixar um segundo clique passar durante a janela.
+                        disabled={gavetasSalvando.size > 0}
                         onChange={(e) => handleToggleGaveta(id, e.target.checked)}
                         className="h-4 w-4 flex-none accent-signal-600 disabled:opacity-50"
                       />
