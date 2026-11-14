@@ -120,17 +120,32 @@ export async function atualizarDocumentoMotoristaSpot(
  * `resolverTicket` (`@/lib/humanInTheLoop`), aqui como campo direto do
  * dossiê em vez de ticket, porque a aprovação é uma ação sobre o CADASTRO do
  * motorista, não sobre o ticket HITL que apenas a sinalizou.
+ *
+ * NUNCA confia no `dossie.status` recebido do chamador (que pode estar
+ * obsoleto — ex.: o snapshot do painel ainda não refletiu uma CNH que
+ * venceu nos últimos minutos, o mesmo drift que `processarTickSpotDriverOnboardingAdmin`
+ * corrige a cada execução): recalcula `avaliarDossieMotoristaSpot` a partir
+ * dos `documentos` reais e de "agora" antes de liberar a frota — o próprio
+ * gate de compliance, não só uma UI que esconde o botão.
  */
 export async function aprovarMotoristaSpot(dossie: DossieMotoristaSpot): Promise<void> {
+  const avaliacao = avaliarDossieMotoristaSpot(dossie.documentos);
+  if (avaliacao.status !== "verde") {
+    throw new Error(
+      "A documentação deste motorista não está mais completa/válida (pode ter vencido agora mesmo) — atualize a página antes de aprovar."
+    );
+  }
+
   return enfileirarEscrita("Aprovar motorista SPOT", async () => {
     const uid = auth?.currentUser?.uid;
     if (!uid) throw new Error("É necessário estar autenticado para aprovar um motorista SPOT.");
 
     const database = requireDb();
+    const agoraIso = new Date().toISOString();
     await updateDoc(doc(database, COLECAO, dossie.id), {
-      aprovadoEm: new Date().toISOString(),
+      aprovadoEm: agoraIso,
       aprovadoPor: uid,
-      atualizadoEm: new Date().toISOString(),
+      atualizadoEm: agoraIso,
     });
   });
 }

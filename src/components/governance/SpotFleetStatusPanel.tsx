@@ -150,7 +150,12 @@ export function SpotFleetStatusPanel() {
       await aprovarMotoristaSpot(dossie);
     } catch (e) {
       reportarErro(e, "spot-driver:aprovar-motorista");
-      setErro("Não foi possível aprovar o motorista agora. Tente novamente em alguns instantes.");
+      // Diferente dos outros handlers deste painel: `aprovarMotoristaSpot`
+      // pode rejeitar por um motivo de COMPLIANCE real (documentação venceu
+      // nos últimos minutos), não só por falha transitória de rede — "tente
+      // novamente" seria conselho ativamente errado aqui, então mostra o
+      // motivo específico sempre que a própria função o fornece.
+      setErro(e instanceof Error ? e.message : "Não foi possível aprovar o motorista agora. Tente novamente em alguns instantes.");
     } finally {
       setProcessandoId(null);
     }

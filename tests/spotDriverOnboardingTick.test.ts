@@ -112,6 +112,13 @@ function documentosComCnhVencida(): DocumentoMotoristaSpot[] {
   );
 }
 
+/** CNH e ANTT vencidas — dossiê continua `vermelho`, mas com DUAS pendências em vez de uma. */
+function documentosComCnhEAnttVencidos(): DocumentoMotoristaSpot[] {
+  return documentosComCnhVencida().map((d) =>
+    d.tipo === "antt" ? { ...d, validadeEm: new Date(REFERENCIA.getTime() - 1 * DIA_MS).toISOString() } : d
+  );
+}
+
 function dossie(parcial: Partial<DossieMotoristaSpot> = {}): DossieMotoristaSpot {
   return {
     id: "motorista-1",
@@ -230,6 +237,41 @@ describe("processarTickSpotDriverOnboardingAdmin", () => {
     // O novo ticket é para a transição `vermelho` recém-detectada, não uma
     // repetição do ticket antigo (que era para `verde`).
     expect(persistido?.ticketAbertoEm).toBe(REFERENCIA.toISOString());
+  });
+
+  it("atualiza as pendencias quando um SEGUNDO documento vence depois, mesmo sem o status mudar — nunca abre um segundo ticket para a mesma transição", async () => {
+    // Estado persistido quando só a CNH tinha vencido: `vermelho`, ticket já
+    // aberto, pendência citando só a CNH.
+    armazenamento.set(
+      "motoristasSpot/motorista-1",
+      dossie({
+        documentos: documentosComCnhVencida(),
+        status: "vermelho",
+        pendencias: ["CNH vencida há 5 dia(s)."],
+        ticketAbertoEm: "2026-03-10T00:00:00.000Z",
+      }) as unknown as Record<string, unknown>
+    );
+
+    // Entre aquele tick e este, a ANTT TAMBÉM venceu — mesmo `vermelho`,
+    // mas agora com dois motivos reais.
+    armazenamento.set("motoristasSpot/motorista-1", {
+      ...armazenamento.get("motoristasSpot/motorista-1"),
+      documentos: documentosComCnhEAnttVencidos(),
+    });
+
+    const { processarTickSpotDriverOnboardingAdmin } = await import("@/lib/server/spotDriverOnboardingAdmin");
+    const resultado = await processarTickSpotDriverOnboardingAdmin("ws-a", { referencia: REFERENCIA });
+
+    // Status não mudou (continua vermelho) — não é uma transição nova, não
+    // abre um segundo ticket.
+    expect(resultado.escalonamentosAbertos).toBe(0);
+    expect(mockAbrirTransbordo).not.toHaveBeenCalled();
+    const persistido = armazenamento.get("motoristasSpot/motorista-1");
+    expect(persistido?.status).toBe("vermelho");
+    expect(persistido?.ticketAbertoEm).toBe("2026-03-10T00:00:00.000Z");
+    // Mas a lista de pendências salva (a que o painel exibe) reflete os DOIS
+    // documentos vencidos agora, não só o primeiro.
+    expect(persistido?.pendencias).toHaveLength(2);
   });
 
   it("um erro em um dossiê não impede o processamento dos demais", async () => {

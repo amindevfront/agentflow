@@ -101,6 +101,17 @@ export async function processarTickSpotDriverOnboardingAdmin(
 
         const avaliacao = avaliarDossieMotoristaSpot(atual.documentos, referencia);
         const statusMudou = avaliacao.status !== atual.status;
+        // Também cobre o caso em que o status NÃO muda (ex.: já `vermelho`
+        // por uma CNH vencida) mas um SEGUNDO documento vence depois, só
+        // pela passagem do tempo — sem isto, as `pendencias` exibidas no
+        // painel e já salvas no ticket original ficariam presas no primeiro
+        // motivo para sempre, mesmo a lista real de problemas tendo
+        // crescido. Nunca pode encolher só pelo tempo passar (documentos só
+        // ficam mais vencidos, nunca menos — qualquer melhora exige um
+        // write real do cliente, que já recomputa na hora via
+        // `atualizarDocumentoMotoristaSpot`), então comparar os arrays é
+        // seguro.
+        const pendenciasMudaram = JSON.stringify(avaliacao.pendencias) !== JSON.stringify(atual.pendencias ?? []);
         const dossieAtualizado: DossieMotoristaSpot = {
           ...atual,
           status: avaliacao.status,
@@ -115,11 +126,11 @@ export async function processarTickSpotDriverOnboardingAdmin(
         const decisao = decidirProximaAcaoOnboardingSpot(dossieAtualizado);
 
         if (decisao.acao === "aguardar-documentos") {
-          if (statusMudou) {
+          if (statusMudou || pendenciasMudaram) {
             tx.update(refDossie, {
               status: avaliacao.status,
               pendencias: avaliacao.pendencias,
-              ticketAbertoEm: null,
+              ticketAbertoEm: statusMudou ? null : atual.ticketAbertoEm,
               atualizadoEm: agoraIso,
             });
           }
