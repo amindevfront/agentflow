@@ -12,10 +12,17 @@ describe("gerarContextoNicho", () => {
     expect(gerarContextoNicho("outros")).toBeNull();
   });
 
-  it("gera o contexto de salão de beleza com foco em agendamento rápido", () => {
-    const contexto = gerarContextoNicho("salao-beleza");
-    expect(contexto).toContain("agendamento");
+  it("gera o contexto de logística B2B com protocolo de ingestão (peso/cubagem) e restrição de frete", () => {
+    const contexto = gerarContextoNicho("logistica-portuaria");
     expect(contexto).toContain("Nicho do negócio");
+    expect(contexto).toContain("cubagem");
+    expect(contexto).toContain("torre de controle");
+  });
+
+  it("nenhum perfil de nicho carrega artefato residual de Salão de Beleza/Barbearia", () => {
+    const PROIBIDO = /sal[ãa]o|barbearia|escova|manicure/i;
+    expect(PROIBIDO.test(JSON.stringify(PERFIL_POR_NICHO))).toBe(false);
+    expect(PROIBIDO.test(JSON.stringify(PERFIL_POR_NICHO_IDIOMA))).toBe(false);
   });
 
   it("gera o contexto de clínica de alto padrão com foco em qualificação", () => {

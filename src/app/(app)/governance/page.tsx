@@ -25,6 +25,7 @@ import { RoiConfigPanel } from "@/components/governance/RoiConfigPanel";
 import { RoiOpportunityPanel } from "@/components/governance/RoiOpportunityPanel";
 import { SimuladorContingenciaPanel } from "@/components/governance/SimuladorContingenciaPanel";
 import { SpotFleetStatusPanel } from "@/components/governance/SpotFleetStatusPanel";
+import { VerticalTelemetryPanel } from "@/components/governance/VerticalTelemetryPanel";
 import { DocumentVaultPanel } from "@/components/niche/DocumentVaultPanel";
 import { Banner } from "@/components/ui/Banner";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -36,6 +37,7 @@ import { useWorkspaceDoc } from "@/lib/queries/workspace";
 import { obterIdsModulosAtivos } from "@/modules/registry";
 
 type Aba =
+  | "motor-vertical"
   | "oportunidade"
   | "transbordo"
   | "guardrails"
@@ -51,6 +53,7 @@ type Aba =
   | "backoffice";
 
 const ABAS: Array<{ valor: Aba; label: string }> = [
+  { valor: "motor-vertical", label: "Motor Vertical" },
   { valor: "oportunidade", label: "Oportunidade & Pipeline" },
   { valor: "transbordo", label: "Transbordo" },
   { valor: "guardrails", label: "Guardrails" },
@@ -76,7 +79,10 @@ function CtaAtivarEmConfiguracoes() {
 }
 
 export default function GovernancePage() {
-  const [aba, setAba] = useState<Aba>("oportunidade");
+  // Motor Vertical abre a Governança: é a aba que responde a pergunta que o
+  // C-Level faz primeiro ("quanto negócio isso move na MINHA vertical"), e
+  // que as demais abas depois justificam em detalhe.
+  const [aba, setAba] = useState<Aba>("motor-vertical");
   const { workspaceId, pendingSync } = useWorkspace();
   const { data: workspace, isLoading: workspaceCarregando } = useWorkspaceDoc(workspaceId);
   const idsModulosAtivos = obterIdsModulosAtivos(workspace);
@@ -130,6 +136,7 @@ export default function GovernancePage() {
         />
       </nav>
 
+      {aba === "motor-vertical" && <VerticalTelemetryPanel />}
       {aba === "oportunidade" && <RoiOpportunityPanel />}
       {aba === "transbordo" && <HandoffQueuePanel />}
       {aba === "guardrails" && <GuardrailInspectorPanel />}

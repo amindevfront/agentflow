@@ -89,7 +89,7 @@ vi.mock("firebase/firestore", () => ({
 
 const WORKSPACE_ID = "ws-copiloto-e2e";
 
-describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança (Horizon BC)", () => {
+describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança (Incorporadora Atlântica)", () => {
   beforeEach(() => {
     banco.clear();
     contadorId = 0;
@@ -110,9 +110,9 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
     expect(INBOX_EXTRAS_REGISTRY["construtora-imobiliaria"]).toBeDefined();
   });
 
-  it("Passo 2 — Carregar Dados de Demonstração gera dados válidos, e Salvar persiste o fluxo 'Horizon BC' com workspaceId propagado", async () => {
+  it("Passo 2 — Carregar Dados de Demonstração gera dados válidos, e Salvar persiste o fluxo 'Incorporadora Atlântica' com workspaceId propagado", async () => {
     const exemplo = obterExemploFluxo("construtora-imobiliaria");
-    expect(exemplo.nomeFluxo).toContain("Horizon BC");
+    expect(exemplo.nomeFluxo).toContain("Incorporadora Atlântica");
     expect(exemplo.nomeFluxo.trim().length).toBeGreaterThanOrEqual(3); // mesma regra de `FlowSettingsForm` (mín. 3 caracteres)
 
     const { createFlow } = await import("@/lib/firestore");
@@ -210,7 +210,7 @@ describe("E2E lógico: Copiloto Guiado — conta zerada até Inbox e Governança
     ).toBe(false);
   });
 
-  it("o mesmo roteiro funciona para QUALQUER nicho de indústria, não só Horizon BC — Carregar Dados de Demonstração nunca devolve um exemplo inválido", () => {
+  it("o mesmo roteiro funciona para QUALQUER nicho de indústria, não só Incorporadora Atlântica — Carregar Dados de Demonstração nunca devolve um exemplo inválido", () => {
     for (const setor of NICHE_ORDER) {
       const exemplo = obterExemploFluxo(setor as NicheKey);
       expect(exemplo.nomeFluxo.trim().length).toBeGreaterThanOrEqual(3);

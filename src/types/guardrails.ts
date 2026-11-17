@@ -252,7 +252,7 @@ export interface GuardrailPolicy {
    * condição de parcelamento sempre vira violação `critica`
    * (`preco-comercial-nao-autorizado`), bloqueando a resposta e acionando o
    * SAC Shield. `false` por padrão: nichos sem essa restrição comercial
-   * (ex.: e-commerce, salão de beleza) continuam podendo cotar preço livremente.
+   * (ex.: e-commerce) continuam podendo cotar preço livremente.
    */
   bloquearPromessaComercialNaoAutorizada: boolean;
 

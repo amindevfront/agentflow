@@ -3,16 +3,27 @@ import { obterExemploFluxo } from "@/lib/flowDemoData";
 import { NICHE_ORDER } from "@/lib/niches";
 
 describe("obterExemploFluxo", () => {
-  it("devolve o exemplo com o nome de marca pedido para construtora-imobiliaria (Horizon BC)", () => {
+  it("devolve o exemplo do Motor Vertical A (Incorporadora Atlântica — Itajaí/BC)", () => {
     const exemplo = obterExemploFluxo("construtora-imobiliaria");
-    expect(exemplo.nomeFluxo).toContain("Horizon BC");
+    expect(exemplo.nomeFluxo).toContain("Incorporadora Atlântica");
     expect(exemplo.payloadExemplo.nome).toBeTruthy();
     expect(exemplo.payloadExemplo.texto).toBeTruthy();
   });
 
-  it("devolve o exemplo com o nome de marca pedido para salao-beleza (Salão da Mãe)", () => {
-    const exemplo = obterExemploFluxo("salao-beleza");
-    expect(exemplo.nomeFluxo).toContain("Salão da Mãe");
+  it("devolve o exemplo do Motor Vertical B (Logística B2B) com peso e cubagem no payload", () => {
+    const exemplo = obterExemploFluxo("logistica-portuaria");
+    expect(exemplo.nomeFluxo).toContain("Logística");
+    expect(exemplo.payloadExemplo.texto).toContain("kg");
+    expect(exemplo.payloadExemplo.texto).toContain("m³");
+  });
+
+  it("nenhum exemplo de demonstração carrega artefato residual de Salão de Beleza/Barbearia", () => {
+    const PROIBIDO = /sal[ãa]o|barbearia|escova|manicure/i;
+    for (const setor of NICHE_ORDER) {
+      const exemplo = obterExemploFluxo(setor);
+      expect(PROIBIDO.test(exemplo.nomeFluxo)).toBe(false);
+      expect(PROIBIDO.test(JSON.stringify(exemplo.payloadExemplo))).toBe(false);
+    }
   });
 
   it("devolve payload em inglês para as gavetas americanas", () => {

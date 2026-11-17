@@ -15,6 +15,8 @@ import { FlowRail } from "@/components/ui/FlowRail";
 import { FlowSettingsForm } from "@/components/flows/FlowSettingsForm";
 import { PayloadSimulator } from "@/components/flows/PayloadSimulator";
 import { PrimeirosPassosCard } from "@/components/flows/PrimeirosPassosCard";
+import { FlowTemplateGallery } from "@/components/flows/FlowTemplateGallery";
+import { FlowGraphView } from "@/components/flows/FlowGraphView";
 import { RealExecutionPanel } from "@/components/flows/RealExecutionPanel";
 import { NicheAttachmentsPanel } from "@/components/niche/NicheAttachmentsPanel";
 import { ClientPortalLinkCard } from "@/components/flows/ClientPortalLinkCard";
@@ -102,6 +104,8 @@ export default function FlowsPage() {
     <div className="flex flex-col gap-4">
       <PrimeirosPassosCard temNicho={Boolean(workspace?.setor)} temFluxo={flows.length > 0} ehAdmin={appUser?.papel === "admin"} />
 
+      <FlowTemplateGallery onImplantado={(id) => setSelectedId(id)} />
+
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <section className="flex flex-col gap-3 rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
         <div className="flex items-center gap-2">
@@ -175,6 +179,18 @@ export default function FlowsPage() {
             <FlowSettingsForm flow={selectedFlow} onSaved={(id) => setSelectedId(id)} />
           )}
         </section>
+
+        {/* Grafo declarado do fluxo (templates implantados em 1 clique).
+            Ausente em fluxos criados à mão — a seção inteira some, nunca um
+            diagrama vazio sugerindo que faltou configurar algo. */}
+        {selectedFlow?.grafo && (
+          <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">
+              Grafo do fluxo — nós, guardrails e fallbacks
+            </p>
+            <FlowGraphView grafo={selectedFlow.grafo} />
+          </section>
+        )}
 
         {workspace?.setor === "construtora-imobiliaria" && (
           <section className="rounded-[var(--radius-md)] border border-ink-100 bg-white p-4">

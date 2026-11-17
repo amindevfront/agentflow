@@ -132,8 +132,8 @@ function novoRunId(): string {
  *
  * `contextoNicho` é o Engine Auto-Moldável por Nicho
  * (`@/lib/nichePrompts`): o System Prompt se adapta de verdade ao setor do
- * workspace (salão de beleza, clínica de alto padrão, imobiliária, clínica
- * médica) — mesmo mecanismo de injeção de `contextoConversao`, outro
+ * workspace (imobiliária de alto padrão, logística B2B, clínica de alto
+ * padrão, clínica médica) — mesmo mecanismo de injeção de `contextoConversao`, outro
  * parâmetro opcional e retrocompatível.
  *
  * `contextoMemoriaEpisodica` é o Motor de Memória Episódica e Contexto

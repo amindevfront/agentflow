@@ -446,6 +446,16 @@ export type AuditEventType =
    * uma rota admin dedicada.
    */
   | "fluxo.excluido"
+  /**
+   * Implantação em 1 clique de um Template de Fluxo pronto para produção
+   * (`@/lib/flowTemplates`). Tipo PRÓPRIO, não `config.alterada`: o fluxo
+   * nasce com nós de guardrail já apontados para uma política real e com
+   * arestas de fallback definidas — numa auditoria, "quem ligou este
+   * guardrail e quando" é exatamente a pergunta que precisa de resposta, e
+   * ela se perderia dentro de um evento genérico de configuração (mesma
+   * lição do bug de `conversa.desfecho.registrado`).
+   */
+  | "fluxo.template.implantado"
   /** Exclusão de um conector (lixeira em Canais & Integrações) — mesmo raciocínio de `fluxo.excluido`. */
   | "conector.excluido"
   /**

@@ -16,44 +16,85 @@ import { Button } from "@/components/ui/Button";
 import { Field } from "@/components/ui/Field";
 import { Modal } from "@/components/ui/Modal";
 import { DeleteIconButton } from "@/components/ui/DeleteIconButton";
+import {
+  CONNECTOR_TYPES,
+  TIPOS_COM_INGESTAO_REAL,
+  TIPOS_SEM_INGESTAO_REAL,
+  TIPO_FACEBOOK,
+  TIPO_INSTAGRAM,
+  TIPO_SMS,
+  TIPO_TELEGRAM,
+  TIPO_WHATSAPP,
+  TIPO_WIDGET,
+  canaisDaCamada,
+  type DefinicaoCanal,
+} from "@/lib/connectorCatalog";
+import { cn } from "@/lib/utils";
 import type { Connector } from "@/types";
 
-// Canais Globais (EUA/UK/Europa + Expansão Enterprise Global): além dos
-// quatro originais, são os adaptadores de mensageria reais — ver
-// `@/lib/inbox/channelAdapters`, `@/lib/server/metaMessagingAdmin` e
-// `@/lib/server/telegramBotAdmin`. Os nomes aqui têm de bater EXATAMENTE com
-// as constantes `TIPO_CONECTOR_*` exportadas por aqueles módulos — não
-// importamos as constantes direto porque esses módulos são SERVER-ONLY
-// (puxam o Admin SDK), e importar deles aqui bundlaria código de servidor no
-// cliente.
-const CONNECTOR_TYPES = [
-  "Webhook",
-  "E-mail",
-  "Armazenamento",
-  "API externa",
-  "SMS / Twilio Gateway",
-  "Web Widget Corporativo (Embed)",
-  "WhatsApp Business (Cloud API)",
-  "Instagram Direct (Meta Graph API)",
-  "Facebook Messenger (Meta Graph API)",
-  "Telegram Bot API",
-];
+// Catálogo de canais: hierarquia de vitrine, nomes de tipo e quais têm
+// ingestão real — tudo vem de `@/lib/connectorCatalog`, a fonte única.
+// Aqueles `tipo` têm de bater EXATAMENTE com as constantes
+// `TIPO_CONECTOR_*` dos adaptadores de servidor (`@/lib/server/metaMessagingAdmin`,
+// `@/lib/server/telegramBotAdmin`, etc.) — não importamos as constantes
+// direto porque esses módulos são SERVER-ONLY (puxam o Admin SDK), e
+// importar deles aqui bundlaria código de servidor no cliente.
 
-const TIPO_WIDGET = "Web Widget Corporativo (Embed)";
-const TIPO_WHATSAPP = "WhatsApp Business (Cloud API)";
-const TIPO_SMS = "SMS / Twilio Gateway";
-const TIPO_INSTAGRAM = "Instagram Direct (Meta Graph API)";
-const TIPO_FACEBOOK = "Facebook Messenger (Meta Graph API)";
-const TIPO_TELEGRAM = "Telegram Bot API";
-const TIPOS_COM_INGESTAO_REAL = new Set([
-  TIPO_WIDGET,
-  TIPO_WHATSAPP,
-  TIPO_SMS,
-  TIPO_INSTAGRAM,
-  TIPO_FACEBOOK,
-  TIPO_TELEGRAM,
-]);
-const TIPOS_SEM_INGESTAO_REAL = new Set(CONNECTOR_TYPES.filter((t) => !TIPOS_COM_INGESTAO_REAL.has(t)));
+/**
+ * Card de canal do grid de catálogo — a camada visual que separa "canal
+ * operacional de primeira linha" de "registro de intenção". Deliberadamente
+ * um cartão plano com borda de 1px (regra de elevação do design system),
+ * nunca um bloco com gradiente ou sombra pesada.
+ */
+function CanalCard({
+  canal,
+  configurados,
+  onConectar,
+  bloqueadoParaNaoAdmin,
+}: {
+  canal: DefinicaoCanal;
+  configurados: number;
+  onConectar: () => void;
+  bloqueadoParaNaoAdmin: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex flex-col gap-2 rounded-[var(--radius-md)] border bg-white p-4",
+        configurados > 0 ? "border-signal-500/40" : "border-ink-100"
+      )}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-semibold text-ink-950">{canal.rotuloCurto}</p>
+        <span
+          className={cn(
+            "flex-none rounded-full px-2 py-0.5 text-[10px] font-medium",
+            configurados > 0
+              ? "bg-state-done-bg text-state-done"
+              : canal.ingestaoReal
+                ? "bg-state-idle-bg text-state-idle"
+                : "bg-state-run-bg text-state-run"
+          )}
+        >
+          {configurados > 0 ? `${configurados} ativo${configurados === 1 ? "" : "s"}` : canal.ingestaoReal ? "disponível" : "beta"}
+        </span>
+      </div>
+      <p className="flex-1 text-xs text-ink-500">{canal.descricao}</p>
+      <button
+        type="button"
+        onClick={onConectar}
+        disabled={bloqueadoParaNaoAdmin}
+        className="self-start text-xs font-medium text-signal-600 hover:underline disabled:cursor-not-allowed disabled:text-ink-300 disabled:no-underline"
+      >
+        {bloqueadoParaNaoAdmin
+          ? "exclusivo de admin"
+          : configurados > 0
+            ? "adicionar outro"
+            : "conectar canal"}
+      </button>
+    </div>
+  );
+}
 
 /** Gera um segredo de webhook aleatório (papel equivalente a `META_WEBHOOK_SECRET`, só prova "isto veio do meu webhook registrado"). */
 function gerarSegredoAleatorio(): string {
@@ -66,8 +107,12 @@ export default function ConnectorsPage() {
   const { workspaceId, appUser } = useWorkspace();
   const [connectors, setConnectors] = useState<Connector[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [betaAberto, setBetaAberto] = useState(false);
   const [nome, setNome] = useState("");
-  const [tipo, setTipo] = useState(CONNECTOR_TYPES[0]);
+  // Padrão WhatsApp (e não o primeiro item bruto da lista): o canal tier-1
+  // que praticamente toda operação liga primeiro — abrir o formulário já no
+  // canal mais provável poupa um clique em toda demonstração.
+  const [tipo, setTipo] = useState<string>(TIPO_WHATSAPP);
   const [metaPhoneNumberId, setMetaPhoneNumberId] = useState("");
   const [twilioPhoneNumber, setTwilioPhoneNumber] = useState("");
   const [metaPageId, setMetaPageId] = useState("");
@@ -299,6 +344,18 @@ export default function ConnectorsPage() {
     }
   }
 
+  /** Abre o formulário já no canal escolhido no grid — o atalho que o card oferece. */
+  function abrirFormParaCanal(tipoCanal: string) {
+    setTipo(tipoCanal);
+    setNomeError(null);
+    setShowForm(true);
+  }
+
+  const contarPorTipo = (tipoCanal: string) => connectors.filter((c) => c.tipo === tipoCanal).length;
+  const canaisTier1 = canaisDaCamada("tier-1");
+  const canaisAdicionais = canaisDaCamada("ativo-adicional");
+  const canaisBeta = canaisDaCamada("beta");
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
@@ -312,6 +369,74 @@ export default function ConnectorsPage() {
           Novo conector
         </Button>
       </div>
+
+      {/* Hierarquia de vitrine: os quatro canais operacionais primários em
+          grid de alta disponibilidade; os reais de adoção secundária logo
+          abaixo, em linha compacta; e os ainda não ligados a um provedor
+          fechados numa gaveta "Em breve (Beta)". A separação é informativa,
+          não cosmética — cada camada corresponde a um estado REAL de
+          ingestão (ver `@/lib/connectorCatalog`). */}
+      <section className="flex flex-col gap-3">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Canais operacionais</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {canaisTier1.map((canal) => (
+            <CanalCard
+              key={canal.tipo}
+              canal={canal}
+              configurados={contarPorTipo(canal.tipo)}
+              onConectar={() => abrirFormParaCanal(canal.tipo)}
+              bloqueadoParaNaoAdmin={canal.tipo === TIPO_TELEGRAM && appUser?.papel !== "admin"}
+            />
+          ))}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-[var(--radius-sm)] border border-ink-100 bg-mist-50 px-3 py-2">
+          <span className="text-[11px] font-medium text-ink-500">Também disponíveis:</span>
+          {canaisAdicionais.map((canal) => (
+            <button
+              key={canal.tipo}
+              type="button"
+              onClick={() => abrirFormParaCanal(canal.tipo)}
+              className="rounded-full border border-ink-100 bg-white px-2.5 py-1 text-[11px] font-medium text-ink-700 hover:border-signal-500 hover:text-signal-700"
+              title={canal.descricao}
+            >
+              {canal.rotuloCurto}
+              {contarPorTipo(canal.tipo) > 0 ? ` · ${contarPorTipo(canal.tipo)}` : ""}
+            </button>
+          ))}
+        </div>
+
+        <div className="rounded-[var(--radius-md)] border border-ink-100 bg-white">
+          <button
+            type="button"
+            onClick={() => setBetaAberto((v) => !v)}
+            aria-expanded={betaAberto}
+            className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left"
+          >
+            <span>
+              <span className="block text-sm font-semibold text-ink-950">Em breve (Beta)</span>
+              <span className="block text-xs text-ink-400">
+                {canaisBeta.length} conectores assíncronos sem provedor ligado nesta versão — o registro salva o
+                canal para planejamento, mas nenhuma mensagem chega por ele ainda.
+              </span>
+            </span>
+            <span className="mono flex-none text-xs text-ink-400">{betaAberto ? "−" : "+"}</span>
+          </button>
+          {betaAberto && (
+            <div className="grid gap-3 border-t border-ink-100 p-4 sm:grid-cols-2 lg:grid-cols-4">
+              {canaisBeta.map((canal) => (
+                <CanalCard
+                  key={canal.tipo}
+                  canal={canal}
+                  configurados={contarPorTipo(canal.tipo)}
+                  onConectar={() => abrirFormParaCanal(canal.tipo)}
+                  bloqueadoParaNaoAdmin={false}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
 
       {whatsappFaltando && whatsappFaltando.length > 0 && (
         <div className="rounded-[var(--radius-sm)] border border-state-run-ink/40 bg-state-run-bg p-3">
@@ -507,13 +632,15 @@ export default function ConnectorsPage() {
         </div>
       )}
 
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">Conectores configurados</p>
+
       {connectors.length === 0 ? (
         <EmptyState
           title="Nenhum conector configurado"
-          description="Conecte webhooks, e-mail ou APIs externas para acionar seus fluxos."
+          description="Escolha um dos canais operacionais acima para começar — WhatsApp Business, Instagram Direct, Web Widget Corporativo ou Telegram já recebem mensagem real de ponta a ponta."
           action={
-            <Button size="sm" onClick={() => setShowForm(true)}>
-              Novo conector
+            <Button size="sm" onClick={() => abrirFormParaCanal(TIPO_WHATSAPP)}>
+              Conectar WhatsApp Business
             </Button>
           }
         />

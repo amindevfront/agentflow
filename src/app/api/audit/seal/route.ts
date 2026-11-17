@@ -67,6 +67,7 @@ const TIPOS_EVENTO = new Set<AuditEventType>([
   "equipe.membro.removido",
   "equipe.convite.revogado",
   "fluxo.excluido",
+  "fluxo.template.implantado",
   "conector.excluido",
   "conversa.desfecho.registrado",
   "relatorio.compliance-global.gerado",

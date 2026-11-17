@@ -102,7 +102,7 @@ describe("Zero-State: workspace recém-criado não carrega nenhum dado de demons
     contadorId = 0;
   });
 
-  it("não contém conversas, fluxos, nem texto hardcoded de demo (ex. 'Salão da Mãe') logo após a criação", async () => {
+  it("não contém conversas, fluxos, nem texto hardcoded de demo (ex. 'Incorporadora Atlântica') logo após a criação", async () => {
     const { prepareWorkspace, persistWorkspace, getWorkspace } = await import("@/lib/firestore");
     const { collection, getDocs, query, where } = await import("firebase/firestore");
     // O mock de `@/lib/firebase` devolve `{}` em runtime (ver `vi.mock` acima) —
@@ -110,7 +110,7 @@ describe("Zero-State: workspace recém-criado não carrega nenhum dado de demons
     // exija um Firestore de verdade só para satisfazer o compilador neste teste.
     const db = (await import("@/lib/firebase")).db as unknown as Parameters<typeof collection>[0];
 
-    const setor: NicheKey = "salao-beleza";
+    const setor: NicheKey = "construtora-imobiliaria";
     const { ref, workspace } = prepareWorkspace("Workspace de Onboarding", setor, "uid-zero-state-001");
     await persistWorkspace(ref, workspace);
 
@@ -136,8 +136,10 @@ describe("Zero-State: workspace recém-criado não carrega nenhum dado de demons
 
     // Nenhum texto hardcoded de dados de demonstração vazou para o documento real.
     const serializado = JSON.stringify(workspacePersistido);
-    expect(serializado).not.toContain("Salão da Mãe");
-    expect(serializado).not.toContain("Horizon BC");
+    expect(serializado).not.toContain("Incorporadora Atlântica");
+    expect(serializado).not.toContain("Marina Castello");
+    // Vitrine sanitizada: nenhum artefato residual do sandbox genérico antigo.
+    expect(serializado).not.toMatch(/sal[ãa]o|barbearia/i);
 
     // `playbooksSugeridos` é só uma lista de NOMES sugeridos (texto de UI),
     // nunca objetos de conversa/fluxo prontos — reflexo do preset do nicho,

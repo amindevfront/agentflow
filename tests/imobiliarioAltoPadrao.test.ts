@@ -4,6 +4,8 @@ import {
   detectarGatilhoAgendamentoVisita,
   extrairFaixaOrcamento,
   extrairImovelInteresse,
+  detectarIntencaoCompraExplicita,
+  exigeHandoverHumano,
   extrairObjecaoMapeada,
 } from "@/lib/server/imobiliarioAltoPadrao";
 
@@ -113,5 +115,56 @@ describe("construirResumoExecutivoHandoff", () => {
     expect(resumo.faixaOrcamento).toBeNull();
     expect(resumo.imovelInteresse).toBeNull();
     expect(resumo.objecaoMapeada).toBeNull();
+  });
+});
+
+describe("detectarIntencaoCompraExplicita", () => {
+  it("detecta pedido de proposta formal em variacoes comuns", () => {
+    expect(detectarIntencaoCompraExplicita(["Pode me enviar uma proposta?"])?.categoria).toBe("proposta-formal");
+    expect(detectarIntencaoCompraExplicita(["Quero proposta comercial por escrito"])?.categoria).toBe(
+      "proposta-formal"
+    );
+    expect(detectarIntencaoCompraExplicita(["manda a minuta do contrato"])?.categoria).toBe("proposta-formal");
+  });
+
+  it("detecta negociacao de condicao/estrutura de pagamento", () => {
+    expect(detectarIntencaoCompraExplicita(["qual o indexador do saldo devedor, INCC?"])?.categoria).toBe(
+      "condicao-pagamento"
+    );
+    expect(detectarIntencaoCompraExplicita(["Quero entender as condicoes de pagamento"])?.categoria).toBe(
+      "condicao-pagamento"
+    );
+    expect(detectarIntencaoCompraExplicita(["da pra parcelar a entrada?"])?.categoria).toBe("condicao-pagamento");
+  });
+
+  it("detecta pedido de reserva ou intencao de fechamento", () => {
+    expect(detectarIntencaoCompraExplicita(["Quero reservar essa unidade"])?.categoria).toBe("reserva-unidade");
+    expect(detectarIntencaoCompraExplicita(["vou fechar, me diz o proximo passo"])?.categoria).toBe(
+      "reserva-unidade"
+    );
+  });
+
+  it("devolve o trecho que disparou o gatilho — trilha de explicabilidade do handover", () => {
+    const intencao = detectarIntencaoCompraExplicita(["Boa noite", "Pode me enviar uma proposta formal?"]);
+    expect(intencao?.trechoDetectado.toLowerCase()).toContain("proposta");
+    expect(intencao?.rotulo.length).toBeGreaterThan(0);
+  });
+
+  it("NAO dispara em interesse comum — pedir visita ou perguntar metragem nao e negociacao", () => {
+    expect(detectarIntencaoCompraExplicita(["Quero agendar uma visita sabado"])).toBeNull();
+    expect(detectarIntencaoCompraExplicita(["Qual a metragem da cobertura?"])).toBeNull();
+    expect(detectarIntencaoCompraExplicita(["Tem vista para o mar?"])).toBeNull();
+    expect(detectarIntencaoCompraExplicita([])).toBeNull();
+    expect(detectarIntencaoCompraExplicita([""])).toBeNull();
+  });
+
+  it("exigeHandoverHumano espelha o detector — uma regra de negocio, um lugar", () => {
+    expect(exigeHandoverHumano(["Quero reservar a unidade 1203"])).toBe(true);
+    expect(exigeHandoverHumano(["Qual o horario de visitacao do decorado?"])).toBe(false);
+  });
+
+  it("varre todas as mensagens, nao so a ultima", () => {
+    const mensagens = ["Pode mandar a proposta?", "Obrigado!", "Ate mais"];
+    expect(exigeHandoverHumano(mensagens)).toBe(true);
   });
 });

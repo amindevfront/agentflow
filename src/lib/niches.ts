@@ -76,16 +76,6 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
       "Triagem de troca/devolução",
     ],
   },
-  "salao-beleza": {
-    key: "salao-beleza",
-    label: "Salão de Beleza & Barbearia",
-    descricao: "Agendamento rápido de serviços, dúvidas de valores e redução de cadeiras/horários vagos.",
-    playbooksSugeridos: [
-      "Agendamento rápido via link do ERP (ex.: SalonSoft)",
-      "Tabela de preços e serviços em destaque",
-      "Lembrete de horário e redução de no-show",
-    ],
-  },
   "clinica-medica-exames": {
     key: "clinica-medica-exames",
     label: "Clínica Médica & Laboratório de Exames",
@@ -173,12 +163,15 @@ export const NICHE_PRESETS: Record<NicheKey, NichePreset> = {
   },
 };
 
+// Ordem de exibição na triagem de nicho do onboarding. As duas verticais
+// de alto ticket (Imobiliário de Alto Padrão e Logística B2B) abrem a lista
+// porque são os motores verticais de demonstração enterprise do AgentFlow —
+// ver `@/lib/verticalTelemetry`.
 export const NICHE_ORDER: NicheKey[] = [
-  "salao-beleza",
-  "clinica-alto-padrao",
-  "clinica-medica-exames",
   "construtora-imobiliaria",
   "logistica-portuaria",
+  "clinica-alto-padrao",
+  "clinica-medica-exames",
   "servicos-luxo",
   "ecommerce",
   "advocacia-contabilidade",

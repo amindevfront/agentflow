@@ -326,6 +326,7 @@ export const ROTULO_EVENTO: Record<AuditEventType, string> = {
   "equipe.membro.removido": "Membro removido da equipe",
   "equipe.convite.revogado": "Convite pendente revogado",
   "fluxo.excluido": "Fluxo excluído",
+  "fluxo.template.implantado": "Template de fluxo implantado (guardrails pré-configurados)",
   "conector.excluido": "Conector excluído",
   "conversa.desfecho.registrado": "Desfecho de atendimento registrado",
   "relatorio.compliance-global.gerado": "Relatório de prontidão internacional gerado (GDPR/Privacidade EUA)",

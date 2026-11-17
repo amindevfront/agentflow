@@ -14,6 +14,8 @@ import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 import { ZeroTrustBadge } from "@/components/ui/ZeroTrustBadge";
 import { QuizModalProvider } from "@/components/onboarding/DynamicNicheQuizModal";
+import { DemoScenarioProvider } from "@/lib/verticalEngine";
+import { DemoScenarioSwitcher } from "@/components/demo/DemoScenarioSwitcher";
 
 const TITLE_BY_PATH: Array<[string, string]> = [
   ["/inbox", "Neural Inbox"],
@@ -83,6 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <QuizModalProvider>
+      <DemoScenarioProvider>
       <div className="flex min-h-screen">
         <Sidebar
           isOpen={sidebarOpen}
@@ -97,6 +100,11 @@ export function AppShell({ children }: { children: ReactNode }) {
             onMenuClick={() => setSidebarOpen(true)}
             actions={
               <>
+                {/* Vitrine enterprise: trocar o cenário de demonstração tem
+                    de ser alcançável de QUALQUER tela durante uma reunião —
+                    por isso vive no header do workspace, não enterrado em
+                    Configurações. */}
+                <DemoScenarioSwitcher />
                 <ZeroTrustBadge />
                 <Button
                   variant="secondary"
@@ -172,6 +180,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           }
         />
       </div>
+      </DemoScenarioProvider>
     </QuizModalProvider>
   );
 }

@@ -1,9 +1,9 @@
 "use client";
 
 // Portal do Cliente — visão mobile-first, dopaminérgica, de UM workspace
-// específico, para o PRÓPRIO cliente final (dono do salão/clínica/
-// imobiliária) acompanhar sem precisar navegar pelo painel administrativo
-// completo.
+// específico, para o PRÓPRIO cliente final (diretoria da incorporadora, da
+// transportadora, da clínica) acompanhar sem precisar navegar pelo painel
+// administrativo completo.
 //
 // Segurança: o `slug` na URL é só uma forma bonita de link — a leitura real
 // (`useWorkspace()`) sempre resolve o workspace do USUÁRIO AUTENTICADO, e

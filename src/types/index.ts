@@ -56,7 +56,6 @@ export type NicheKey =
   | "clinica-alto-padrao"
   | "servicos-luxo"
   | "ecommerce"
-  | "salao-beleza"
   | "clinica-medica-exames"
   | "advocacia-contabilidade"
   // --- Expansão Enterprise Global (EUA/Flórida e Portugal) ---
@@ -177,7 +176,7 @@ export interface Workspace {
   horarioFuncionamento?: { inicioHora: number; fimHora: number; diasUteis: number[] } | null;
   /**
    * Link principal de conversão exibido no Portal do Cliente — agendamento
-   * online (ex.: SalonSoft), WhatsApp do corretor de plantão, confirmação de
+   * online (ex.: Calendly), WhatsApp do corretor de plantão, confirmação de
    * presença em clínica, etc. O significado exato depende do nicho; o
    * AgentFlow nunca valida o destino, só exibe e copia.
    */
@@ -228,6 +227,57 @@ export interface FlowStepDef {
   titulo: string;
 }
 
+/**
+ * Papel de um nó no grafo de um fluxo pré-configurado (ver
+ * `@/lib/flowTemplates`). Deliberadamente um vocabulário FECHADO e pequeno:
+ * cada valor corresponde a uma peça que o AgentFlow de fato executa hoje —
+ * `guardrail` resolve uma política real de `@/lib/guardrails/policy`,
+ * `handoff` abre um ticket real de `@/lib/humanInTheLoop`. Um papel novo só
+ * deve entrar aqui quando existir o motor por trás dele, nunca para deixar
+ * um diagrama mais bonito (Artigo IV — No Invention).
+ */
+export type FlowNodeKind =
+  | "gatilho"
+  | "qualificacao"
+  | "guardrail"
+  | "consulta"
+  | "handoff"
+  | "notificacao"
+  | "fallback";
+
+export interface FlowNodeDef {
+  id: string;
+  titulo: string;
+  tipo: FlowNodeKind;
+  /** O que este nó faz, em uma linha — exibido no preview do template. */
+  descricao: string;
+  /** Id de `POLITICAS_PREDEFINIDAS` (`@/lib/guardrails/policy`) aplicado neste nó, quando `tipo` é `guardrail`. */
+  politicaGuardrailId?: string;
+}
+
+/**
+ * Tipo de transição entre dois nós. `falha` e `escalonamento` são as
+ * ARESTAS DE FALLBACK: o caminho que o fluxo toma quando o nó de origem
+ * falha (erro de integração, consulta sem resultado) ou quando o guardrail
+ * exige um humano. Um template sem nenhuma aresta de fallback é um template
+ * que só funciona no caminho feliz — por isso `validarGrafoFluxo`
+ * (`@/lib/flowTemplates`) rejeita esse caso.
+ */
+export type FlowEdgeKind = "sucesso" | "falha" | "escalonamento";
+
+export interface FlowEdgeDef {
+  de: string;
+  para: string;
+  tipo: FlowEdgeKind;
+  /** Condição da transição, em linguagem de operador (ex.: "lead pediu proposta"). */
+  rotulo?: string;
+}
+
+export interface FlowGraph {
+  nos: FlowNodeDef[];
+  arestas: FlowEdgeDef[];
+}
+
 export interface Flow {
   id: string;
   workspaceId: string;
@@ -246,6 +296,16 @@ export interface Flow {
    */
   apiTokenCredentialId?: string | null;
   steps: FlowStepDef[];
+  /**
+   * Grafo de nós e arestas do fluxo, quando ele nasceu de um template
+   * pré-configurado (`@/lib/flowTemplates`). Opcional e retrocompatível: um
+   * fluxo criado à mão continua existindo só com `steps` (a sequência
+   * linear que o trilho de execução renderiza), e toda a UI trata a
+   * ausência deste campo como "fluxo sem grafo declarado", nunca como erro.
+   */
+  grafo?: FlowGraph | null;
+  /** Id do template de origem (`@/lib/flowTemplates`), quando houver — rastreabilidade do 1-clique. */
+  templateId?: string | null;
   status: RunStatus;
   atualizadoEm: string;
 }

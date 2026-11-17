@@ -52,7 +52,7 @@ const COLECAO_WORKSPACES = "workspaces";
 /**
  * Lê o nicho (`Workspace.setor`) do workspace — gate dos handoffs com
  * Resumo Executivo específicos de vertical abaixo, para que um nicho sem
- * esse protocolo (e-commerce, salão de beleza) não receba um ticket
+ * esse protocolo (e-commerce, serviços de luxo) não receba um ticket
  * inesperado só por mencionar uma palavra-gatilho de outra vertical.
  * Best-effort: falha de leitura nunca impede o registro da mensagem em si,
  * apenas desativa essa funcionalidade adicional para esta chamada —

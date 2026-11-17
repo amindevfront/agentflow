@@ -9,8 +9,8 @@
 // Corte de escopo deliberado desta primeira versão (mesmo em que já é
 // honesto no widget): os handoffs com Resumo Executivo específicos de
 // vertical (Imobiliário, Clínicas, Advocacia, gavetas dos EUA) ficam de fora
-// — nenhum deles se aplica a Salão de Beleza/Barbearia, o primeiro caso real
-// deste canal, e adicioná-los aqui replicaria ~300 linhas sem uso imediato.
+// deste caminho — eles já rodam no caminho do widget/Neural Inbox
+// (`./inboxWidgetAdmin`), e replicá-los aqui duplicaria ~300 linhas.
 // Quando um nicho com handoff dedicado precisar de WhatsApp, a peça certa é
 // extrair aquele bloco para uma função compartilhada entre os dois arquivos,
 // não duplicá-lo de novo.

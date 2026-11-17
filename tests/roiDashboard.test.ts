@@ -93,7 +93,6 @@ describe("VALOR_MEDIO_PIPELINE_PADRAO_BRL", () => {
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["logistica-portuaria"]).toBe(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["servicos-luxo"]).toBe(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL.ecommerce).toBe(0);
-    expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["salao-beleza"]).toBe(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL["clinica-medica-exames"]).toBe(0);
     expect(VALOR_MEDIO_PIPELINE_PADRAO_BRL.outros).toBe(0);
   });

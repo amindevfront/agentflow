@@ -125,6 +125,95 @@ export function extrairFaixaOrcamento(mensagensClienteRecentes: string[]): strin
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Gatilho obrigatório de Human-in-the-Loop — intenção explícita de compra
+// ---------------------------------------------------------------------------
+//
+// Por que isto é SEPARADO de `detectarGatilhoAgendamentoVisita`: pedir uma
+// visita é interesse; pedir proposta, reserva de unidade ou negociar
+// condição de pagamento é uma NEGOCIAÇÃO COMERCIAL ABERTA. A partir desse
+// ponto, qualquer resposta autônoma — por mais bem redigida — cria
+// expectativa sobre preço, prazo ou condição que só a diretoria pode
+// assumir. O guardrail de Proteção de Caixa
+// (`bloquearPromessaComercialNaoAutorizada`) já barra a FRASE errada na
+// saída; este detector resolve o problema anterior a ele: encerrar a
+// autonomia do agente antes que ele tente responder.
+//
+// Determinístico, como todo detector deste módulo: léxico auditável, sem
+// IA generativa — um gatilho de handover não pode depender da temperatura
+// do modelo no dia.
+
+export type CategoriaIntencaoCompra = "proposta-formal" | "condicao-pagamento" | "reserva-unidade";
+
+export interface IntencaoCompraExplicita {
+  categoria: CategoriaIntencaoCompra;
+  /** Trecho que disparou o gatilho, verbatim — a trilha de explicabilidade do handover. */
+  trechoDetectado: string;
+  /** Rótulo pronto para a UI/ticket, em linguagem de operador. */
+  rotulo: string;
+}
+
+const LEXICO_INTENCAO_COMPRA: Array<{
+  padrao: RegExp;
+  categoria: CategoriaIntencaoCompra;
+  rotulo: string;
+}> = [
+  {
+    padrao:
+      /\b(?:me\s+)?(?:envi[ae]|mand[ae]|manda|faz|fa[çc]a|quero|gostaria\s+de|pode\s+(?:me\s+)?(?:enviar|mandar|fazer))\s+(?:uma\s+|a\s+)?proposta\b|\bproposta\s+(?:formal|por\s+escrito|comercial)\b|\bminuta\s+(?:do\s+)?contrato\b/i,
+    categoria: "proposta-formal",
+    rotulo: "Pedido de proposta formal / minuta de contrato",
+  },
+  {
+    padrao:
+      /\bcondi[çc][õo]es?\s+de\s+pagamento\b|\btabela\s+de\s+pagamento\b|\bfluxo\s+de\s+pagamento\b|\bparcel(?:ar|amento|as)\b|\bentrada\s+de\b|\bsaldo\s+devedor\b|\bfinanciamento\b|\bchaves?\s+(?:em|na)\s+\d+\s*x\b|\bINCC\b/i,
+    categoria: "condicao-pagamento",
+    rotulo: "Negociação de condição/estrutura de pagamento",
+  },
+  {
+    padrao:
+      /\breserv(?:ar|a)\s+(?:a\s+|essa\s+|esta\s+|uma\s+)?(?:unidade|cobertura|apartamento|apto|planta)\b|\bquero\s+fechar\b|\bvou\s+fechar\b|\bfechar\s+(?:a\s+)?(?:compra|unidade|neg[óo]cio)\b|\bsinal\s+de\s+reserva\b/i,
+    categoria: "reserva-unidade",
+    rotulo: "Pedido de reserva / intenção de fechamento",
+  },
+];
+
+/**
+ * Intenção explícita de compra nas mensagens do cliente, ou `null`.
+ *
+ * A primeira categoria que casar vence, na ordem do léxico acima — proposta
+ * formal é o sinal mais forte (o lead já decidiu avançar), condição de
+ * pagamento vem em seguida (negociação financeira aberta) e reserva fecha a
+ * lista. Varre as mensagens na ordem recebida: o gatilho é "houve este
+ * pedido em algum momento", não "foi a última coisa dita".
+ */
+export function detectarIntencaoCompraExplicita(
+  mensagensClienteRecentes: string[]
+): IntencaoCompraExplicita | null {
+  for (const { padrao, categoria, rotulo } of LEXICO_INTENCAO_COMPRA) {
+    for (const texto of mensagensClienteRecentes) {
+      if (!texto) continue;
+      const encontrado = texto.match(padrao);
+      if (encontrado) {
+        return { categoria, trechoDetectado: encontrado[0].trim(), rotulo };
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * `true` quando a conversa NÃO pode mais seguir em modo autônomo.
+ *
+ * Função de uma linha por desenho: o nome é o contrato. Qualquer chamador
+ * (painel da Inbox, orquestrador, template de fluxo) pergunta exatamente
+ * isto antes de deixar o agente responder sozinho, e a regra de negócio
+ * vive em um lugar só.
+ */
+export function exigeHandoverHumano(mensagensClienteRecentes: string[]): boolean {
+  return detectarIntencaoCompraExplicita(mensagensClienteRecentes) !== null;
+}
+
 export interface ConstruirResumoExecutivoInput {
   /** `Conversation.participante.nome` — já não é mascarado por desenho (ver `ConversationParticipant`). */
   nomeCliente: string;

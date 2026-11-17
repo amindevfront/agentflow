@@ -96,7 +96,6 @@ describe("construirTabelaPipelinePadrao", () => {
     expect(tabela["logistica-portuaria"]).toBe(0);
     expect(tabela["servicos-luxo"]).toBe(0);
     expect(tabela.ecommerce).toBe(0);
-    expect(tabela["salao-beleza"]).toBe(0);
     expect(tabela["clinica-medica-exames"]).toBe(0);
     expect(tabela.outros).toBe(0);
     // Expansão Enterprise Global.

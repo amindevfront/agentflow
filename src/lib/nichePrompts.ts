@@ -43,12 +43,6 @@ export interface PerfilNicho {
 }
 
 export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
-  "salao-beleza": {
-    foco: "agendamento rápido de serviços (cabelo, unhas, estética) e dúvidas sobre valores",
-    acaoPrincipal:
-      "direcionar o cliente o quanto antes para o link de agendamento online — não prolongar a conversa com perguntas que o próprio link já resolve",
-    tomAtendimento: "simpático, ágil e direto",
-  },
   "clinica-alto-padrao": {
     foco:
       "acolhimento e triagem de leads de procedimentos estéticos/médicos de alto ticket (estética avançada, " +
@@ -121,6 +115,35 @@ export const PERFIL_POR_NICHO: Partial<Record<NicheKey, PerfilNicho>> = {
       "qualificado (Código de Ética da OAB, art. 48 — proibição de captação de causa mediante garantia de " +
       "resultado). Quando perguntado sobre prazo, resultado ou honorário, explique que depende da análise " +
       "técnica do caso e direcione para a reunião de diagnóstico.",
+  },
+  // Motor Vertical B — Logística & Supply Chain B2B (fretes recorrentes,
+  // rastreio, ocorrências). O protocolo de qualificação aqui é de INGESTÃO
+  // operacional, não de venda consultiva: os três campos abaixo são
+  // exatamente o que `extrairDadosCarga` (`@/lib/logisticaCarga`) sabe
+  // interpretar de forma determinística a partir da mensagem do cliente —
+  // pedir no prompt o que o parser reconhece é o que torna a cotação em
+  // menos de 30s possível sem um humano reescrever os dados.
+  "logistica-portuaria": {
+    foco:
+      "triagem operacional de demandas B2B de frete e supply chain a qualquer hora — cotação de spot, " +
+      "consulta de status/CT-e de carga em trânsito, agendamento de janela de doca e registro de ocorrência",
+    acaoPrincipal:
+      "extrair os dados operacionais da carga (peso, cubagem, origem/destino, prazo) e devolver status ou " +
+      "encaminhar a cotação à torre de controle — nunca fechar valor de frete nem prometer prazo de entrega " +
+      "sem confirmação do despachante",
+    tomAtendimento: "operacional, objetivo e preciso — linguagem de quem trabalha com carga, nunca publicitária",
+    protocoloQualificacao:
+      "Colete de forma objetiva, sem parecer formulário: (1) peso total da carga (kg ou toneladas) e, quando " +
+      "houver, cubagem em m³ ou as dimensões do volume (ex.: \"1,20 x 0,80 x 1,00\"); (2) origem e destino " +
+      "(cidade/UF, porto ou CEP); (3) prazo desejado e se há urgência/criticidade (perecível, parada de linha, " +
+      "free time estourando, janela de atracação). Se o cliente informar um código de rastreio ou número de " +
+      "CT-e, repita o código exatamente como recebido para a consulta de status. Nunca repita valores " +
+      "financeiros exatos do contrato.",
+    restricao:
+      "Nunca feche valor de frete, percentual de desconto ou condição de pagamento sem validação do " +
+      "despachante/torre de controle, e nunca prometa data de entrega ou liberação aduaneira como garantia — " +
+      "prazo em logística depende de terceiros (porto, Receita, trânsito). Quando perguntado sobre preço ou " +
+      "prazo firme, responda com a faixa de referência operacional e encaminhe para a torre de controle.",
   },
   // --- Expansão Enterprise Global (EUA/Flórida) ---
   //

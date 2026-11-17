@@ -1,11 +1,12 @@
 // Custo de Agenda Vazia — exposição financeira real de no-show (nichos
-// Clínicas, Salão de Beleza & Barbearia, Serviços de Luxo).
+// Clínicas, Serviços de Luxo e visitas/vistorias do Imobiliário de Alto
+// Padrão).
 //
 // Por que isto existe: é uma lacuna documentada pelo próprio produto — o
 // preset "no-show-agendamento" do Onboarding Cognitivo (`@/lib/onboardingQuiz`)
 // avisa explicitamente que esta versão não tinha um módulo dedicado de custo
 // de no-show, só lembretes de confirmação. Pesquisa de mercado sobre
-// no-show em salões/clínicas (outubro de 2026) documenta taxa média de
+// no-show em agendas de serviço (outubro de 2026) documenta taxa média de
 // 15% a 30% sem automação — caindo para 5% ou menos com lembrete +
 // confirmação + depósito — e que o custo de UM no-show isolado já cobre
 // aluguel/insumos do horário vazio, além do próprio procedimento perdido.

@@ -1,8 +1,8 @@
 // Preenchimento Mágico por Nicho — Modo Copiloto Guiado (V2 do Onboarding).
 //
 // Dados de DEMONSTRAÇÃO, puros e isomórficos: nenhum nome aqui é um cliente
-// real — "Horizon BC"/"Salão da Mãe" e os demais são fictícios por desenho,
-// só para o implementador não precisar digitar nada ao demonstrar o produto
+// real — "Incorporadora Atlântica"/"Horizon Miami" e os demais são fictícios
+// por desenho, só para o implementador não precisar digitar nada ao demonstrar o produto
 // pela primeira vez (ou mostrar pra um cliente em pé numa reunião). Mesma
 // honestidade de todo dado de exemplo deste código: rotulado como exemplo,
 // nunca confundido com dado real.
@@ -32,12 +32,13 @@ const EXEMPLO_PADRAO: ExemploFluxoPorNicho = {
 
 const EXEMPLOS_POR_NICHO: Partial<Record<NicheKey, ExemploFluxoPorNicho>> = {
   "construtora-imobiliaria": {
-    nomeFluxo: "Leads Horizon BC — Imóveis de Alto Padrão",
+    nomeFluxo: "Leads Incorporadora Atlântica — Alto Padrão (Itajaí/BC)",
     gatilho: "webhook",
-    origem: "Formulário do site Horizon BC",
+    origem: "Formulário do site Incorporadora Atlântica",
     payloadExemplo: {
       nome: "Marina Castello",
-      texto: "Oi! Vi a cobertura na Praia Brava, orçamento até 1,8 milhão. Podemos agendar uma visita esse sábado?",
+      texto:
+        "Oi! Vi a cobertura de 4 suítes na Praia Brava, orçamento até 1,8 milhão. Podemos agendar uma visita ao decorado esse sábado?",
     },
   },
   "clinica-alto-padrao": {
@@ -53,10 +54,13 @@ const EXEMPLOS_POR_NICHO: Partial<Record<NicheKey, ExemploFluxoPorNicho>> = {
     payloadExemplo: { nome: "Roberto Alves", texto: "Confirmo presença no exame de sangue amanhã às 8h, preciso mesmo estar em jejum?" },
   },
   "logistica-portuaria": {
-    nomeFluxo: "Rastreio de Cargas — Porto",
+    nomeFluxo: "Triagem Logística — Cotação, Rastreio & Ocorrências B2B",
     gatilho: "webhook",
-    origem: "Sistema de rastreamento da transportadora",
-    payloadExemplo: { nome: "Setor de Importação", texto: "Qual o status da carga ABC-123456789? Previsão de desembaraço?" },
+    origem: "Portal de clientes da transportadora",
+    payloadExemplo: {
+      nome: "Setor de Importação",
+      texto: "Qual o status da carga BRX-004521? Preciso também de cotação para 2.400 kg, 6 m³, Itajaí → Campinas.",
+    },
   },
   ecommerce: {
     nomeFluxo: "Atendimento Pós-venda E-commerce",
@@ -69,12 +73,6 @@ const EXEMPLOS_POR_NICHO: Partial<Record<NicheKey, ExemploFluxoPorNicho>> = {
     gatilho: "formulario",
     origem: 'Formulário "Fale com um especialista" do site',
     payloadExemplo: { nome: "Diretoria Tech Solutions Ltda", texto: "Somos uma startup e precisamos de orientação tributária para abrir filial em outro estado." },
-  },
-  "salao-beleza": {
-    nomeFluxo: "Agendamento Salão da Mãe",
-    gatilho: "manual",
-    origem: "Atendimento via WhatsApp",
-    payloadExemplo: { nome: "Cliente Salão da Mãe", texto: "Oi, vocês têm horário pra escova e manicure sábado de manhã?" },
   },
   "servicos-luxo": {
     nomeFluxo: "Concierge VIP",
